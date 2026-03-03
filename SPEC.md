@@ -1,8 +1,8 @@
-# PALS v0 Spec (Working Draft)
+# PALS Pre-Release Spec (v0 Working Draft)
 
-Updated: 2026-03-02
+Updated: 2026-03-03
 
-## 1) Current Agreements
+## 1) Current Agreements (Resolved v0 Decisions)
 
 1. System model:
 - Each module is its own filesystem tree.
@@ -26,22 +26,27 @@ Updated: 2026-03-02
 5. Interaction style:
 - Human prompt is natural language.
 - Orchestrator can forward prompt verbatim to a module skill/subagent.
-- Module may return structured output to support deterministic orchestration.
+- Module returns semi-structured output to support deterministic orchestration.
 
-## 2) Read Contract Direction (Without "Next Hop")
+## 2) Read Contract Direction (Resolved v0 Decision)
 
-Each module read response should include a consistent shape, but no global routing advice.
+Each module read response uses a semi-structured envelope, but no global routing advice.
 
-Suggested response envelope:
+Canonical response envelope keys:
 - `answer`: module-owned interpretation/result.
 - `evidence`: which records/files were used.
-- `needs`: external facts required to complete stronger answer (fact-type only, not module routing).
+- `needs`: external facts required to complete stronger answer.
 - `confidence`: high/medium/low.
 - `uncertainties`: assumptions, ambiguities, data quality issues.
 
-Example `needs` values (module-local language):
-- "experiment outcomes in last 30 days for experiment IDs X/Y"
-- "risk classification for platform channel Z"
+Envelope rules:
+1. Use a stable semi-structured template with the canonical keys above.
+2. Module-local extra fields are allowed, but canonical keys remain consistent.
+3. `needs` entries must use standardized need-type tokens with optional context details.
+
+Example standardized `needs` entries:
+- `EXPERIMENT_OUTCOMES_RECENT` + context: "experiment IDs X/Y, last 30 days"
+- `RISK_CLASSIFICATION` + context: "platform channel Z"
 
 Important: `needs` expresses missing information categories, not "call module X" instructions.
 
@@ -106,15 +111,15 @@ Flow:
 Requirement:
 - Uncertainty handling must be first-class output, not hidden prose.
 
-## 4) Cross-Module Communication (Decision + Deferred Design Space)
+## 4) Cross-Module Communication (Resolved v0 Decision + Deferred Design Space)
 
-### v1 Decision (Resolved)
+### Current Baseline (Resolved in v0 Draft)
 
 1. Default cross-module mechanism is orchestrator-mediated request/response chaining.
 2. Integration events are optional and used selectively for async/high-value transitions.
 3. Domain-event-only and full dual-event architectures are deferred.
 
-The options below are retained as design space references, not active v1 defaults.
+The options below are retained as design space references, not active baseline defaults.
 
 ### Option 1: Orchestrator-Only Request/Response (No Events)
 
@@ -165,9 +170,9 @@ Cons:
 - Highest complexity.
 - Risk of over-engineering too early.
 
-### 4.1) v1 Baseline Summary
+### 4.1) Current Baseline Summary (Pre-Release v0)
 
-For v1, start with:
+For the current baseline, start with:
 1. Synchronous orchestrator-mediated request/response for reads and decisions.
 2. Optional append-only integration event log only for high-value transitions.
 3. Skip full domain-event layer initially.
@@ -177,7 +182,7 @@ Rationale:
 - Avoids dual-event-complexity too early.
 - Keeps path open to add domain events later if needed.
 
-## 6) Minimal v0 Integration Event Shape (If Enabled)
+## 5) Optional Integration Event Shape (Deferred/If Enabled)
 
 Event fields (conceptual):
 - `event_id`
@@ -197,15 +202,13 @@ Storage approach:
 - Append-only markdown or JSONL under module-owned `events/` directory.
 - Treated as immutable log.
 
-## 7) Open Decisions
+## 6) Open Decisions (Deferred Design Space)
 
-1. Should module read outputs be hard-structured (strict schema) or semi-structured markdown template?
-2. Should `needs` be standardized taxonomy or free text initially?
-3. Do we require evidence paths for every claim, or only high-impact claims?
-4. At what trigger do we introduce full domain+integration event split?
-5. Should orchestrator keep a short-term working memory artifact between turns (e.g., per-request transcript file)?
+1. Do we require evidence paths for every claim, or only high-impact claims?
 
-## 8) Next Scenario Candidates
+The full domain+integration event-split trigger is intentionally parked in Section 21 at the end of this document.
+
+## 7) Next Scenario Candidates (Behavioral Example Backlog)
 
 1. Write path with side effects:
 - Backlog state change triggers an experiment planning task.
@@ -216,7 +219,7 @@ Storage approach:
 3. Multi-module chain:
 - Backlog + experiments + distribution readiness constraints.
 
-## 9) Additional Scenario Exercises
+## 8) Additional Scenario Exercises (Behavioral Examples)
 
 ### Scenario D: Write With Side Effects (No Events)
 
@@ -289,7 +292,7 @@ Desired behavior:
 Need:
 - Correlation ID across subagent calls to debug routing quality over time.
 
-## 10) Domain vs Integration Events in This Architecture
+## 9) Domain vs Integration Events in This Architecture (Deferred Design Space)
 
 ### Domain Events (internal)
 
@@ -308,7 +311,7 @@ Use when:
 
 Treat integration events as curated outputs, not raw internal details.
 
-### v0 Decision Heuristic
+### Current Baseline Heuristic (Resolved v0)
 
 Emit integration events only for transitions that are:
 1. Cross-module relevant.
@@ -317,16 +320,17 @@ Emit integration events only for transitions that are:
 
 If a flow is synchronous and human-in-loop in one turn, orchestrator chaining is enough.
 
-## 11) Practical Guardrails for v0
+## 10) Practical Guardrails for v0 Baseline (Resolved v0 Decisions)
 
 1. Keep module read/write responses in a stable template.
-2. Keep `needs` module-local and fact-oriented.
+2. Keep `needs` standardized and fact-oriented.
 3. Keep cross-module references as IDs, not file paths.
 4. Require a correlation ID per orchestrated request chain.
 5. Start with 2-4 integration event types only; avoid event proliferation.
 6. Prefer explicit orchestrator retries over hidden auto-magic.
+7. Do not require a persistent short-term orchestrator memory artifact between turns.
 
-## 12) Questions For Next Iteration
+## 11) Questions For Next Iteration (Deferred Design Space)
 
 1. Which exact backlog transitions should emit integration events in v0?
 2. Which experiment transitions should emit integration events in v0?
@@ -334,7 +338,7 @@ If a flow is synchronous and human-in-loop in one turn, orchestrator chaining is
 4. Do we want one shared event log per module or per-entity event streams?
 5. What is the minimum retry policy for orchestrator misroutes and transient failures?
 
-## 13) Reference Encoding (Cross-Module IDs)
+## 12) Reference Encoding (Cross-Module IDs, Resolved v0 Decision)
 
 ### Decision
 
@@ -382,12 +386,12 @@ people:
 3. Opaque primary IDs are required in URI targets (no slug-as-key in canonical target).
 4. Display labels are human-facing and may be soft-validated only.
 
-### Non-Goals for v0
+### Non-Goals for v0 Baseline
 
 1. No rich inline relation objects as default reference form.
 2. No path-coupled references as canonical FK mechanism.
 
-## 14) Module Evolution and Versioning
+## 13) Module Evolution and Versioning (Resolved v0 Decision + Playbook Foundation)
 
 ### Decision
 
@@ -425,13 +429,13 @@ Minimum fields (in `MODULE.md` or equivalent):
 - Example: field meaning changes from label to computed score.
 - Requires explicit version bump and compatibility window.
 
-## 15) Body Structure and Null Semantics
+## 14) Body Structure and Null Semantics (Resolved v0 Decision)
 
 ### Decision
 
 Markdown body structure is part of schema, not free-form prose.
 
-v1 enforcement model:
+Current baseline enforcement model:
 1. Enforce section presence/shape contract first.
 2. Defer deep typed parsing of section internals unless needed.
 
@@ -446,7 +450,7 @@ Rules:
 1. Required sections must be present, even when empty.
 2. Missing required section is a schema violation (or temporary legacy during compatibility window).
 3. Explicit empty must use one canonical marker: `null`.
-4. Per-section empty-marker overrides are not supported in v1.
+4. Per-section empty-marker overrides are not supported in the current baseline.
 
 ### Add-New-Section Process
 
@@ -455,7 +459,7 @@ Rules:
 3. Backfill existing records incrementally (lazy-on-touch + optional batch pass).
 4. Promote to required and enforce with linter error at cutover.
 
-## 16) Compiler Responsibilities (Separation of Concerns)
+## 15) Compiler Responsibilities (Separation of Concerns, Resolved v0 Decision)
 
 ### Decision
 
@@ -479,9 +483,9 @@ Do not build one monolithic linter. Split responsibilities:
 - Avoids embedding transformation logic directly in lint checks.
 - Makes large module updates auditable and repeatable.
 
-## 17) Delivery Scope (v1 vs Later)
+## 16) Delivery Scope (Current Baseline vs Later)
 
-### v1 (Target)
+### Current Baseline (Pre-Release v0)
 
 1. Orchestrator request/response chaining is the primary cross-module mechanism.
 2. Transport-agnostic references with `pals://<namespace>/<module>/<id>`.
@@ -495,19 +499,21 @@ Do not build one monolithic linter. Split responsibilities:
 2. Broader domain-event modeling (if needed).
 3. Advanced body-content typing and richer schema introspection.
 
-## 18) Decision Log Snapshot (2026-03-02)
+## 17) Decision Log Snapshot (2026-03-03)
 
 1. Orchestrator is the detective/router; modules do not prescribe global routing.
 2. Module interfaces are skills/subagents; orchestration handoffs remain natural-language-first.
 3. Cross-module references use markdown links with transport-agnostic URI targets.
 4. Canonical FK truth is opaque ID in URI target, not display label.
 5. Keep relation payload minimal to reduce drift.
-6. Prefer synchronous orchestrator chaining for v1; add integration events selectively for async/high-value transitions.
+6. Prefer synchronous orchestrator chaining in the current baseline; add integration events selectively for async/high-value transitions.
 7. Treat body section structure as schema; enforce explicit empty vs missing semantics.
 8. Support three evolution classes with different strategies (additive, shape, semantic).
 9. Separate normalizer/linter/migrator responsibilities.
+10. Keep module read envelopes semi-structured and keep `needs` standardized.
+11. Do not require persistent short-term orchestrator memory artifacts between turns.
 
-## 19) Backlog Evolution Playbook (Epic/Story -> Initiative/Epic/Story)
+## 18) Backlog Evolution Playbook (Epic/Story -> Initiative/Epic/Story, Playbook/Template)
 
 ### Purpose
 
@@ -515,11 +521,11 @@ Define one concrete, repeatable evolution procedure for the backlog module when 
 
 ### Baseline and Target
 
-Baseline (v1):
+Baseline (module_version: 1):
 - Hierarchy: `epic -> story`
 - Story record requires `epic_ref`
 
-Target (v2):
+Target (module_version: 2):
 - Hierarchy: `initiative -> epic -> story`
 - Story record requires both `initiative_ref` and `epic_ref`
 - Epic record requires `initiative_ref`
@@ -671,7 +677,7 @@ If mapping story/epic to initiative is ambiguous:
 4. Compatibility code for v1 is removed.
 5. Migration report is archived with counts and failure resolutions.
 
-## 20) Body Shape-Change Playbook (Section Move Example: `## Media`)
+## 19) Body Shape-Change Playbook (Section Move Example: `## Media`, Playbook/Template)
 
 ### Purpose
 
@@ -763,7 +769,7 @@ Exit criteria:
 3. Alias mapping removed.
 4. Migration/conflict report archived.
 
-## 21) Fixture-Backed Current Model (Pristine Snapshot)
+## 20) Fixture-Backed Current Model (Pristine Snapshot, Behavioral Example)
 
 This section reflects the current concrete fixture under `example-systems/pristine-happy-path`.
 
@@ -784,6 +790,9 @@ Minimum module metadata fields:
 - `uri_scheme`
 - `module_version`
 - `schema_version`
+- `compat.read_versions`
+- `compat.write_version`
+- `compat.sunset_by` (optional but recommended)
 
 ### Identity Invariants (Enforced)
 
@@ -793,7 +802,7 @@ Minimum module metadata fields:
 4. Duplicate `id` values within module scope are forbidden.
 5. Reference targets must resolve by exact `id`.
 
-### Reference Contract (v1)
+### Reference Contract (Current Baseline)
 
 Reference fields use `type: ref` with:
 - `uri_scheme`
@@ -801,15 +810,15 @@ Reference fields use `type: ref` with:
 - `module`
 - `target_entity`
 
-No `target_key_field` or `target_example` in v1.
+No `target_key_field` or `target_example` in the current baseline.
 Resolution target key is opinionated: always `id`.
 
-### Body Contract (v1)
+### Body Contract (Current Baseline)
 
 1. Body schema is defined inline in markdown section contract blocks.
 2. Required sections must be present.
 3. Explicit empty value is literal `null`.
-4. Custom per-section empty markers are not supported in v1.
+4. Custom per-section empty markers are not supported in the current baseline.
 
 ### Flat and Nested Structures
 
@@ -832,3 +841,8 @@ For example:
 1. Experiment record contains `program_ref`.
 2. Run record contains both `program_ref` and `experiment_ref`.
 3. Linter must validate path-parent consistency and ref-parent consistency.
+
+## 21) Open Decision Note (Deferred Design Space)
+
+1. Trigger for introducing full domain+integration event split remains open.
+2. Status: on the table for later iteration; no trigger is selected yet.

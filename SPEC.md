@@ -45,7 +45,10 @@ Example `needs` values (module-local language):
 
 Important: `needs` expresses missing information categories, not "call module X" instructions.
 
-## 3) Scenario Set (Concrete)
+## 3) Reference Scenarios (Behavioral Examples)
+
+These scenarios describe expected PALS behavior under different request conditions.
+They are illustrative examples, not mutually exclusive design options.
 
 ### Scenario A: Priority Selection (Backlog + Experiments)
 
@@ -103,7 +106,15 @@ Flow:
 Requirement:
 - Uncertainty handling must be first-class output, not hidden prose.
 
-## 4) Cross-Module Communication: Options
+## 4) Cross-Module Communication (Decision + Deferred Design Space)
+
+### v1 Decision (Resolved)
+
+1. Default cross-module mechanism is orchestrator-mediated request/response chaining.
+2. Integration events are optional and used selectively for async/high-value transitions.
+3. Domain-event-only and full dual-event architectures are deferred.
+
+The options below are retained as design space references, not active v1 defaults.
 
 ### Option 1: Orchestrator-Only Request/Response (No Events)
 
@@ -154,9 +165,9 @@ Cons:
 - Highest complexity.
 - Risk of over-engineering too early.
 
-## 5) Recommendation for v0
+### 4.1) v1 Baseline Summary
 
-For v0, start with:
+For v1, start with:
 1. Synchronous orchestrator-mediated request/response for reads and decisions.
 2. Optional append-only integration event log only for high-value transitions.
 3. Skip full domain-event layer initially.
@@ -330,14 +341,14 @@ If a flow is synchronous and human-in-loop in one turn, orchestrator chaining is
 Use standard markdown link syntax for cross-module references, but with transport-agnostic logical URIs in link targets.
 
 Canonical format:
-- `[display-label](ghost://<module>/<opaque-primary-id>)`
+- `[display-label](pals://<namespace>/<module>/<id>)`
 
 Example:
 ```yaml
 ---
 people:
-  - "[nick-frith](ghost://people/PPL-000123)"
-  - "[sarah-chen](ghost://people/PPL-000456)"
+  - "[alex-rivera](pals://workspace/people/PPL-000101)"
+  - "[mira-chen](pals://workspace/people/PPL-000204)"
 ---
 ```
 
@@ -358,16 +369,18 @@ people:
 
 4. Easy compiler/linter enforcement.
 - Markdown link parse check.
-- Allowed scheme check (`ghost://`).
-- Module namespace check.
-- Opaque ID format check.
+- Allowed URI scheme check (`pals://`).
+- Namespace segment check (required, non-empty).
+- Module segment check (required, non-empty).
+- ID segment check (required, non-empty).
 - Existence/resolution check.
 
 ### Canonicality Rules
 
 1. Canonical truth is the URI target, not the display label.
-2. Opaque primary IDs are required in URI targets (no slug-as-key in canonical target).
-3. Display labels are human-facing and may be soft-validated only.
+2. URI target must include namespace + module + id segments.
+3. Opaque primary IDs are required in URI targets (no slug-as-key in canonical target).
+4. Display labels are human-facing and may be soft-validated only.
 
 ### Non-Goals for v0
 
@@ -382,6 +395,8 @@ Every module declares explicit version metadata and compatibility policy.
 
 Minimum fields (in `MODULE.md` or equivalent):
 - `module_id`
+- `namespace`
+- `uri_scheme`
 - `module_version`
 - `schema_version`
 - `compat.read_versions`
@@ -430,7 +445,8 @@ Treat as three distinct states:
 Rules:
 1. Required sections must be present, even when empty.
 2. Missing required section is a schema violation (or temporary legacy during compatibility window).
-3. Explicit empty must use one canonical marker (default: `_none_`).
+3. Explicit empty must use one canonical marker: `null`.
+4. Per-section empty-marker overrides are not supported in v1.
 
 ### Add-New-Section Process
 
@@ -468,7 +484,7 @@ Do not build one monolithic linter. Split responsibilities:
 ### v1 (Target)
 
 1. Orchestrator request/response chaining is the primary cross-module mechanism.
-2. Transport-agnostic references with `ghost://<module>/<opaque-id>`.
+2. Transport-agnostic references with `pals://<namespace>/<module>/<id>`.
 3. Additive evolution support (including required explicit empty section markers).
 4. Shape-change support via alias + cutover rules.
 5. Minimal migrator for deterministic rewrites.
@@ -511,9 +527,9 @@ Target (v2):
 ### Canonical References
 
 Use transport-agnostic references only:
-- `ghost://backlog/INIT-<id>`
-- `ghost://backlog/EPIC-<id>`
-- `ghost://backlog/STORY-<id>`
+- `pals://<namespace>/backlog/INIT-<id>`
+- `pals://<namespace>/backlog/EPIC-<id>`
+- `pals://<namespace>/backlog/STORY-<id>`
 
 ### Module Version Contract (Example)
 
@@ -605,7 +621,7 @@ Exit criteria:
 
 Example rules:
 
-1. `BKL-REF-001` reference target must be valid `ghost://` URI.
+1. `BKL-REF-001` reference target must be valid `pals://<namespace>/<module>/<id>` URI.
 - Always `error`.
 
 2. `BKL-EVO-001` `initiative_ref` missing on story.
@@ -737,7 +753,7 @@ Exit criteria:
 
 ### Null/Empty Handling During Move
 
-1. Empty content remains explicit using canonical empty marker (`_none_`).
+1. Empty content remains explicit using canonical empty marker (`null`).
 2. Missing required section after move is still a schema violation.
 
 ### Definition of Done
@@ -746,3 +762,73 @@ Exit criteria:
 2. Linter rejects old layout.
 3. Alias mapping removed.
 4. Migration/conflict report archived.
+
+## 21) Fixture-Backed Current Model (Pristine Snapshot)
+
+This section reflects the current concrete fixture under `example-systems/pristine-happy-path`.
+
+### Module Root Pattern
+
+1. Workspace root uses `workspace/` as the high-level partition.
+2. Each module has `workspace/<module_id>/MODULE.md`.
+3. `MODULE.md` frontmatter is authoritative module metadata and invariants (body is optional).
+
+Current fixture module shapes:
+1. `backlog` -> flat entity files under typed subdirectories.
+2. `people` -> simple single-entity module.
+3. `experiments` -> nested 3-layer hierarchy (program -> experiment -> run).
+
+Minimum module metadata fields:
+- `module_id`
+- `namespace`
+- `uri_scheme`
+- `module_version`
+- `schema_version`
+
+### Identity Invariants (Enforced)
+
+1. Every record must have frontmatter `id`.
+2. Filename stem must equal frontmatter `id`.
+3. `id` is immutable except through explicit migration workflows.
+4. Duplicate `id` values within module scope are forbidden.
+5. Reference targets must resolve by exact `id`.
+
+### Reference Contract (v1)
+
+Reference fields use `type: ref` with:
+- `uri_scheme`
+- `namespace`
+- `module`
+- `target_entity`
+
+No `target_key_field` or `target_example` in v1.
+Resolution target key is opinionated: always `id`.
+
+### Body Contract (v1)
+
+1. Body schema is defined inline in markdown section contract blocks.
+2. Required sections must be present.
+3. Explicit empty value is literal `null`.
+4. Custom per-section empty markers are not supported in v1.
+
+### Flat and Nested Structures
+
+Both structures are allowed:
+
+1. Flat entity files:
+- Example: `workspace/backlog/stories/STORY-0001.md`
+
+2. Nested containment hierarchies:
+- Example:
+  - `workspace/experiments/programs/PRG-0001/PRG-0001.md`
+  - `workspace/experiments/programs/PRG-0001/experiments/EXP-0001/EXP-0001.md`
+  - `workspace/experiments/programs/PRG-0001/experiments/EXP-0001/runs/RUN-0001.md`
+
+### Nested Hierarchy Rule
+
+Containment path encodes hierarchy, but explicit parent refs are still required in frontmatter.
+
+For example:
+1. Experiment record contains `program_ref`.
+2. Run record contains both `program_ref` and `experiment_ref`.
+3. Linter must validate path-parent consistency and ref-parent consistency.

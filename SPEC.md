@@ -654,3 +654,95 @@ If mapping story/epic to initiative is ambiguous:
 3. Backlog write path only emits v2 shape.
 4. Compatibility code for v1 is removed.
 5. Migration report is archived with counts and failure resolutions.
+
+## 20) Body Shape-Change Playbook (Section Move Example: `## Media`)
+
+### Purpose
+
+Define a concrete procedure for a markdown body section move/rename without breaking module reads.
+
+Example change:
+- Old shape: top-level `## Media`
+- New shape: nested under `## Assets` as `### Media`
+
+### Canonical Schema Key
+
+Treat both layouts as one canonical key during compatibility window:
+- Canonical key: `body.media`
+
+Interpretation rule:
+1. Old layout (`## Media`) maps to `body.media`.
+2. New layout (`## Assets` -> `### Media`) maps to `body.media`.
+
+### Phase Plan
+
+#### Phase 0: Introduce Alias Mapping
+
+1. Add normalizer alias rules for both old and new layouts.
+2. Keep linter non-blocking for old layout.
+
+Lint state:
+- Both shapes accepted.
+- If both appear in same file, flag conflict (`error`) unless content is identical.
+
+Exit criteria:
+- Parser/normalizer resolves both layouts to same canonical key.
+
+#### Phase 1: New-Write Preference
+
+1. Module write logic emits new layout only.
+2. Existing files may remain old layout.
+
+Lint state:
+- Old layout in unchanged legacy files: `warn`
+- Old layout in newly written/rewritten files: `error`
+
+Exit criteria:
+- All skill-generated writes use new layout.
+
+#### Phase 2: Backfill
+
+1. Run migrator to rewrite old layout -> new layout.
+2. Validate canonical equivalence after rewrite.
+
+Backfill guarantees:
+- Deterministic transform.
+- Idempotent re-run behavior.
+- Per-file status log.
+
+Exit criteria:
+- Remaining old-layout files are only known exceptions.
+
+#### Phase 3: Cutover
+
+1. Remove old-layout acceptance from linter.
+2. Keep short read-only compatibility toggle if needed for rollback.
+
+Lint state:
+- Old layout anywhere: `error`
+
+Exit criteria:
+- No old-layout sections remain in active records.
+
+#### Phase 4: Cleanup
+
+1. Remove alias mapping and compatibility toggle.
+2. Keep migration note in module changelog for auditability.
+
+### Conflict and Ambiguity Rules
+
+1. If file has both old and new layout with different content, fail lint (`error`).
+2. Migrator must not guess merge outcomes for conflicting content.
+3. Conflicts are routed to manual resolution queue.
+
+### Null/Empty Handling During Move
+
+1. Empty content remains explicit using canonical empty marker (`_none_`).
+2. Missing required section after move is still a schema violation.
+
+### Definition of Done
+
+1. All active files use new layout.
+2. Linter rejects old layout.
+3. Alias mapping removed.
+4. Migration/conflict report archived.

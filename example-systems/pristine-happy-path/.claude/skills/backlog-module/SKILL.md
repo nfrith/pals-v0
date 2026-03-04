@@ -1,37 +1,20 @@
 ---
 name: backlog-module
-description: Operate on the PALS backlog module for read/write workflows, schema-aware validation, and versioned evolution tasks.
+description: Version router for backlog-module. Load the currently deployed versioned skill content.
 ---
 
-# Backlog Module Skill
+# Backlog Module (Version Router)
 
-## Use This Skill When
+This file is a pointer to the latest deployed backlog-module skill version.
 
-1. You need to read backlog epics or stories.
-2. You need to create or update backlog records.
-3. You need module-owned interpretation for prioritization or readiness.
+## Current Deployed Version
 
-## Scope
+- `v0`
 
-- Read/write scope: `workspace/backlog/`
-- Do not write outside module scope.
+## Load Target
 
-## Read Response Contract
+- `v0/content/SKILL.md`
 
-Return:
-1. `answer`
-2. `evidence`
-3. `needs`
-4. `confidence`
-5. `uncertainties`
+## Router Rule
 
-## Write Rules
-
-1. Enforce schema in `workspace/backlog/.schema/`.
-2. Enforce canonical references: `pals://workspace/backlog/<opaque-id>`.
-3. Keep body required sections present. Use `null` for explicit empty content.
-
-## Evolution Rules
-
-1. Follow module compatibility policy in `workspace/backlog/MODULE.md`.
-2. Use phased plan: `prepare -> expand -> backfill -> cutover -> cleanup`.
+When this skill is invoked, read and follow the skill instructions at `v0/content/SKILL.md`.

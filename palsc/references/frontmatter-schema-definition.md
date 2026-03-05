@@ -100,6 +100,10 @@ body_contract:
 15. `schema_version` in each schema file must match module `MODULE.md` `schema_version` for the deployed version.
 16. All deployed schema files in a module must share the same `schema_version`.
 
+## Boundary
+
+This file defines only schema-file frontmatter shape. Record validation semantics are defined in `palsc/references/record-validation.md`.
+
 ## Explicitly Not Supported (Current Baseline)
 
 1. Per-entity schema_version divergence inside one deployed module version.

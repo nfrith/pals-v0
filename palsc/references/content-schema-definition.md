@@ -63,14 +63,9 @@ Repeat the `## <SECTION_NAME>` block for each section in the schema.
 7. `includes` and `excludes` must be non-empty strings.
 8. Unknown section-contract keys are invalid in the current baseline.
 
-## Validation Semantics Against Data Records
+## Boundary
 
-1. `required: true` means the section must exist in data records.
-2. `required: false` means section may be absent.
-3. `nullable: true` means explicit empty (`null`) is allowed when section exists.
-4. `nullable: false` means explicit empty (`null`) is not allowed.
-5. Missing and explicit empty (`null`) are distinct states.
-6. A required section that is missing is a schema violation.
+This file defines only schema-file body shape. Record validation semantics are defined in `palsc/references/record-validation.md`.
 
 ## Value Type Meaning
 

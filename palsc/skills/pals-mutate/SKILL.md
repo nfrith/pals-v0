@@ -7,6 +7,14 @@ description: Guide the development of a PALS module's next version. Interviews t
 
 Create the next version of a PALS module skill through structured discovery, operator interview, and authoring.
 
+## Input
+
+The operator provides the path or name of a PALS module skill (e.g. `backlog-module` or `.claude/skills/{skill-name}`).
+
+## Preflight
+
+Before starting, verify the target is a valid PALS module skill (see `palsc/references/pals-module-shape.md`). If it isn't, stop and tell the operator pals-mutate can only be operated against PALS enabled skills.
+
 ## Scope & Boundaries
 
 ### What pals-mutate does

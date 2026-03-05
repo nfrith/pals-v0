@@ -1,8 +1,8 @@
-# PALS Pre-Release Spec (v0 Working Draft)
+# PALS Pre-Release Spec (Working Draft)
 
-Updated: 2026-03-03
+Updated: 2026-03-05
 
-## 1) Current Agreements (Resolved v0 Decisions)
+## 1) Current Agreements (Resolved Decisions)
 
 1. System model:
 - Each module is its own filesystem tree.
@@ -28,7 +28,7 @@ Updated: 2026-03-03
 - Orchestrator can forward prompt verbatim to a module skill/subagent.
 - Module returns semi-structured output to support deterministic orchestration.
 
-## 2) Read Contract Direction (Resolved v0 Decision)
+## 2) Read Contract Direction (Resolved Decision)
 
 Each module read response uses a semi-structured envelope, but no global routing advice.
 
@@ -111,9 +111,9 @@ Flow:
 Requirement:
 - Uncertainty handling must be first-class output, not hidden prose.
 
-## 4) Cross-Module Communication (Resolved v0 Decision + Deferred Design Space)
+## 4) Cross-Module Communication (Resolved Decision + Deferred Design Space)
 
-### Current Baseline (Resolved in v0 Draft)
+### Current Baseline (Resolved in Current Draft)
 
 1. Default cross-module mechanism is orchestrator-mediated request/response chaining.
 2. Integration events are optional and used selectively for async/high-value transitions.
@@ -170,7 +170,7 @@ Cons:
 - Highest complexity.
 - Risk of over-engineering too early.
 
-### 4.1) Current Baseline Summary (Pre-Release v0)
+### 4.1) Current Baseline Summary (Pre-Release)
 
 For the current baseline, start with:
 1. Synchronous orchestrator-mediated request/response for reads and decisions.
@@ -311,7 +311,7 @@ Use when:
 
 Treat integration events as curated outputs, not raw internal details.
 
-### Current Baseline Heuristic (Resolved v0)
+### Current Baseline Heuristic (Resolved)
 
 Emit integration events only for transitions that are:
 1. Cross-module relevant.
@@ -320,7 +320,7 @@ Emit integration events only for transitions that are:
 
 If a flow is synchronous and human-in-loop in one turn, orchestrator chaining is enough.
 
-## 10) Practical Guardrails for v0 Baseline (Resolved v0 Decisions)
+## 10) Practical Guardrails for Baseline (Resolved Decisions)
 
 1. Keep module read/write responses in a stable template.
 2. Keep `needs` standardized and fact-oriented.
@@ -332,13 +332,13 @@ If a flow is synchronous and human-in-loop in one turn, orchestrator chaining is
 
 ## 11) Questions For Next Iteration (Deferred Design Space)
 
-1. Which exact backlog transitions should emit integration events in v0?
-2. Which experiment transitions should emit integration events in v0?
+1. Which exact backlog transitions should emit integration events in current baseline?
+2. Which experiment transitions should emit integration events in current baseline?
 3. Should event storage be JSONL-first or markdown-first?
 4. Do we want one shared event log per module or per-entity event streams?
 5. What is the minimum retry policy for orchestrator misroutes and transient failures?
 
-## 12) Reference Encoding (Cross-Module IDs, Resolved v0 Decision)
+## 12) Reference Encoding (Cross-Module IDs, Resolved Decision)
 
 ### Decision
 
@@ -386,16 +386,17 @@ people:
 3. Opaque primary IDs are required in URI targets (no slug-as-key in canonical target).
 4. Display labels are human-facing and may be soft-validated only.
 
-### Non-Goals for v0 Baseline
+### Non-Goals for Baseline
 
 1. No rich inline relation objects as default reference form.
 2. No path-coupled references as canonical FK mechanism.
 
-## 13) Module Evolution and Versioning (Resolved v0 Decision + Playbook Foundation)
+## 13) Module Evolution and Versioning (Resolved Decision + Playbook Foundation)
 
 ### Decision
 
-Every module declares explicit version metadata and compatibility policy.
+Every module declares explicit version metadata.
+Versioning is customer-facing and starts at `v1`.
 
 Minimum fields (in `MODULE.md` or equivalent):
 - `module_id`
@@ -403,33 +404,67 @@ Minimum fields (in `MODULE.md` or equivalent):
 - `uri_scheme`
 - `module_version`
 - `schema_version`
-- `compat.read_versions`
-- `compat.write_version`
-- `compat.sunset_by` (optional but recommended)
 
-### Compatibility Window Policy
+### Versioning Rules
 
-1. During evolution windows, reads may support old + new versions.
-2. Writes target the new version only.
-3. Linter severity escalates by time/stage:
-- `warn` during introduction
-- `error` after required/cutover point
+1. `module_version` tracks deployed module behavior (schema + skill logic package).
+2. `schema_version` is a global module-level version, not per-entity.
+3. Schema versions are integers only (`1`, `2`, `3`, ...), not decimals.
+4. If any deployed schema file changes, bump module `schema_version`.
+5. All deployed schema files in a module must carry the same `schema_version`.
+6. Root skill router target `vN` must match `MODULE.md` `module_version: N`.
+
+### Bump Rules
+
+1. Logic-only change:
+- bump `module_version` by `+1`
+- keep `schema_version` unchanged
+
+2. Schema-only change:
+- bump `module_version` by `+1`
+- bump `schema_version` by `+1`
+
+3. Schema + logic change:
+- bump `module_version` by `+1`
+- bump `schema_version` by `+1`
+
+### Mutate -> Migrate Contract
+
+1. `pals-mutate` takes `module_skill_path` as its only required input and derives module context.
+2. `pals-mutate` authors `vN+1/` under module skill path.
+3. `vN+1/migrations/MANIFEST.md` is required.
+4. Manifest frontmatter must include at minimum:
+- `manifest_id`
+- `module_id`
+- `module_path`
+- `skill_path`
+- `from_version`
+- `to_version`
+- `change_class`
+- `data_migration_required`
+- `status`
+- `created_on`
+- `updated_on`
+5. `pals-migrate` must fail if manifest is missing or invalid.
+6. Cutover is atomic:
+- if migration or validation fails, do not update router or `MODULE.md`
+- if all gates pass, update router + `MODULE.md` together in one cutover commit
 
 ### Evolution Classes
 
 1. Additive change
 - Example: add a new section/field.
-- Default strategy: phased rollout.
+- Default strategy: mutate authoring -> deterministic migrate -> atomic cutover.
 
 2. Shape change (move/rename/restructure)
 - Example: `body.media` moved under another section.
-- Default strategy: `expand -> migrate -> contract`.
+- Default strategy: mutate authoring -> deterministic rewrite -> atomic cutover.
 
 3. Semantic change (meaning changes)
 - Example: field meaning changes from label to computed score.
-- Requires explicit version bump and compatibility window.
+- Requires explicit version bump, manifested behavior test plan, and migration validation proof.
 
-## 14) Body Structure and Null Semantics (Resolved v0 Decision)
+## 14) Body Structure and Null Semantics (Resolved Decision)
 
 ### Decision
 
@@ -448,7 +483,7 @@ Treat as three distinct states:
 
 Rules:
 1. Required sections must be present, even when empty.
-2. Missing required section is a schema violation (or temporary legacy during compatibility window).
+2. Missing required section is a schema violation.
 3. Explicit empty must use one canonical marker: `null`.
 4. Per-section empty-marker overrides are not supported in the current baseline.
 
@@ -459,7 +494,7 @@ Rules:
 3. Backfill existing records incrementally (lazy-on-touch + optional batch pass).
 4. Promote to required and enforce with linter error at cutover.
 
-## 15) Compiler Responsibilities (Separation of Concerns, Resolved v0 Decision)
+## 15) Compiler Responsibilities (Separation of Concerns, Resolved Decision)
 
 ### Decision
 
@@ -470,7 +505,7 @@ Do not build one monolithic linter. Split responsibilities:
 - Resolve layout aliases into canonical schema keys.
 
 2. Linter
-- Validate canonical model against schema + compatibility policy.
+- Validate canonical model against schema + module invariants.
 - Enforce references, required fields/sections, enums, state transitions.
 
 3. Migrator
@@ -485,12 +520,12 @@ Do not build one monolithic linter. Split responsibilities:
 
 ## 16) Delivery Scope (Current Baseline vs Later)
 
-### Current Baseline (Pre-Release v0)
+### Current Baseline (Pre-Release)
 
 1. Orchestrator request/response chaining is the primary cross-module mechanism.
 2. Transport-agnostic references with `pals://<namespace>/<module>/<id>`.
 3. Additive evolution support (including required explicit empty section markers).
-4. Shape-change support via alias + cutover rules.
+4. Shape-change support via deterministic migration transforms + atomic cutover rules.
 5. Minimal migrator for deterministic rewrites.
 
 ### Later
@@ -512,6 +547,9 @@ Do not build one monolithic linter. Split responsibilities:
 9. Separate normalizer/linter/migrator responsibilities.
 10. Keep module read envelopes semi-structured and keep `needs` standardized.
 11. Do not require persistent short-term orchestrator memory artifacts between turns.
+12. Customer-facing module and skill versions start at `v1`.
+13. `schema_version` is global per module and uses integers only.
+14. `pals-mutate` requires `migrations/MANIFEST.md`; `pals-migrate` performs atomic cutover.
 
 ## 18) Backlog Evolution Playbook (Epic/Story -> Initiative/Epic/Story, Playbook/Template)
 
@@ -543,85 +581,54 @@ Use transport-agnostic references only:
 module_id: backlog
 module_version: 2
 schema_version: 2
-compat:
-  read_versions: [1, 2]
-  write_version: 2
-  sunset_by: 2026-06-30
 ```
 
 ### Phase Plan
 
-#### Phase 0: Prepare
+#### Phase 0: Mutate Authoring (vN+1 Folder)
 
 1. Add initiative schema and directory.
-2. Add compatibility policy in module metadata.
-3. Add linter rules in `warn` mode for upcoming required fields.
+2. Update module skill logic in `vN+1/content/SKILL.md` for initiative-aware behavior.
+3. Author required `vN+1/migrations/MANIFEST.md`.
+4. Include mutate outputs: intent, invariants, constraints, schema changes, behavior changes, migration plan, behavior test plan, cutover gates.
 
 Exit criteria:
 - New schema loads successfully.
-- No blocking lint errors introduced by prep changes.
+- Manifest is complete and approved.
 
-#### Phase 1: Expand (Dual-Read Starts)
+#### Phase 1: Migration Implementation
 
-1. Read logic supports old and new shapes.
-2. Write logic begins writing v2 shape for all new/updated records.
-3. `initiative_ref` is optional for legacy records but required for new writes.
-
-Lint state:
-- Missing `initiative_ref` on legacy story/epic: `warn`
-- Invalid reference format: `error`
+1. Implement deterministic, idempotent migration script(s).
+2. Migration rewrites v1 records to v2 shape:
+- story requires `initiative_ref` + `epic_ref`
+- epic requires `initiative_ref`
+3. Do not change IDs or containment paths.
 
 Exit criteria:
-- All new writes include `initiative_ref`.
-- Legacy read behavior remains stable.
+- Migration script exists and can run repeatedly without drift.
 
-#### Phase 2: Backfill
+#### Phase 2: Dry-Run + Validation Gates
 
-Run two backfill paths in parallel:
-
-1. Lazy-on-touch backfill
-- Any record edited by module skill gets normalized to v2.
-
-2. Batch backfill
-- Deterministic migrator processes remaining v1 records.
-
-Required backfill outputs:
-- Per-record result (`updated`, `skipped`, `failed`)
-- Reason for failures
-- Retry list
-
-Lint state:
-- Missing `initiative_ref` remains `warn`
-- Invalid/missing target references remain `error`
+1. Run migration on a staging copy.
+2. Validate migrated output in strict mode.
+3. Execute behavior tests from manifest.
+4. Produce migration report with per-record status and failures.
 
 Exit criteria:
-- Backfill coverage >= agreed threshold (recommended: 100% for epics, >= 95% stories before cutover)
-- Retry list is small and actionable.
+- Strict validation passes.
+- Behavior tests pass.
+- Failures are either zero or explicitly accepted with manual resolution plan.
 
 #### Phase 3: Cutover
 
-1. Flip requiredness:
-- `initiative_ref` required on stories and epics.
-
-2. Flip linter severities:
-- Missing `initiative_ref`: `error`
-- Any v1-only shape usage in writes: `error`
-
-3. Keep dual-read for short stabilization window.
+1. Apply migration to active module data.
+2. Update root skill router to `v2`.
+3. Update `MODULE.md` to `module_version: 2`, `schema_version: 2`.
+4. Commit cutover atomically.
 
 Exit criteria:
-- No new v1-shape writes.
-- Operational flows pass with strict v2 writes.
-
-#### Phase 4: Contract and Cleanup
-
-1. Remove v1 write paths.
-2. Remove read compatibility for v1 after `sunset_by`.
-3. Remove temporary alias/compat code.
-
-Exit criteria:
-- `read_versions: [2]`
-- Migration marked complete.
+- Deployed pointers and metadata all agree on v2.
+- No partial deployment state.
 
 ### Linter Rule Timeline (Concrete)
 
@@ -631,16 +638,13 @@ Example rules:
 - Always `error`.
 
 2. `BKL-EVO-001` `initiative_ref` missing on story.
-- Phase 1-2: `warn`
-- Phase 3+: `error`
+- Always `error` in deployed v2 data.
 
 3. `BKL-EVO-002` `initiative_ref` missing on epic.
-- Phase 1-2: `warn`
-- Phase 3+: `error`
+- Always `error` in deployed v2 data.
 
 4. `BKL-EVO-003` v1-only write shape detected.
-- Phase 1-2: `warn`
-- Phase 3+: `error`
+- Always `error` in deployed v2 logic.
 
 ### Backfill Process Contract
 
@@ -662,11 +666,12 @@ If mapping story/epic to initiative is ambiguous:
 1. Mark record `failed` with explicit reason.
 2. Do not guess silently.
 3. Route failed set to manual resolution queue.
+4. Do not cut over until failures are resolved or explicitly waived.
 
-### Orchestrator/Skill Behavior During Window
+### Orchestrator/Skill Behavior During Migration
 
 1. Orchestrator remains unchanged.
-2. Backlog skill handles compatibility and normalization internally.
+2. Backlog skill handles only one deployed version at a time.
 3. Cross-module callers only see stable backlog output contract.
 
 ### Definition of Done
@@ -674,8 +679,8 @@ If mapping story/epic to initiative is ambiguous:
 1. All active records are v2-compliant.
 2. Linter runs in strict mode for v2 requirements.
 3. Backlog write path only emits v2 shape.
-4. Compatibility code for v1 is removed.
-5. Migration report is archived with counts and failure resolutions.
+4. Required manifest and migration report are archived.
+5. Router + `MODULE.md` point to v2 and are in sync.
 
 ## 19) Body Shape-Change Playbook (Section Move Example: `## Media`, Playbook/Template)
 
@@ -689,7 +694,7 @@ Example change:
 
 ### Canonical Schema Key
 
-Treat both layouts as one canonical key during compatibility window:
+Treat both layouts as one canonical key during migration design:
 - Canonical key: `body.media`
 
 Interpretation rule:
@@ -698,34 +703,29 @@ Interpretation rule:
 
 ### Phase Plan
 
-#### Phase 0: Introduce Alias Mapping
+#### Phase 0: Mutate Authoring
 
-1. Add normalizer alias rules for both old and new layouts.
-2. Keep linter non-blocking for old layout.
+1. Update vN+1 schema to require only the new layout.
+2. Add migration transform rules from old layout -> new layout.
+3. Record this change in `vN+1/migrations/MANIFEST.md`.
 
-Lint state:
-- Both shapes accepted.
-- If both appear in same file, flag conflict (`error`) unless content is identical.
-
-Exit criteria:
-- Parser/normalizer resolves both layouts to same canonical key.
-
-#### Phase 1: New-Write Preference
-
-1. Module write logic emits new layout only.
-2. Existing files may remain old layout.
-
-Lint state:
-- Old layout in unchanged legacy files: `warn`
-- Old layout in newly written/rewritten files: `error`
+Validation state:
+- Old layout is allowed only as migration input.
+- New layout is required in deployed output.
 
 Exit criteria:
-- All skill-generated writes use new layout.
+- Migration transform rules are deterministic and conflict-aware.
+
+#### Phase 1: Migration Implementation
+
+1. Implement migrator to rewrite old layout to new layout.
+2. Keep deployed write logic on new layout only.
+3. Do not deploy dual-layout acceptance.
 
 #### Phase 2: Backfill
 
-1. Run migrator to rewrite old layout -> new layout.
-2. Validate canonical equivalence after rewrite.
+1. Run migrator on staging copy.
+2. Validate canonical equivalence and strict schema compliance.
 
 Backfill guarantees:
 - Deterministic transform.
@@ -737,8 +737,8 @@ Exit criteria:
 
 #### Phase 3: Cutover
 
-1. Remove old-layout acceptance from linter.
-2. Keep short read-only compatibility toggle if needed for rollback.
+1. Apply migration to active data.
+2. Deploy vN+1 schema and skill logic with new layout only.
 
 Lint state:
 - Old layout anywhere: `error`
@@ -748,7 +748,7 @@ Exit criteria:
 
 #### Phase 4: Cleanup
 
-1. Remove alias mapping and compatibility toggle.
+1. Remove migration-only transform shims from active runtime.
 2. Keep migration note in module changelog for auditability.
 
 ### Conflict and Ambiguity Rules
@@ -766,7 +766,7 @@ Exit criteria:
 
 1. All active files use new layout.
 2. Linter rejects old layout.
-3. Alias mapping removed.
+3. Migration-only transform shims removed from active runtime.
 4. Migration/conflict report archived.
 
 ## 20) Fixture-Backed Current Model (Pristine Snapshot, Behavioral Example)
@@ -790,9 +790,11 @@ Minimum module metadata fields:
 - `uri_scheme`
 - `module_version`
 - `schema_version`
-- `compat.read_versions`
-- `compat.write_version`
-- `compat.sunset_by` (optional but recommended)
+
+Versioning conventions in fixture:
+1. Customer-facing skill versions start at `v1`.
+2. Root skill router target `vN` matches `MODULE.md` `module_version: N`.
+3. All schema files in a deployed module share the module `schema_version`.
 
 ### Identity Invariants (Enforced)
 

@@ -811,8 +811,6 @@ Reference fields use `type: ref` with:
 - `namespace`
 - `module`
 - `target_entity`
-
-No `target_key_field` or `target_example` in the current baseline.
 Resolution target key is opinionated: always `id`.
 
 ### Body Contract (Current Baseline)

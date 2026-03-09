@@ -245,20 +245,13 @@ Right now we have a template, not a full validator contract.
 
 ### 12. State-transition validation is referenced but has no declaration model
 
-**Status:** unresolved
+**Status:** resolved
 **Severity:** significant — compiler scope is ambiguous
+**Decision Record:** [ITEM-12-runtime-owned-state-transitions.md](ITEM-12-runtime-owned-state-transitions.md)
 
-`SPEC.md` says the linter should enforce state transitions, but no current schema surface defines how valid transitions are declared.
+`SPEC.md` Section 15 now limits baseline compiler scope to static schema/module validation. Workflow rules, transition legality, and transition guards are runtime concerns owned by module write behavior, not `palsc validate`.
 
-Open questions:
-1. Are transitions declared in schema frontmatter, schema body, module skill content, or elsewhere?
-2. Is this meant only for known business fields like `status`, or for arbitrary enum fields?
-3. Is transition validation part of `palsc validate`, or a later write-time check only?
-4. If it is not part of the baseline compiler, it should be removed from the linter responsibility list.
-
-Until this is resolved, "compiler responsibilities" overstate what the validator can actually implement.
-
-**Files:** `SPEC.md:446-458`
+**Files:** `SPEC.md:447-465`, `example-systems/pristine-happy-path/.claude/skills/experiments-module/v2/content/SKILL.md:26-38`
 
 ---
 
@@ -284,15 +277,14 @@ Without a concrete AST-level or token-level rule, `PAL-RV-BODY-004` will vary ac
 
 ## Recommended Work Order
 
-1. `### 12.` State-transition validation is referenced but has no declaration model
-2. `### 2.` Entity path pattern matching has no formal definition
-3. `### 3.` Nested path-parent/identity-contract parent consistency algorithm is undefined
-4. `### 6.` Workspace/module discovery mechanism is missing
-5. `### 4.` Schema file authority is ambiguous
-6. `### 7.` Body section null detection rule is imprecise
-7. `### 13.` Body `value_type` classification rules are too loose for deterministic validation
-8. `### 9.` Display-label warning target is undefined
-9. `### 5.` CLI interface for `palsc validate` is undesigned
-10. `### 11.` Manifest validity and migration-report contracts are incomplete
-11. `### 10.` Diagnostic registry does not cover all compiler failure classes
-12. `### 8.` Correlation ID is required for orchestrated chains but is not part of the canonical read envelope keys
+1. `### 2.` Entity path pattern matching has no formal definition
+2. `### 3.` Nested path-parent/identity-contract parent consistency algorithm is undefined
+3. `### 6.` Workspace/module discovery mechanism is missing
+4. `### 4.` Schema file authority is ambiguous
+5. `### 7.` Body section null detection rule is imprecise
+6. `### 13.` Body `value_type` classification rules are too loose for deterministic validation
+7. `### 9.` Display-label warning target is undefined
+8. `### 5.` CLI interface for `palsc validate` is undesigned
+9. `### 11.` Manifest validity and migration-report contracts are incomplete
+10. `### 10.` Diagnostic registry does not cover all compiler failure classes
+11. `### 8.` Correlation ID is required for orchestrated chains but is not part of the canonical read envelope keys

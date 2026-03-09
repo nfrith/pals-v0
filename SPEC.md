@@ -456,11 +456,13 @@ Do not build one monolithic linter. Split responsibilities:
 
 2. Linter
 - Validate canonical model against schema + module invariants.
-- Enforce references, declared fields/sections, nullability, enums, state transitions.
+- Enforce references, declared fields/sections, nullability, and enums.
 
 3. Migrator
 - Apply record rewrites/backfills.
 - Operates from explicit evolution rules.
+
+Workflow rules, transition legality, and transition guards are module runtime concerns enforced by write skills, not by the baseline compiler.
 
 ### Why
 

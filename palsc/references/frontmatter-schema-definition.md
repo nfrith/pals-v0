@@ -92,7 +92,7 @@ body_contract:
 ## Compiler Enforcement Rules
 
 1. Top-level frontmatter keys must be exactly: `entity`, `schema_version`, `identity_contract`, `frontmatter_contract`, `body_contract`.
-2. `entity` must be a non-empty identifier string.
+2. `entity` must be a lowercase kebab-case identifier string matching `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`.
 3. `schema_version` must be a positive integer.
 4. `identity_contract` must be an object with key `local_id_field` and optional key `parent_ref_field`.
 5. `identity_contract.local_id_field` must be literal `id`.
@@ -117,6 +117,7 @@ body_contract:
 This file defines only schema-file frontmatter shape. Record validation semantics are defined in `palsc/references/record-validation.md`.
 Declared frontmatter fields are always required to be present on records; `nullable` controls whether the value may be explicit `null`.
 Logical URI construction is defined by `identity_contract`; ref values still use the canonical markdown-link form.
+Canonical entity names are lowercase kebab-case and must match `MODULE.md` `entity_paths` keys exactly.
 
 ## Explicitly Not Supported (Current Baseline)
 

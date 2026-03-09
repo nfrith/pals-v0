@@ -49,13 +49,13 @@ Diagnostics emitted by `palsc validate` must use one of:
 | `PAL-SCHEMA-009` | error | `schema_content` | Duplicate section key in schema body |
 | `PAL-SCHEMA-010` | error | `module_consistency` | Schema version mismatch against `MODULE.md` |
 | `PAL-SCHEMA-011` | error | `module_contract` | Invalid `MODULE.md` top-level frontmatter key set |
-| `PAL-SCHEMA-012` | error | `module_contract` | Invalid `entity_paths` contract shape |
+| `PAL-SCHEMA-012` | error | `module_contract` | Invalid `entity_paths` contract shape, template grammar, or template-set overlap |
 | `PAL-SCHEMA-013` | error | `module_contract` | Invalid `references.modules` contract shape |
 | `PAL-SCHEMA-014` | error | `module_contract` | `MODULE.md` must be frontmatter-only (body not allowed) |
 | `PAL-SCHEMA-015` | error | `schema_frontmatter` | Invalid `identity_contract` shape |
 | `PAL-RV-PARSE-001` | error | `parse` | Frontmatter YAML parse failure |
 | `PAL-RV-PARSE-002` | error | `parse` | Markdown section parse failure |
-| `PAL-RV-PARSE-003` | error | `parse` | Could not infer entity from record path |
+| `PAL-RV-PARSE-003` | error | `parse` | Could not infer entity from record path (zero or multiple entity-path template matches) |
 | `PAL-RV-FM-001` | error | `record_frontmatter` | Missing declared frontmatter field |
 | `PAL-RV-FM-002` | error | `record_frontmatter` | Unknown frontmatter field |
 | `PAL-RV-FM-003` | error | `record_frontmatter` | Enum value not in allowed set |

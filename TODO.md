@@ -20,8 +20,9 @@ Workflow for now: `unresolved` -> `proposed` -> `resolved`
 
 ### 2. Entity path pattern matching has no formal definition
 
-**Status:** unresolved
+**Status:** resolved
 **Severity:** critical — blocks entity inference and path validation
+**Decision Record:** [ITEM-2-semantic-entity-path-templates.md](ITEM-2-semantic-entity-path-templates.md)
 
 `MODULE.md` declares `entity_paths` using patterns like:
 ```yaml
@@ -32,16 +33,9 @@ entity_paths:
   run: programs/<PROGRAM-ID>/experiments/<EXPERIMENT-ID>/runs/<RUN-ID>.md
 ```
 
-The compiler must match actual file paths against these patterns to infer entity type (record-validation Phase 2, step 3) and validate path correctness (Phase 7, rule 1). But there is no formal specification of the pattern language:
+`entity_paths` is now defined as a semantic relative path-template language with canonical placeholder tokens, exact terminal self-placeholder filenames, and pairwise non-overlap requirements. Record parsing now infers entity type by exact-one-template match and produces placeholder bindings for later nested-parent validation work.
 
-1. **Wildcard semantics:** Is `<EPIC-ID>` a wildcard matching any single path segment? Any string? Does it have character constraints?
-2. **Repeated variables:** When `<PROGRAM-ID>` appears twice in `programs/<PROGRAM-ID>/<PROGRAM-ID>.md`, must both matched segments have the same value? The fixture says yes (e.g. `programs/PRG-0001/PRG-0001.md`), but no rule enforces this.
-3. **Ambiguity resolution:** Given a file path, multiple entity patterns could match. What is the precedence? (Most-specific-wins? Longest-match? Declaration order?)
-4. **Variable name semantics:** Are variable names like `<PROGRAM-ID>` meaningful tokens the compiler should parse, or are they just documentation? If meaningful, what is the naming convention?
-
-Without this spec, the compiler cannot reliably infer which entity a file belongs to or validate that a file lives at the correct path.
-
-**Files:** `palsc/references/module-schema-definition.md:8-9`, `palsc/references/record-validation.md:53`
+**Files:** `palsc/references/module-schema-definition.md`, `palsc/references/frontmatter-schema-definition.md`, `palsc/references/record-validation.md`, `palsc/references/diagnostic-codes.md`
 
 ---
 
@@ -277,14 +271,13 @@ Without a concrete AST-level or token-level rule, `PAL-RV-BODY-004` will vary ac
 
 ## Recommended Work Order
 
-1. `### 2.` Entity path pattern matching has no formal definition
-2. `### 3.` Nested path-parent/identity-contract parent consistency algorithm is undefined
-3. `### 6.` Workspace/module discovery mechanism is missing
-4. `### 4.` Schema file authority is ambiguous
-5. `### 7.` Body section null detection rule is imprecise
-6. `### 13.` Body `value_type` classification rules are too loose for deterministic validation
-7. `### 9.` Display-label warning target is undefined
-8. `### 5.` CLI interface for `palsc validate` is undesigned
-9. `### 11.` Manifest validity and migration-report contracts are incomplete
-10. `### 10.` Diagnostic registry does not cover all compiler failure classes
-11. `### 8.` Correlation ID is required for orchestrated chains but is not part of the canonical read envelope keys
+1. `### 3.` Nested path-parent/identity-contract parent consistency algorithm is undefined
+2. `### 6.` Workspace/module discovery mechanism is missing
+3. `### 4.` Schema file authority is ambiguous
+4. `### 7.` Body section null detection rule is imprecise
+5. `### 13.` Body `value_type` classification rules are too loose for deterministic validation
+6. `### 9.` Display-label warning target is undefined
+7. `### 5.` CLI interface for `palsc validate` is undesigned
+8. `### 11.` Manifest validity and migration-report contracts are incomplete
+9. `### 10.` Diagnostic registry does not cover all compiler failure classes
+10. `### 8.` Correlation ID is required for orchestrated chains but is not part of the canonical read envelope keys

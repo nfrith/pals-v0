@@ -3,6 +3,7 @@
 ## Scope
 
 This document defines how to validate a data record file (for example `workspace/backlog/stories/STORY-0001.md`) against module schemas.
+It assumes `record_path` already identifies one candidate data record file inside a module. Discovery of candidate record files, and exclusion of metadata such as `MODULE.md` or `.schema/*`, is outside scope.
 
 Schema-file shape is defined separately in:
 
@@ -50,7 +51,17 @@ The compiler should collect as many diagnostics as possible per file. If parsing
 
 1. Parse YAML frontmatter.
 2. Parse markdown body sections (`##` headings).
-3. Infer target entity from `record_path` using module entity paths.
+3. Infer target entity from `record_path` using module `entity_paths` templates:
+   - normalize `record_path` to a module-relative path with `/` separators
+   - evaluate the normalized path against every declared entity-path template
+   - template matching rules are:
+     - candidate path and template must have the same segment count
+     - literal-only segments must match exactly
+     - placeholder segments capture a non-empty substring within any literal affixes
+     - repeated placeholder names in one template must capture the same value
+   - if exactly one template matches, infer that entity and retain the placeholder binding map for later validation
+   - if zero templates match, emit `PAL-RV-PARSE-003`
+   - if multiple templates match, also emit `PAL-RV-PARSE-003`
 4. Match section headings literally against schema section names:
    - case-sensitive
    - whitespace-sensitive
@@ -131,8 +142,8 @@ For every `ref` or `array<ref>` value:
 
 ## Phase 7: Module-Level Consistency Validation
 
-1. Record must match one declared entity path template in `MODULE.md`.
-2. Entity inferred from path must have a matching schema `entity`.
+1. Record must have exactly one successful entity-path template match in `MODULE.md`.
+2. Entity inferred from that unique path-template match must have a matching schema `entity`.
 3. For nested hierarchies, path-parent consistency and identity-contract parent consistency must both hold.
 4. Module namespace and URI scheme in refs must be compatible with module contract rules.
 

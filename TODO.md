@@ -1,11 +1,20 @@
 # TODO
 
+## Status Legend
+
+- `unresolved`: ambiguity is documented, but no preferred solution is selected yet
+- `proposed`: a preferred solution exists and is written down, but the normative specs/files are not updated yet
+- `resolved`: the normative specs/files are updated and the ambiguity is closed
+
+Workflow for now: `unresolved` -> `proposed` -> `resolved`
+
 ## Open Ambiguities
 
 ### 1. Duplicate ID in fixture contradicts spec
 
-**Status:** unresolved
+**Status:** proposed
 **Severity:** critical — blocks compiler identity validation
+**Proposal:** [ITEM-1-qualified-logical-identity.md](ITEM-1-qualified-logical-identity.md)
 
 The spec rule is clear: "Duplicate `id` values within module scope are forbidden" (`palsc/references/record-validation.md`, Phase 5, rule 3).
 
@@ -286,3 +295,21 @@ The compiler still needs to know:
 Without a concrete AST-level or token-level rule, `PAL-RV-BODY-004` will vary across implementations.
 
 **Files:** `palsc/references/record-validation.md:100-103`, `palsc/references/content-schema-definition.md:68-72`, `palsc/references/diagnostic-codes.md:68`
+
+---
+
+## Recommended Work Order
+
+1. `### 1.` Duplicate ID in fixture contradicts spec
+2. `### 12.` State-transition validation is referenced but has no declaration model
+3. `### 2.` Entity path pattern matching has no formal definition
+4. `### 3.` Nested path-parent/ref-parent consistency algorithm is undefined
+5. `### 6.` Workspace/module discovery mechanism is missing
+6. `### 4.` Schema file authority is ambiguous
+7. `### 7.` Body section null detection rule is imprecise
+8. `### 13.` Body `value_type` classification rules are too loose for deterministic validation
+9. `### 9.` Display-label warning target is undefined
+10. `### 5.` CLI interface for `palsc validate` is undesigned
+11. `### 11.` Manifest validity and migration-report contracts are incomplete
+12. `### 10.` Diagnostic registry does not cover all compiler failure classes
+13. `### 8.` Correlation ID is required for orchestrated chains but is not part of the canonical read envelope keys

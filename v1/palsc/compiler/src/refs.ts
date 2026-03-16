@@ -1,7 +1,7 @@
 export interface ParsedRef {
   display: string;
   uri: string;
-  namespace: string;
+  system_id: string;
   module: string;
   entity_pairs: Array<{ entity: string; id: string }>;
 }
@@ -16,7 +16,7 @@ export function parseRefUri(value: string): ParsedRef | null {
   const uriMatch = uri.match(/^pals:\/\/([^/]+)\/([^/]+)\/(.+)$/);
   if (!uriMatch) return null;
 
-  const namespace = uriMatch[1];
+  const system_id = uriMatch[1];
   const module = uriMatch[2];
   const rest = uriMatch[3];
   const parts = rest.split("/");
@@ -34,7 +34,7 @@ export function parseRefUri(value: string): ParsedRef | null {
   return {
     display,
     uri,
-    namespace,
+    system_id,
     module,
     entity_pairs,
   };

@@ -2,14 +2,12 @@ schema: pals-module@1
 
 module:
   id: backlog
-  namespace: workspace
   mount: workspace
   path: backlog
   version: 1
 
 dependencies:
-  - namespace: workspace
-    module: people
+  - module: people
 
 entities:
   epic:
@@ -42,7 +40,6 @@ entities:
         items:
           type: ref
           target:
-            namespace: workspace
             module: backlog
             entity: story
 
@@ -111,7 +108,6 @@ entities:
         required: true
         allow_null: false
         target:
-          namespace: workspace
           module: backlog
           entity: epic
 
@@ -122,7 +118,6 @@ entities:
         items:
           type: ref
           target:
-            namespace: workspace
             module: people
             entity: person
 

@@ -2,14 +2,12 @@ schema: pals-module@1
 
 module:
   id: experiments
-  namespace: workspace
   mount: workspace
   path: experiments
   version: 1
 
 dependencies:
-  - namespace: workspace
-    module: people
+  - module: people
 
 entities:
   program:
@@ -92,7 +90,6 @@ entities:
         required: true
         allow_null: false
         target:
-          namespace: workspace
           module: experiments
           entity: program
 
@@ -112,7 +109,6 @@ entities:
         required: true
         allow_null: true
         target:
-          namespace: workspace
           module: people
           entity: person
 
@@ -173,7 +169,6 @@ entities:
         required: true
         allow_null: false
         target:
-          namespace: workspace
           module: experiments
           entity: experiment
 

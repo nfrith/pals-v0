@@ -11,6 +11,7 @@ import { moduleShapeSchema, systemConfigSchema, type EntityShape, type FieldShap
 import type { CompilerDiagnostic, ModuleValidationReport, ModuleValidationSummary, SystemValidationOutput } from "./types.ts";
 
 interface LoadedModuleContext {
+  system_id: string;
   module_id: string;
   module_path_abs: string;
   module_path_rel: string;
@@ -148,6 +149,7 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
   }
 
   const context: LoadedModuleContext = {
+    system_id: systemConfig.system_id,
     module_id: moduleId,
     module_path_abs: modulePathAbs,
     module_path_rel: modulePathRel,
@@ -238,7 +240,7 @@ function validateFrontmatter(record: ParsedRecord, context: LoadedModuleContext)
 
   for (const [fieldName, fieldShape] of Object.entries(declaredFields)) {
     if (!(fieldName in record.frontmatter)) continue;
-    diagnostics.push(...validateFieldValue(record, context, fieldName, fieldShape, record.frontmatter[fieldName]));
+      diagnostics.push(...validateFieldValue(record, context, fieldName, fieldShape, record.frontmatter[fieldName]));
   }
 
   return diagnostics;
@@ -362,7 +364,7 @@ function validateFieldValue(
       break;
 
     case "ref":
-      diagnostics.push(...validateRefContract(record, fieldName, fieldShape, value));
+      diagnostics.push(...validateRefContract(record, context, fieldName, fieldShape, value));
       break;
 
     case "list":
@@ -391,7 +393,7 @@ function validateFieldValue(
               );
             }
           } else {
-            diagnostics.push(...validateRefContract(record, `${fieldName}[${index}]`, { type: "ref", required: true, allow_null: false, target: fieldShape.items.target }, item));
+            diagnostics.push(...validateRefContract(record, context, `${fieldName}[${index}]`, { type: "ref", required: true, allow_null: false, target: fieldShape.items.target }, item));
           }
         });
       }
@@ -482,7 +484,7 @@ function validateIdentity(record: ParsedRecord): CompilerDiagnostic[] {
 
 function validateReferences(
   record: ParsedRecord,
-  _context: LoadedModuleContext,
+  context: LoadedModuleContext,
   recordIndex: Map<string, ParsedRecord>,
 ): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
@@ -492,11 +494,11 @@ function validateReferences(
     const value = record.frontmatter[fieldName];
 
     if (fieldShape.type === "ref") {
-      diagnostics.push(...validateResolvedRef(record, fieldName, fieldShape, value, recordIndex));
+      diagnostics.push(...validateResolvedRef(record, context, fieldName, fieldShape, value, recordIndex));
     } else if (fieldShape.type === "list" && fieldShape.items.type === "ref" && Array.isArray(value)) {
       value.forEach((item, index) => {
         diagnostics.push(
-          ...validateResolvedRef(record, `${fieldName}[${index}]`, { type: "ref", required: true, allow_null: false, target: fieldShape.items.target }, item, recordIndex),
+          ...validateResolvedRef(record, context, `${fieldName}[${index}]`, { type: "ref", required: true, allow_null: false, target: fieldShape.items.target }, item, recordIndex),
         );
       });
     }
@@ -524,6 +526,7 @@ function validateReferences(
 
 function validateRefContract(
   record: ParsedRecord,
+  context: LoadedModuleContext,
   fieldName: string,
   fieldShape: Extract<FieldShape, { type: "ref" }>,
   value: unknown,
@@ -550,22 +553,26 @@ function validateRefContract(
         module_id: record.module_id,
         entity: record.entity_name,
         field: fieldName,
-        expected: "[label](pals://namespace/module/entity/id)",
+        expected: "[label](pals://system_id/module/entity/id)",
         actual: value,
       }),
     );
     return diagnostics;
   }
 
-  if (parsedRef.namespace !== fieldShape.target.namespace || parsedRef.module !== fieldShape.target.module) {
+  if (parsedRef.system_id !== context.system_id || parsedRef.module !== fieldShape.target.module) {
     diagnostics.push(
-      diag(codes.REF_CONTRACT_MISMATCH, "error", "reference", record.file_rel, `Field '${fieldName}' points to the wrong namespace/module`, {
+      diag(codes.REF_CONTRACT_MISMATCH, "error", "reference", record.file_rel, `Field '${fieldName}' points to the wrong system/module`, {
         module_id: record.module_id,
         entity: record.entity_name,
         field: fieldName,
-        expected: fieldShape.target,
+        expected: {
+          system_id: context.system_id,
+          module: fieldShape.target.module,
+          entity: fieldShape.target.entity,
+        },
         actual: {
-          namespace: parsedRef.namespace,
+          system_id: parsedRef.system_id,
           module: parsedRef.module,
           entity: refTargetEntity(parsedRef),
         },
@@ -590,6 +597,7 @@ function validateRefContract(
 
 function validateResolvedRef(
   record: ParsedRecord,
+  context: LoadedModuleContext,
   fieldName: string,
   _fieldShape: Extract<FieldShape, { type: "ref" }>,
   value: unknown,
@@ -600,6 +608,19 @@ function validateResolvedRef(
 
   const parsedRef = parseRefUri(value);
   if (!parsedRef) return diagnostics;
+
+  if (parsedRef.system_id !== context.system_id) {
+    diagnostics.push(
+      diag(codes.REF_CONTRACT_MISMATCH, "error", "reference", record.file_rel, `Reference '${fieldName}' points to the wrong system`, {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: fieldName,
+        expected: context.system_id,
+        actual: parsedRef.system_id,
+      }),
+    );
+    return diagnostics;
+  }
 
   if (!recordIndex.has(parsedRef.uri)) {
     diagnostics.push(
@@ -710,7 +731,7 @@ function buildCanonicalUri(
     segments.push(lineageEntity, entityId);
   }
 
-  return `pals://${context.shape.module.namespace}/${context.shape.module.id}/${segments.join("/")}`;
+  return `pals://${context.system_id}/${context.shape.module.id}/${segments.join("/")}`;
 }
 
 function validateRegistryAlignment(

@@ -1,5 +1,5 @@
 schema: pals-system@1
-namespace: workspace
+system_id: centralized-happy-path
 
 roots:
   workspace:

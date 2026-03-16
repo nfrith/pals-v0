@@ -21,7 +21,6 @@ const relativePath = z.string().min(1).refine(isNormalizedRelativePath, {
 });
 
 const targetSchema = z.object({
-  namespace: nonEmptyString,
   module: entityName,
   entity: entityName,
 });
@@ -160,20 +159,18 @@ export const moduleShapeSchema = z.object({
   schema: z.literal("pals-module@1"),
   module: z.object({
     id: entityName,
-    namespace: nonEmptyString,
     mount: entityName,
     path: relativePath,
     version: positiveInt,
   }),
   dependencies: z.array(z.object({
-    namespace: nonEmptyString,
     module: entityName,
   })),
   entities: z.record(entityName, entitySchema),
 }).superRefine((value, ctx) => {
   const seenDependencies = new Set<string>();
   for (const dependency of value.dependencies) {
-    const key = `${dependency.namespace}/${dependency.module}`;
+    const key = dependency.module;
     if (seenDependencies.has(key)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -196,7 +193,7 @@ export const moduleShapeSchema = z.object({
     const fieldEntries = Object.entries(entity.fields);
     for (const [fieldKey, field] of fieldEntries) {
       if (field.type === "ref" && field.target.module !== value.module.id) {
-        const dependencyKey = `${field.target.namespace}/${field.target.module}`;
+        const dependencyKey = field.target.module;
         if (!seenDependencies.has(dependencyKey)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -207,7 +204,7 @@ export const moduleShapeSchema = z.object({
       }
 
       if (field.type === "list" && field.items.type === "ref" && field.items.target.module !== value.module.id) {
-        const dependencyKey = `${field.items.target.namespace}/${field.items.target.module}`;
+        const dependencyKey = field.items.target.module;
         if (!seenDependencies.has(dependencyKey)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -222,7 +219,7 @@ export const moduleShapeSchema = z.object({
 
 export const systemConfigSchema = z.object({
   schema: z.literal("pals-system@1"),
-  namespace: nonEmptyString,
+  system_id: nonEmptyString,
   roots: z.record(entityName, z.object({
     path: relativePath,
   })),

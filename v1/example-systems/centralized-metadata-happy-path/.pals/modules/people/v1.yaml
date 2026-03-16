@@ -2,7 +2,6 @@ schema: pals-module@1
 
 module:
   id: people
-  namespace: workspace
   mount: workspace
   path: people
   version: 1

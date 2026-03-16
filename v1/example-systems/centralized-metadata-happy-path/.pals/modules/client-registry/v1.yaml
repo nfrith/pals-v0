@@ -2,7 +2,6 @@ schema: pals-module@1
 
 module:
   id: client-registry
-  namespace: workspace
   mount: clients
   path: registry
   version: 1

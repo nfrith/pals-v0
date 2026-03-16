@@ -5,9 +5,10 @@ This fixture is an alternate clean PALS-style system built from the same domain 
 ## What Changed
 
 1. Authoritative module shape metadata lives under `.pals/`.
-2. The system registry declares reusable top-level mounts such as `workspace/` and `clients/`.
-3. Module shapes use `mount + path` instead of a single baked-in root string.
-4. Module shape files use explicit object-shaped contracts intended to be authored by agents, not terse human shorthand.
+2. `.pals/system.yaml` owns the single `system_id` for canonical PALS refs.
+3. The system registry declares reusable top-level mounts such as `workspace/` and `clients/`.
+4. Module shapes use `mount + path` instead of a single baked-in root string or repeated per-module namespace.
+5. Module shape files use explicit object-shaped contracts intended to be authored by agents, not terse human shorthand.
 
 ## Intent
 
@@ -29,6 +30,7 @@ In this trimmed `v1` fixture, skill paths still exist as metadata in `.pals/syst
 ## Tradeoff This Fixture Is Testing
 
 - Better: one obvious place to inspect system shape, lower schema duplication, cleaner data tree.
+- Better: a single `system_id` owns canonical identity, while mounts only describe file placement.
 - Better: modules can be spread across multiple repo roots without changing canonical module identity.
 - Better: section content rules are explicit enough for AST-based validation instead of loose `prose`/`list` heuristics.
 - Worse: metadata is farther from records, and module edits usually touch `.pals/` plus skill content.

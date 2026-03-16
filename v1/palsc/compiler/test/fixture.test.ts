@@ -56,12 +56,12 @@ test("disallowed subheading inside a paragraph-only section fails", async () => 
   ).toBe(true);
 });
 
-test("unknown module mount fails system validation", async () => {
+test("unknown module root fails system validation", async () => {
   const tempRoot = await copyFixture();
   await rewriteFixtureFile(
     tempRoot,
     ".pals/system.yaml",
-    (current) => current.replace("mount: clients", "mount: ghosts"),
+    (current) => current.replace("root: clients", "root: ghosts"),
   );
 
   const result = validateSystem(tempRoot);
@@ -69,12 +69,12 @@ test("unknown module mount fails system validation", async () => {
   expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SYSTEM_INVALID)).toBe(true);
 });
 
-test("root mount paths must stay normalized and relative", async () => {
+test("roots must be single-segment slugs", async () => {
   const tempRoot = await copyFixture();
   await rewriteFixtureFile(
     tempRoot,
     ".pals/system.yaml",
-    (current) => current.replace("path: clients", "path: ../clients"),
+    (current) => current.replace("  - clients", "  - clients/nested"),
   );
 
   const result = validateSystem(tempRoot);
@@ -82,12 +82,12 @@ test("root mount paths must stay normalized and relative", async () => {
   expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SYSTEM_INVALID)).toBe(true);
 });
 
-test("module paths must stay normalized and relative", async () => {
+test("module dirs must be single-segment slugs", async () => {
   const tempRoot = await copyFixture();
   await rewriteFixtureFile(
     tempRoot,
     ".pals/system.yaml",
-    (current) => current.replace("path: registry", "path: ../registry"),
+    (current) => current.replace("dir: registry", "dir: registry/nested"),
   );
 
   const result = validateSystem(tempRoot);
@@ -95,18 +95,58 @@ test("module paths must stay normalized and relative", async () => {
   expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SYSTEM_INVALID)).toBe(true);
 });
 
-test("shape mount mismatch against the registry fails", async () => {
+test("declared roots must exist on disk", async () => {
   const tempRoot = await copyFixture();
   await rewriteFixtureFile(
     tempRoot,
-    ".pals/modules/client-registry/v1.yaml",
-    (current) => current.replace("mount: clients", "mount: workspace"),
+    ".pals/system.yaml",
+    (current) => current.replace("  - dotfiles", "  - ghosts"),
   );
 
   const result = validateSystem(tempRoot);
   expect(result.status).toBe("fail");
+  expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SYSTEM_ROOT_INVALID)).toBe(true);
+});
 
-  const report = result.modules.find((moduleReport) => moduleReport.module_id === "client-registry");
-  expect(report).toBeDefined();
-  expect(report!.diagnostics.some((diagnostic) => diagnostic.code === codes.SHAPE_REGISTRY_MISMATCH)).toBe(true);
+test("declared module directories must exist on disk", async () => {
+  const tempRoot = await copyFixture();
+  await rewriteFixtureFile(
+    tempRoot,
+    ".pals/system.yaml",
+    (current) => current.replace("dir: registry", "dir: missing"),
+  );
+
+  const result = validateSystem(tempRoot);
+  expect(result.status).toBe("fail");
+  expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SYSTEM_MODULE_DIR_INVALID)).toBe(true);
+});
+
+test("duplicate module locations are rejected", async () => {
+  const tempRoot = await copyFixture();
+  await rewriteFixtureFile(
+    tempRoot,
+    ".pals/system.yaml",
+    (current) =>
+      current.replace(
+        "  client-registry:\n    root: clients\n    dir: registry\n    version: 1\n",
+        "  client-registry:\n    root: workspace\n    dir: backlog\n    version: 1\n",
+      ),
+  );
+
+  const result = validateSystem(tempRoot);
+  expect(result.status).toBe("fail");
+  expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SYSTEM_MODULE_LOCATION_CONFLICT)).toBe(true);
+});
+
+test("missing inferred shape files are rejected", async () => {
+  const tempRoot = await copyFixture();
+  await rewriteFixtureFile(
+    tempRoot,
+    ".pals/system.yaml",
+    (current) => current.replace("version: 1\n    skill: .claude/skills/client-registry-module/SKILL.md", "version: 9\n    skill: .claude/skills/client-registry-module/SKILL.md"),
+  );
+
+  const result = validateSystem(tempRoot);
+  expect(result.status).toBe("fail");
+  expect(result.system_diagnostics.some((diagnostic) => diagnostic.code === codes.SHAPE_FILE_MISSING)).toBe(true);
 });

@@ -2,7 +2,9 @@
 
 Bun-based validator for the explicit centralized `.pals/` metadata model.
 
-The system registry owns a single `system_id`, declares named repo-root mounts, and each module resolves from `mount + path`.
+The system registry owns a single `system_id`, declares top-level roots, and each module resolves from `root + dir`.
+
+Shape files are inferred by convention as `.pals/modules/<module-id>/v<version>.yaml`.
 
 ## Usage
 

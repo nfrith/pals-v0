@@ -1,5 +1,5 @@
 import { basename, join, relative, resolve } from "node:path";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import matter from "gray-matter";
 import { parse as parseYaml } from "yaml";
 import { ZodError } from "zod";
@@ -7,7 +7,7 @@ import { codes, computeStatus, diag } from "./diagnostics.ts";
 import { parseBodySections, validateSectionMarkdown, type ParsedBody } from "./markdown.ts";
 import { parsePathTemplate, matchPath, type ParsedPathTemplate } from "./parser/path-template.ts";
 import { parseRefUri, refTargetEntity } from "./refs.ts";
-import { moduleShapeSchema, systemConfigSchema, type EntityShape, type FieldShape, type ModuleShape, type SectionShape, type SystemConfig } from "./schema.ts";
+import { moduleShapeSchema, systemConfigSchema, type EntityShape, type FieldShape, type ModuleShape, type SystemConfig } from "./schema.ts";
 import type { CompilerDiagnostic, ModuleValidationReport, ModuleValidationSummary, SystemValidationOutput } from "./types.ts";
 
 interface LoadedModuleContext {
@@ -17,7 +17,7 @@ interface LoadedModuleContext {
   module_path_rel: string;
   shape_path_abs: string;
   shape_path_rel: string;
-  deployed_version: number;
+  module_version: number;
   shape: ModuleShape;
   templates: Map<string, ParsedPathTemplate>;
 }
@@ -62,6 +62,15 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
 
   const systemConfig = parsedSystem.data;
   const selectedModuleIds = getSelectedModuleIds(systemConfig, moduleFilter, systemConfigPathAbs, systemDiagnostics);
+  if (selectedModuleIds.length === 0) {
+    return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports);
+  }
+
+  const layoutDiagnostics = validateSystemLayout(systemRootAbs, systemConfig);
+  if (layoutDiagnostics.length > 0) {
+    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(layoutDiagnostics), moduleReports);
+  }
+
   const moduleStates = selectedModuleIds.map((moduleId) => loadModuleState(systemRootAbs, systemConfig, moduleId));
   const stateByModuleId = new Map(moduleStates.map((state) => [state.module_id, state]));
 
@@ -127,10 +136,9 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
 
 function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, moduleId: string): ModuleWorkState {
   const registryEntry = systemConfig.modules[moduleId];
-  const mountEntry = systemConfig.roots[registryEntry.mount];
-  const modulePathAbs = resolve(systemRootAbs, mountEntry.path, registryEntry.path);
+  const modulePathAbs = resolve(systemRootAbs, registryEntry.root, registryEntry.dir);
   const modulePathRel = toRepoRelative(modulePathAbs);
-  const shapePathAbs = resolve(systemRootAbs, registryEntry.shape);
+  const shapePathAbs = resolve(systemRootAbs, inferredShapePath(moduleId, registryEntry.version));
   const shapePathRel = toRepoRelative(shapePathAbs);
 
   const shapeResult = parseYamlFile<ModuleShape>(shapePathAbs, moduleShapeSchema, "module_shape", codes.SHAPE_INVALID, moduleId);
@@ -138,7 +146,7 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
     return {
       module_id: moduleId,
       module_path_rel: modulePathRel,
-      module_version: registryEntry.deployed_version,
+      module_version: registryEntry.version,
       shape_schema: null,
       diagnostics: shapeResult.diagnostics,
       files_checked: 0,
@@ -155,13 +163,13 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
     module_path_rel: modulePathRel,
     shape_path_abs: shapePathAbs,
     shape_path_rel: shapePathRel,
-    deployed_version: registryEntry.deployed_version,
+    module_version: registryEntry.version,
     shape: shapeResult.data,
     templates: new Map(Object.entries(shapeResult.data.entities).map(([entityName, entity]) => [entityName, parsePathTemplate(entity.path, entityName)])),
   };
 
   const diagnostics: CompilerDiagnostic[] = [...shapeResult.diagnostics];
-  diagnostics.push(...validateRegistryAlignment(context, registryEntry));
+  diagnostics.push(...validateShapeContracts(context, systemConfig));
 
   const filePaths = discoverMarkdownFiles(context.module_path_abs);
   const fileErrorMap = new Map<string, boolean>();
@@ -183,7 +191,7 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
   return {
     module_id: moduleId,
     module_path_rel: modulePathRel,
-    module_version: context.shape.module.version,
+    module_version: registryEntry.version,
     shape_schema: context.shape.schema,
     diagnostics,
     files_checked: filePaths.length,
@@ -240,7 +248,7 @@ function validateFrontmatter(record: ParsedRecord, context: LoadedModuleContext)
 
   for (const [fieldName, fieldShape] of Object.entries(declaredFields)) {
     if (!(fieldName in record.frontmatter)) continue;
-      diagnostics.push(...validateFieldValue(record, context, fieldName, fieldShape, record.frontmatter[fieldName]));
+    diagnostics.push(...validateFieldValue(record, context, fieldName, fieldShape, record.frontmatter[fieldName]));
   }
 
   return diagnostics;
@@ -731,56 +739,167 @@ function buildCanonicalUri(
     segments.push(lineageEntity, entityId);
   }
 
-  return `pals://${context.system_id}/${context.shape.module.id}/${segments.join("/")}`;
+  return `pals://${context.system_id}/${context.module_id}/${segments.join("/")}`;
 }
 
-function validateRegistryAlignment(
+function validateShapeContracts(
   context: LoadedModuleContext,
-  registryEntry: SystemConfig["modules"][string],
+  systemConfig: SystemConfig,
 ): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
+  const dependencySet = new Set(context.shape.dependencies.map((dependency) => dependency.module));
 
-  if (context.shape.module.id !== context.module_id) {
-    diagnostics.push(
-      diag(codes.SHAPE_REGISTRY_MISMATCH, "error", "module_shape", context.shape_path_rel, "Shape module.id does not match system registry key", {
-        module_id: context.module_id,
-        expected: context.module_id,
-        actual: context.shape.module.id,
-      }),
-    );
+  for (const dependency of context.shape.dependencies) {
+    if (!systemConfig.modules[dependency.module]) {
+      diagnostics.push(
+        diag(codes.SHAPE_CONTRACT_INVALID, "error", "module_shape", context.shape_path_rel, `Dependency '${dependency.module}' is not declared in system.yaml`, {
+          module_id: context.module_id,
+          field: "dependencies",
+          expected: Object.keys(systemConfig.modules).sort(),
+          actual: dependency.module,
+        }),
+      );
+    }
   }
 
-  if (context.shape.module.mount !== registryEntry.mount) {
-    diagnostics.push(
-      diag(codes.SHAPE_REGISTRY_MISMATCH, "error", "module_shape", context.shape_path_rel, "Shape module.mount does not match system registry", {
-        module_id: context.module_id,
-        expected: registryEntry.mount,
-        actual: context.shape.module.mount,
-      }),
-    );
-  }
+  for (const [entityName, entityShape] of Object.entries(context.shape.entities)) {
+    for (const [fieldName, fieldShape] of Object.entries(entityShape.fields)) {
+      if (fieldShape.type === "ref" && fieldShape.target.module !== context.module_id && !dependencySet.has(fieldShape.target.module)) {
+        diagnostics.push(
+          diag(codes.SHAPE_CONTRACT_INVALID, "error", "module_shape", context.shape_path_rel, `Field '${fieldName}' targets undeclared dependency '${fieldShape.target.module}'`, {
+            module_id: context.module_id,
+            entity: entityName,
+            field: fieldName,
+            expected: [...dependencySet].sort(),
+            actual: fieldShape.target.module,
+          }),
+        );
+      }
 
-  if (context.shape.module.path !== registryEntry.path) {
-    diagnostics.push(
-      diag(codes.SHAPE_REGISTRY_MISMATCH, "error", "module_shape", context.shape_path_rel, "Shape module.path does not match system registry", {
-        module_id: context.module_id,
-        expected: registryEntry.path,
-        actual: context.shape.module.path,
-      }),
-    );
-  }
-
-  if (context.shape.module.version !== registryEntry.deployed_version) {
-    diagnostics.push(
-      diag(codes.SHAPE_REGISTRY_MISMATCH, "error", "module_shape", context.shape_path_rel, "Shape module.version does not match deployed_version", {
-        module_id: context.module_id,
-        expected: registryEntry.deployed_version,
-        actual: context.shape.module.version,
-      }),
-    );
+      if (fieldShape.type === "list" && fieldShape.items.type === "ref" && fieldShape.items.target.module !== context.module_id && !dependencySet.has(fieldShape.items.target.module)) {
+        diagnostics.push(
+          diag(codes.SHAPE_CONTRACT_INVALID, "error", "module_shape", context.shape_path_rel, `Field '${fieldName}' targets undeclared dependency '${fieldShape.items.target.module}'`, {
+            module_id: context.module_id,
+            entity: entityName,
+            field: fieldName,
+            expected: [...dependencySet].sort(),
+            actual: fieldShape.items.target.module,
+          }),
+        );
+      }
+    }
   }
 
   return diagnostics;
+}
+
+function validateSystemLayout(
+  systemRootAbs: string,
+  systemConfig: SystemConfig,
+): CompilerDiagnostic[] {
+  const diagnostics: CompilerDiagnostic[] = [];
+
+  for (const rootName of systemConfig.roots) {
+    const rootAbs = resolve(systemRootAbs, rootName);
+    const rootRel = toRepoRelative(rootAbs);
+    const rootStat = safeStat(rootAbs);
+
+    if (!rootStat) {
+      diagnostics.push(
+        diag(codes.SYSTEM_ROOT_INVALID, "error", "system_config", rootRel, `Declared root '${rootName}' does not exist`, {
+          field: rootName,
+          expected: "existing directory",
+          actual: "missing",
+        }),
+      );
+      continue;
+    }
+
+    if (!rootStat.isDirectory()) {
+      diagnostics.push(
+        diag(codes.SYSTEM_ROOT_INVALID, "error", "system_config", rootRel, `Declared root '${rootName}' is not a directory`, {
+          field: rootName,
+          expected: "directory",
+          actual: "file",
+        }),
+      );
+    }
+  }
+
+  const seenModuleLocations = new Map<string, string>();
+  for (const [moduleId, registryEntry] of Object.entries(systemConfig.modules)) {
+    const locationKey = `${registryEntry.root}/${registryEntry.dir}`;
+    const existingModuleId = seenModuleLocations.get(locationKey);
+    if (existingModuleId) {
+      diagnostics.push(
+        diag(codes.SYSTEM_MODULE_LOCATION_CONFLICT, "error", "system_config", locationKey, `Module '${moduleId}' duplicates location '${locationKey}' already used by '${existingModuleId}'`, {
+          module_id: moduleId,
+          expected: "unique root/dir location",
+          actual: locationKey,
+        }),
+      );
+    } else {
+      seenModuleLocations.set(locationKey, moduleId);
+    }
+
+    const modulePathAbs = resolve(systemRootAbs, registryEntry.root, registryEntry.dir);
+    const modulePathRel = toRepoRelative(modulePathAbs);
+    const moduleStat = safeStat(modulePathAbs);
+
+    if (!moduleStat) {
+      diagnostics.push(
+        diag(codes.SYSTEM_MODULE_DIR_INVALID, "error", "system_config", modulePathRel, `Module '${moduleId}' directory does not exist`, {
+          module_id: moduleId,
+          expected: "existing directory",
+          actual: "missing",
+        }),
+      );
+    } else if (!moduleStat.isDirectory()) {
+      diagnostics.push(
+        diag(codes.SYSTEM_MODULE_DIR_INVALID, "error", "system_config", modulePathRel, `Module '${moduleId}' path is not a directory`, {
+          module_id: moduleId,
+          expected: "directory",
+          actual: "file",
+        }),
+      );
+    }
+
+    const shapePathAbs = resolve(systemRootAbs, inferredShapePath(moduleId, registryEntry.version));
+    const shapePathRel = toRepoRelative(shapePathAbs);
+    const shapeStat = safeStat(shapePathAbs);
+
+    if (!shapeStat) {
+      diagnostics.push(
+        diag(codes.SHAPE_FILE_MISSING, "error", "module_shape", shapePathRel, `Inferred shape file for module '${moduleId}' does not exist`, {
+          module_id: moduleId,
+          expected: inferredShapePath(moduleId, registryEntry.version),
+          actual: "missing",
+        }),
+      );
+    } else if (!shapeStat.isFile()) {
+      diagnostics.push(
+        diag(codes.SHAPE_FILE_MISSING, "error", "module_shape", shapePathRel, `Inferred shape path for module '${moduleId}' is not a file`, {
+          module_id: moduleId,
+          expected: "file",
+          actual: "directory",
+        }),
+      );
+    }
+  }
+
+  return diagnostics;
+}
+
+function inferredShapePath(moduleId: string, version: number): string {
+  return `.pals/modules/${moduleId}/v${version}.yaml`;
+}
+
+function safeStat(pathAbs: string): ReturnType<typeof statSync> | null {
+  try {
+    return statSync(pathAbs);
+  } catch {
+    return null;
+  }
 }
 
 function discoverMarkdownFiles(rootAbs: string): string[] {

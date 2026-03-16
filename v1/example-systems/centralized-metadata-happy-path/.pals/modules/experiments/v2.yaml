@@ -1,11 +1,5 @@
 schema: pals-module@1
 
-module:
-  id: experiments
-  mount: workspace
-  path: experiments
-  version: 2
-
 dependencies:
   - module: people
   - module: client-registry

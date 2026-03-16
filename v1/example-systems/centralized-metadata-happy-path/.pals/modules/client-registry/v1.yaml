@@ -1,11 +1,5 @@
 schema: pals-module@1
 
-module:
-  id: client-registry
-  mount: clients
-  path: registry
-  version: 1
-
 dependencies: []
 
 entities:

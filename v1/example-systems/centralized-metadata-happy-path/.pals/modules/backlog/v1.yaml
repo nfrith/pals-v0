@@ -1,11 +1,5 @@
 schema: pals-module@1
 
-module:
-  id: backlog
-  mount: workspace
-  path: backlog
-  version: 1
-
 dependencies:
   - module: people
 

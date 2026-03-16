@@ -1,24 +1,9 @@
-import { posix } from "node:path";
 import { z } from "zod";
 
 const entityName = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/);
 const fieldName = z.string().regex(/^[a-z][a-z0-9_]*$/);
 const nonEmptyString = z.string().min(1);
 const positiveInt = z.number().int().positive();
-
-function isNormalizedRelativePath(value: string): boolean {
-  if (value.length === 0) return false;
-  if (value.startsWith("/") || value.startsWith("\\")) return false;
-  if (value.includes("\\")) return false;
-  if (posix.normalize(value) !== value) return false;
-
-  const segments = value.split("/");
-  return segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
-}
-
-const relativePath = z.string().min(1).refine(isNormalizedRelativePath, {
-  message: "must be a normalized relative path without '.', '..', or a leading slash",
-});
 
 const targetSchema = z.object({
   module: entityName,
@@ -157,12 +142,6 @@ const entitySchema = z.object({
 
 export const moduleShapeSchema = z.object({
   schema: z.literal("pals-module@1"),
-  module: z.object({
-    id: entityName,
-    mount: entityName,
-    path: relativePath,
-    version: positiveInt,
-  }),
   dependencies: z.array(z.object({
     module: entityName,
   })),
@@ -189,54 +168,38 @@ export const moduleShapeSchema = z.object({
         path: ["entities", entityKey, "identity", "parent", "entity"],
       });
     }
-
-    const fieldEntries = Object.entries(entity.fields);
-    for (const [fieldKey, field] of fieldEntries) {
-      if (field.type === "ref" && field.target.module !== value.module.id) {
-        const dependencyKey = field.target.module;
-        if (!seenDependencies.has(dependencyKey)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `cross-module ref ${fieldKey} targets undeclared dependency ${dependencyKey}`,
-            path: ["entities", entityKey, "fields", fieldKey],
-          });
-        }
-      }
-
-      if (field.type === "list" && field.items.type === "ref" && field.items.target.module !== value.module.id) {
-        const dependencyKey = field.items.target.module;
-        if (!seenDependencies.has(dependencyKey)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `cross-module list ref ${fieldKey} targets undeclared dependency ${dependencyKey}`,
-            path: ["entities", entityKey, "fields", fieldKey],
-          });
-        }
-      }
-    }
   }
 });
 
 export const systemConfigSchema = z.object({
   schema: z.literal("pals-system@1"),
   system_id: nonEmptyString,
-  roots: z.record(entityName, z.object({
-    path: relativePath,
-  })),
+  roots: z.array(entityName).min(1),
   modules: z.record(entityName, z.object({
-    mount: entityName,
-    path: relativePath,
-    deployed_version: positiveInt,
-    shape: nonEmptyString,
+    root: entityName,
+    dir: entityName,
+    version: positiveInt,
     skill: nonEmptyString,
   })),
 }).superRefine((value, ctx) => {
-  for (const [moduleId, moduleConfig] of Object.entries(value.modules)) {
-    if (!value.roots[moduleConfig.mount]) {
+  const seenRoots = new Set<string>();
+  for (const [index, rootName] of value.roots.entries()) {
+    if (seenRoots.has(rootName)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `module ${moduleId} references unknown mount ${moduleConfig.mount}`,
-        path: ["modules", moduleId, "mount"],
+        message: `duplicate root ${rootName}`,
+        path: ["roots", index],
+      });
+    }
+    seenRoots.add(rootName);
+  }
+
+  for (const [moduleId, moduleConfig] of Object.entries(value.modules)) {
+    if (!seenRoots.has(moduleConfig.root)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `module ${moduleId} references unknown root ${moduleConfig.root}`,
+        path: ["modules", moduleId, "root"],
       });
     }
   }

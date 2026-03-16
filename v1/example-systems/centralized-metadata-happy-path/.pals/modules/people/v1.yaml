@@ -1,11 +1,5 @@
 schema: pals-module@1
 
-module:
-  id: people
-  mount: workspace
-  path: people
-  version: 1
-
 dependencies: []
 
 entities:

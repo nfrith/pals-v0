@@ -117,6 +117,18 @@ test("variant-local declared fields are enforced", async () => {
   });
 });
 
+test("variant-local non-null fields cannot be set to null", async () => {
+  await withFixtureSandbox("frontmatter-variant-nullability", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.status = null;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "backlog", codes.FM_TYPE_MISMATCH, "ITEM-0001.md");
+  });
+});
+
 test("fields from other variants are rejected", async () => {
   await withFixtureSandbox("frontmatter-variant-unknown", async ({ root }) => {
     await updateShapeYaml(root, "backlog", 1, (shape) => {

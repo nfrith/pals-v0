@@ -55,6 +55,20 @@ test.concurrent("entity shapes must declare an id field", async () => {
   });
 });
 
+test.concurrent("id fields cannot allow null", async () => {
+  await withFixtureSandbox("shape-id-nullability", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.id.allow_null = true;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".pals/modules/backlog/v1.yaml");
+  });
+});
+
 test.concurrent("entity paths must include the id placeholder", async () => {
   await withFixtureSandbox("shape-path-id-placeholder", async ({ root }) => {
     await updateShapeYaml(root, "backlog", 1, (shape) => {

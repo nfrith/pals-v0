@@ -31,6 +31,32 @@ Represent type as a discriminator.
   });
 });
 
+test.concurrent("missing nullable sections are still rejected", async () => {
+  await withFixtureSandbox("body-missing-nullable-section", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = `# ITEM-0001
+
+## DESCRIPTION
+
+Refactor the backlog module so one item entity can represent different work types.
+
+## ARCHITECTURE
+
+Represent type as a discriminator.
+
+## ACTIVITY_LOG
+
+- 2026-03-17: Captured the design goal for type-discriminated backlog items.
+`;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "backlog", codes.BODY_MISSING_SECTION, "ITEM-0001.md");
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_ORDER_MISMATCH, "ITEM-0001.md");
+  });
+});
+
 test.concurrent("unknown sections are rejected", async () => {
   await withFixtureSandbox("body-unknown-section", async ({ root }) => {
     await updateRecord(root, itemPath, (record) => {

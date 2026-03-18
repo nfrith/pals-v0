@@ -157,6 +157,8 @@ Examples:
 
 Every entity must declare an `id` field of type `id`. Every declared field must appear in record frontmatter. `allow_null` controls whether the explicit value may be `null`; it does not allow omission.
 
+There is no mechanism to declare optional fields.
+
 #### id
 
 ```yaml
@@ -166,6 +168,7 @@ id:
 ```
 
 Primary key. Must be a non-empty string. Must match the filename stem.
+The compiler rejects `allow_null: true` on `id`.
 
 #### string
 
@@ -263,8 +266,8 @@ sections:
 ```
 
 Rules:
-- `name`: rendered as `## NAME` in the markdown file (`UPPER_SNAKE_CASE` is recommended, not required)
 - every declared section must be present in the record body
+- `name`: rendered as `## NAME` in the markdown file (`UPPER_SNAKE_CASE` is recommended, not required)
 - `allow_null`: if true, the section can contain the literal word `null` instead of real content
 - `content.allowed_blocks`: at least one of `paragraph`, `bullet_list`, `ordered_list`
 - `content.allow_subheadings/allow_blockquotes/allow_code_blocks`: boolean flags for additional block types
@@ -343,4 +346,4 @@ This is the description content.
 - Each declared frontmatter field must appear explicitly, using YAML `null` when `allow_null: true` and no value is available
 - Each declared section appears as `## SECTION_NAME`
 - Nullable sections with no content use the literal word `null`
-- Empty string is not a valid stand-in for `null` on `type: string` fields
+- Empty string is not a valid value for `type: string` fields

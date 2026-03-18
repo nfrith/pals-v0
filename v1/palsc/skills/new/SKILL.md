@@ -56,7 +56,7 @@ For each entity, ask:
 - "Are there dates that matter? When it started, ended, was due?" — date fields
 - "Does it point to other things? An owner, a parent, related items?" — ref fields
 - "Are there lists of things? Tags, assignees, related items?" — list fields
-- "Can any of these be empty or unknown?" — nullable fields
+- "Can any of these be null or unknown?" — nullable fields
 
 Do not accept vague answers for enums. Get the actual values. "What are the valid statuses?" not "does it have a status?"
 
@@ -66,7 +66,7 @@ For each entity, ask:
 
 - "What prose or documentation goes with each one? If you opened this file, what sections would you expect to see?"
 - "For each section — what belongs there? What definitely does NOT belong there?"
-- "Can any section be empty sometimes, or do they all always have content?"
+- "Can any section be null sometimes, or do they all always have content?"
 
 Sections are the narrative structure. They are where humans write context, decisions, notes, acceptance criteria. Guide the operator to think about what a useful document looks like for each entity.
 
@@ -128,24 +128,24 @@ Directory structure:
 
 Fields:
   program:
-    id          id       declared, not null
-    title       string   declared, not null
-    status      enum     declared, not null    [draft, active, completed]
+    id          id       not null
+    title       string   not null
+    status      enum     not null    [draft, active, completed]
 
   experiment:
-    id          id       declared, not null
-    program_ref ref      declared, not null    → experiments/program
-    title       string   declared, not null
-    status      enum     declared, not null    [draft, active, paused, completed]
-    owner_ref   ref      declared, nullable    → people/person
+    id          id       not null
+    program_ref ref      not null    → experiments/program
+    title       string   not null
+    status      enum     not null    [draft, active, paused, completed]
+    owner_ref   ref      nullable    → people/person
 
   run:
-    id              id     declared, not null
-    experiment_ref  ref    declared, not null   → experiments/experiment
-    status          enum   declared, not null   [queued, running, completed, failed]
-    outcome         enum   declared, nullable   [positive, negative, inconclusive]
-    started_on      date   declared, not null
-    ended_on        date   declared, nullable
+    id              id     not null
+    experiment_ref  ref    not null   → experiments/experiment
+    status          enum   not null   [queued, running, completed, failed]
+    outcome         enum   nullable   [positive, negative, inconclusive]
+    started_on      date   not null
+    ended_on        date   nullable
 
 Sections:
   program:    HYPOTHESIS, SUCCESS_CRITERIA, NOTES

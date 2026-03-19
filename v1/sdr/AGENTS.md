@@ -1,6 +1,6 @@
 # SDR Directory Instructions
 
-This directory stores **Specification Decision Records (SDRs)** for PALS v1.
+This directory stores **Specification Decision Records (SDRs)** for ALS v1.
 
 An SDR captures a decision about what the spec means. It is the place to record normative behavior, not implementation scratch work.
 

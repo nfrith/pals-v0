@@ -1,7 +1,7 @@
 ---
 title: Backlog (Legacy)
 status: active
-notes: brownfield fixture for PALS adoption testing
+notes: brownfield fixture for ALS adoption testing
 ---
 
 # Backlog Legacy Root

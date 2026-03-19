@@ -341,10 +341,10 @@ Item `3` should build on this decision instead of redefining path matching again
 
 This decision required coordinated updates in at least:
 
-1. `palsc/references/module-schema-definition.md`
-2. `palsc/references/frontmatter-schema-definition.md`
-3. `palsc/references/record-validation.md`
-4. `palsc/references/diagnostic-codes.md`
+1. `alsc/references/module-schema-definition.md`
+2. `alsc/references/frontmatter-schema-definition.md`
+3. `alsc/references/record-validation.md`
+4. `alsc/references/diagnostic-codes.md`
 5. `TODO.md`
 
 This repository is still pre-release. This decision is now implemented in the normative spec files and tracked as resolved in `TODO.md`.

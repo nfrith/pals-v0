@@ -1,7 +1,7 @@
 ---
 module_id: backlog
 namespace: workspace
-uri_scheme: pals
+uri_scheme: als
 module_version: 1
 schema_version: 1
 entity_paths:

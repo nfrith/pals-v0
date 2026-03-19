@@ -1,0 +1,58 @@
+schema: als-module@1
+
+dependencies: []
+
+entities:
+  client:
+    path: clients/{id}.md
+
+    identity:
+      id_field: id
+
+    fields:
+      id:
+        type: id
+        allow_null: false
+
+      display_name:
+        type: string
+        allow_null: false
+
+      status:
+        type: enum
+        allow_null: false
+        allowed_values: [prospect, active, paused, former]
+
+    sections:
+      - name: PROFILE
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: stable description of the client and why they matter
+          exclude: experimental run logs or tactical work items
+
+      - name: PRIORITIES
+        allow_null: false
+        content:
+          allowed_blocks: [bullet_list, ordered_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: the main outcomes or constraints this client cares about
+          exclude: internal team-only implementation details
+
+      - name: NOTES
+        allow_null: true
+        content:
+          allowed_blocks: [paragraph]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: optional context and relationship notes
+          exclude: required profile or priority content

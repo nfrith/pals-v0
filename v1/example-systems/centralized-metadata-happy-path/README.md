@@ -1,14 +1,14 @@
 # Centralized Metadata Happy Path
 
-This fixture is an alternate clean PALS-style system built from the same domain data as `pristine-happy-path`, but with a different metadata placement strategy.
+This fixture is an alternate clean ALS-style system built from the same domain data as `pristine-happy-path`, but with a different metadata placement strategy.
 
 ## What Changed
 
-1. Authoritative module shape metadata lives under `.pals/`.
-2. `.pals/system.yaml` owns the single `system_id` for canonical PALS refs.
+1. Authoritative module shape metadata lives under `.als/`.
+2. `.als/system.yaml` owns the single `system_id` for canonical ALS refs.
 3. The system registry declares real top-level roots such as `workspace/` and `clients/`.
 4. Modules are direct children of one root via `root + dir`.
-5. Shape files are inferred by convention as `.pals/modules/<module-id>/v<version>.yaml`.
+5. Shape files are inferred by convention as `.als/modules/<module-id>/v<version>.yaml`.
 6. Module shape files contain only module contents, not repeated registry metadata.
 
 ## Intent
@@ -22,11 +22,11 @@ This model centralizes metadata at the system root, but keeps ownership module-s
 
 ## Layout
 
-1. `.pals/system.yaml`
-2. `.pals/modules/<module>/vN.yaml`
+1. `.als/system.yaml`
+2. `.als/modules/<module>/vN.yaml`
 3. `<root>/<module-dir>/...` data records
 
-In this trimmed `v1` fixture, skill paths still exist as metadata in `.pals/system.yaml`, but the example-system-local skill files are intentionally omitted.
+In this trimmed `v1` fixture, skill paths still exist as metadata in `.als/system.yaml`, but the example-system-local skill files are intentionally omitted.
 
 ## Tradeoff This Fixture Is Testing
 
@@ -34,5 +34,5 @@ In this trimmed `v1` fixture, skill paths still exist as metadata in `.pals/syst
 - Better: a single `system_id` owns canonical identity, while roots only describe file placement.
 - Better: the mental model is simple: root = top-level folder, module = direct child.
 - Better: section content rules are explicit enough for AST-based validation instead of loose `prose`/`list` heuristics.
-- Worse: metadata is farther from records, and module edits usually touch `.pals/` plus skill content.
+- Worse: metadata is farther from records, and module edits usually touch `.als/` plus skill content.
 - Explicit non-goal: this fixture does not make one monolithic file authoritative for the entire system.

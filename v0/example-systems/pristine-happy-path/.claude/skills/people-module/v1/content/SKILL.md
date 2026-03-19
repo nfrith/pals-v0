@@ -1,6 +1,6 @@
 ---
 name: people-module
-description: Operate on the PALS people module for identity lookups and person profile updates.
+description: Operate on the ALS people module for identity lookups and person profile updates.
 ---
 
 # People Module Skill
@@ -18,5 +18,5 @@ description: Operate on the PALS people module for identity lookups and person p
 ## Write Rules
 
 1. Enforce schema in `workspace/people/.schema/`.
-2. Enforce canonical references: `pals://workspace/people/person/<opaque-id>`.
+2. Enforce canonical references: `als://workspace/people/person/<opaque-id>`.
 3. Keep all declared sections present and use `null` for explicit empty content.

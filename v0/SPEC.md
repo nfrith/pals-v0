@@ -1,4 +1,4 @@
-# PALS Pre-Release Spec (Working Draft)
+# ALS Pre-Release Spec (Working Draft)
 
 Updated: 2026-03-05
 
@@ -47,7 +47,7 @@ Important: `uncertainties` expresses evidence or interpretation limits, not "cal
 
 ## 3) Reference Scenarios (Behavioral Examples)
 
-These scenarios describe expected PALS behavior under different request conditions.
+These scenarios describe expected ALS behavior under different request conditions.
 They are illustrative examples, not mutually exclusive design options.
 
 ### Scenario A: Priority Selection (Backlog + Experiments)
@@ -340,15 +340,15 @@ If a flow is synchronous and human-in-loop in one turn, orchestrator chaining is
 Use standard markdown link syntax for cross-module references, but with transport-agnostic logical URIs in link targets.
 
 Canonical format:
-- root entity: `[display-label](pals://<namespace>/<module>/<entity>/<id>)`
-- child entity: `[display-label](pals://<namespace>/<module>/<parent-entity>/<parent-id>/<entity>/<id>)`
+- root entity: `[display-label](als://<namespace>/<module>/<entity>/<id>)`
+- child entity: `[display-label](als://<namespace>/<module>/<parent-entity>/<parent-id>/<entity>/<id>)`
 
 Example:
 ```yaml
 ---
 people:
-  - "[alex-rivera](pals://workspace/people/person/PPL-000101)"
-  - "[mira-chen](pals://workspace/people/person/PPL-000204)"
+  - "[alex-rivera](als://workspace/people/person/PPL-000101)"
+  - "[mira-chen](als://workspace/people/person/PPL-000204)"
 ---
 ```
 
@@ -369,7 +369,7 @@ people:
 
 4. Easy compiler/linter enforcement.
 - Markdown link parse check.
-- Allowed URI scheme check (`pals://`).
+- Allowed URI scheme check (`als://`).
 - Namespace segment check (required, non-empty).
 - Module segment check (required, non-empty).
 - Entity-tag and ID segment pair check.
@@ -394,16 +394,16 @@ people:
 ## 13) Module Evolution (Playbook Foundation)
 
 Canonical module contract and versioning rules are defined in:
-1. `palsc/references/module-schema-definition.md`
-2. `palsc/references/module-skill-definition.md`
-3. `palsc/references/versioning.md`
+1. `alsc/references/module-schema-definition.md`
+2. `alsc/references/module-skill-definition.md`
+3. `alsc/references/versioning.md`
 
 This spec intentionally does not duplicate those normative rules.
 
 ### Mutate -> Migrate Contract
 
-1. `pals-mutate` takes `module_skill_path` as its only required input and derives module context.
-2. `pals-mutate` authors `vN+1/` under module skill path.
+1. `als-mutate` takes `module_skill_path` as its only required input and derives module context.
+2. `als-mutate` authors `vN+1/` under module skill path.
 3. `vN+1/migrations/MANIFEST.md` is required.
 4. Manifest frontmatter must include at minimum:
 - `manifest_id`
@@ -417,7 +417,7 @@ This spec intentionally does not duplicate those normative rules.
 - `status`
 - `created_on`
 - `updated_on`
-5. `pals-migrate` must fail if manifest is missing or invalid.
+5. `als-migrate` must fail if manifest is missing or invalid.
 6. Cutover is atomic:
 - if migration or validation fails, do not update router or `MODULE.md`
 - if all gates pass, update router + `MODULE.md` together in one cutover commit
@@ -439,8 +439,8 @@ This spec intentionally does not duplicate those normative rules.
 ## 14) Body Validation Contract
 
 Canonical body-shape and null/empty semantics are defined in:
-1. `palsc/references/content-schema-definition.md`
-2. `palsc/references/record-validation.md`
+1. `alsc/references/content-schema-definition.md`
+2. `alsc/references/record-validation.md`
 
 This spec intentionally does not duplicate those normative rules.
 
@@ -499,7 +499,7 @@ Workflow rules, transition legality, and transition guards are module runtime co
 9. Separate normalizer/linter/migrator responsibilities.
 10. Keep module read envelopes semi-structured and keep `uncertainties` explicit.
 11. Do not require persistent short-term orchestrator memory artifacts between turns.
-12. `pals-mutate` requires `migrations/MANIFEST.md`; `pals-migrate` performs atomic cutover.
+12. `als-mutate` requires `migrations/MANIFEST.md`; `als-migrate` performs atomic cutover.
 
 ## 18) Backlog Evolution Playbook (Epic/Story -> Initiative/Epic/Story, Playbook/Template)
 
@@ -521,9 +521,9 @@ Target (module_version: 2):
 ### Canonical References
 
 Use transport-agnostic references only:
-- `pals://<namespace>/backlog/initiative/INIT-<id>`
-- `pals://<namespace>/backlog/epic/EPIC-<id>`
-- `pals://<namespace>/backlog/story/STORY-<id>`
+- `als://<namespace>/backlog/initiative/INIT-<id>`
+- `als://<namespace>/backlog/epic/EPIC-<id>`
+- `als://<namespace>/backlog/story/STORY-<id>`
 
 ### Module Version Contract (Example)
 
@@ -582,7 +582,7 @@ Exit criteria:
 
 ### Linter Rule Timeline (Concrete)
 
-Use canonical compiler diagnostics from `palsc/references/diagnostic-codes.md`.
+Use canonical compiler diagnostics from `alsc/references/diagnostic-codes.md`.
 
 Example mappings:
 1. Invalid reference URI format -> `PAL-RV-REF-001` (error).
@@ -704,8 +704,8 @@ Exit criteria:
 ### Null/Empty Handling During Move
 
 Use canonical null/empty and section-presence rules from:
-1. `palsc/references/content-schema-definition.md`
-2. `palsc/references/record-validation.md`
+1. `alsc/references/content-schema-definition.md`
+2. `alsc/references/record-validation.md`
 
 ### Definition of Done
 
@@ -730,8 +730,8 @@ Current fixture module shapes:
 3. `experiments` -> nested 3-layer hierarchy (program -> experiment -> run).
 
 Module contract and versioning norms are source-of-truth in:
-1. `palsc/references/module-schema-definition.md`
-2. `palsc/references/versioning.md`
+1. `alsc/references/module-schema-definition.md`
+2. `alsc/references/versioning.md`
 
 ### Identity Invariants (Enforced)
 
@@ -753,8 +753,8 @@ Resolution target key is opinionated: always the target record's canonical logic
 ### Body Contract (Current Baseline)
 
 Body contract semantics are source-of-truth in:
-1. `palsc/references/content-schema-definition.md`
-2. `palsc/references/record-validation.md`
+1. `alsc/references/content-schema-definition.md`
+2. `alsc/references/record-validation.md`
 
 ### Flat and Nested Structures
 

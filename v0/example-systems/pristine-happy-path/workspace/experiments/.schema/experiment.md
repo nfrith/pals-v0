@@ -11,7 +11,7 @@ frontmatter_contract:
   program_ref:
     type: ref
     nullable: false
-    uri_scheme: pals
+    uri_scheme: als
     namespace: workspace
     module: experiments
     target_entity: program
@@ -28,7 +28,7 @@ frontmatter_contract:
   owner_ref:
     type: ref
     nullable: true
-    uri_scheme: pals
+    uri_scheme: als
     namespace: workspace
     module: people
     target_entity: person

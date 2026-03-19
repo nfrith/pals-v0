@@ -1,6 +1,6 @@
 ---
 name: experiments-module
-description: Operate on the PALS experiments module. Handles program lifecycle, experiment design, funding lifecycle, run recording, outcome interpretation, and evidence assessment across the program/experiment/run hierarchy.
+description: Operate on the ALS experiments module. Handles program lifecycle, experiment design, funding lifecycle, run recording, outcome interpretation, and evidence assessment across the program/experiment/run hierarchy.
 context: fork
 ---
 
@@ -66,7 +66,7 @@ Steps:
 3. Scan existing experiment directories under the parent program to determine the next available `EXP-XXXX` ID.
 4. Create directory `workspace/experiments/programs/<PRG-ID>/experiments/<new-id>/`.
 5. Create `<new-id>.md` with frontmatter (`id`, `program_ref`, `title`, `status: draft`, `budget: null`) and body sections (`Design`, `Metrics`, `Notes`) per the schema.
-6. Format `program_ref` as: `"[<label>](pals://workspace/experiments/program/<PRG-ID>)"`
+6. Format `program_ref` as: `"[<label>](als://workspace/experiments/program/<PRG-ID>)"`
 7. Return a write response.
 
 ### 3. submit-budget (write)
@@ -124,7 +124,7 @@ Steps:
 4. Scan existing run files under the parent experiment to determine the next available `RUN-XXXX` ID.
 5. Create `<new-id>.md` under `workspace/experiments/programs/<PRG-ID>/experiments/<EXP-ID>/runs/`.
 6. Set frontmatter: `id`, `experiment_ref`, `status: running`, `started_on: <today>`.
-7. Format `experiment_ref` as: `"[<label>](pals://workspace/experiments/program/<PRG-ID>/experiment/<EXP-ID>)"`
+7. Format `experiment_ref` as: `"[<label>](als://workspace/experiments/program/<PRG-ID>/experiment/<EXP-ID>)"`
 8. Set body sections (`Observations`, `Decision`, `Notes`) per the schema. If no decision yet, set Decision to `null`.
 9. Return a write response.
 
@@ -193,7 +193,7 @@ uncertainties: <assumptions, ambiguities, data quality issues, or missing extern
 ## Reference URI Format
 
 All cross-entity and cross-module references use entity-tagged qualified logical URIs, for example:
-`"[<display-label>](pals://workspace/<module>/<entity>/<id>)"`
-`"[<display-label>](pals://workspace/<module>/<parent-entity>/<parent-id>/<entity>/<id>)"`
+`"[<display-label>](als://workspace/<module>/<entity>/<id>)"`
+`"[<display-label>](als://workspace/<module>/<parent-entity>/<parent-id>/<entity>/<id>)"`
 
 The URI target is canonical truth. The display label is human-facing and informational only.

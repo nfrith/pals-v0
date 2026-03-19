@@ -37,8 +37,8 @@ Keep these rules:
 
 Add these rules:
 
-1. `palsc validate` does not validate previous-state -> next-state hop legality in the current baseline.
-2. `palsc validate` does not derive workflow contracts from `SKILL.md` prose.
+1. `alsc validate` does not validate previous-state -> next-state hop legality in the current baseline.
+2. `alsc validate` does not derive workflow contracts from `SKILL.md` prose.
 3. Transition legality is owned by module write entrypoints and runtime guard logic.
 4. Cross-field snapshot business rules expressed only in module skill workflow prose are also runtime-owned in the current baseline.
 5. Enum fields are plain enums by default. A field becomes workflow-governed only when module write behavior explicitly gives it lifecycle meaning.
@@ -178,7 +178,7 @@ For item `12`:
 ## Explicit Non-Goals For This Decision
 
 1. Do not introduce a workflow or transition DSL in baseline schema files.
-2. Do not make `palsc validate` read `SKILL.md` and infer legal state graphs.
+2. Do not make `alsc validate` read `SKILL.md` and infer legal state graphs.
 3. Do not require previous snapshots for baseline validation runs.
 4. Do not treat every enum field as an implicit workflow field.
 5. Do not collapse runtime behavior tests into compiler diagnostics.

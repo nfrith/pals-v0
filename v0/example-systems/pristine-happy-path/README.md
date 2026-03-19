@@ -1,6 +1,6 @@
 # Pristine Happy Path Fixture
 
-This fixture represents a clean PALS-style module.
+This fixture represents a clean ALS-style module.
 
 ## Includes
 

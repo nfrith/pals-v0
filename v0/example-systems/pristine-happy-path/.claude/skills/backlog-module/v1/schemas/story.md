@@ -17,7 +17,7 @@ frontmatter_contract:
   epic_ref:
     type: ref
     nullable: false
-    uri_scheme: pals
+    uri_scheme: als
     namespace: workspace
     module: backlog
     target_entity: epic
@@ -26,7 +26,7 @@ frontmatter_contract:
     nullable: true
     items:
       type: ref
-      uri_scheme: pals
+      uri_scheme: als
       namespace: workspace
       module: people
       target_entity: person

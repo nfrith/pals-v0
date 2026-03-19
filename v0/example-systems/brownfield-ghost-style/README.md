@@ -15,4 +15,4 @@ This fixture is intentionally non-compliant and designed for migration testing.
 3. Section structure drift across files.
 4. Missing explicit empty markers in some body sections.
 
-Use this fixture to test `pals-adopt` and `pals-evolve` behavior.
+Use this fixture to test `als-adopt` and `als-evolve` behavior.

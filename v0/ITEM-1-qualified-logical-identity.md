@@ -7,7 +7,7 @@ Related TODO item: `TODO.md` -> `### 1. Duplicate ID in fixture contradicts spec
 
 The current baseline assumes canonical refs use:
 
-`pals://<namespace>/<module>/<id>`
+`als://<namespace>/<module>/<id>`
 
 That only works if `id` is unique across the whole module. The fixture contradicts that assumption in `experiments`, where `EXP-0001` exists under multiple programs.
 
@@ -81,7 +81,7 @@ Notes:
 
 The current 3-segment URI contract is replaced by a qualified logical-path contract:
 
-`pals://<namespace>/<module>/<qualified-logical-path>`
+`als://<namespace>/<module>/<qualified-logical-path>`
 
 Where `<qualified-logical-path>` is:
 
@@ -92,9 +92,9 @@ Where `<qualified-logical-path>` is:
 
 Examples:
 
-- program: `pals://workspace/experiments/program/PRG-0001`
-- experiment: `pals://workspace/experiments/program/PRG-0001/experiment/EXP-0001`
-- run: `pals://workspace/experiments/program/PRG-0001/experiment/EXP-0001/run/RUN-0001`
+- program: `als://workspace/experiments/program/PRG-0001`
+- experiment: `als://workspace/experiments/program/PRG-0001/experiment/EXP-0001`
+- run: `als://workspace/experiments/program/PRG-0001/experiment/EXP-0001/run/RUN-0001`
 
 These are logical names, not raw filesystem paths, even if they often mirror the module tree.
 
@@ -107,7 +107,7 @@ Program record:
 id: PRG-0001
 title: Pricing Page Rework
 status: active
-owner_ref: "[alex-rivera](pals://workspace/people/person/PPL-000101)"
+owner_ref: "[alex-rivera](als://workspace/people/person/PPL-000101)"
 ---
 ```
 
@@ -123,11 +123,11 @@ Experiment record:
 ```yaml
 ---
 id: EXP-0001
-program_ref: "[pricing-page-rework](pals://workspace/experiments/program/PRG-0001)"
+program_ref: "[pricing-page-rework](als://workspace/experiments/program/PRG-0001)"
 title: Headline Variant Test
 status: active
 budget: 12000
-owner_ref: "[mira-chen](pals://workspace/people/person/PPL-000204)"
+owner_ref: "[mira-chen](als://workspace/people/person/PPL-000204)"
 ---
 ```
 
@@ -144,7 +144,7 @@ Run record:
 ```yaml
 ---
 id: RUN-0001
-experiment_ref: "[headline-variant-test](pals://workspace/experiments/program/PRG-0001/experiment/EXP-0001)"
+experiment_ref: "[headline-variant-test](als://workspace/experiments/program/PRG-0001/experiment/EXP-0001)"
 status: completed
 outcome: positive
 started_on: 2026-02-10
@@ -203,10 +203,10 @@ For item `1`:
 This decision required coordinated updates in at least:
 
 1. `SPEC.md`
-2. `palsc/references/frontmatter-schema-definition.md`
-3. `palsc/references/record-validation.md`
-4. `palsc/references/module-schema-definition.md`
-5. `palsc/references/diagnostic-codes.md`
+2. `alsc/references/frontmatter-schema-definition.md`
+3. `alsc/references/record-validation.md`
+4. `alsc/references/module-schema-definition.md`
+5. `alsc/references/diagnostic-codes.md`
 6. example fixture schemas and records under `example-systems/pristine-happy-path`
 7. any repo skills/docs/examples that still embed the old bare-ID URI contract
 

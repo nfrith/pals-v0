@@ -1,0 +1,8 @@
+{
+  "name": "als",
+  "version": "0.1.0",
+  "description": "Structured markdown storage with typed frontmatter, governed prose sections, and a validating compiler. ALS modules turn plain markdown files into schema-enforced records.",
+  "author": {
+    "name": "nfrith"
+  }
+}

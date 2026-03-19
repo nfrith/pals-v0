@@ -11,7 +11,7 @@ frontmatter_contract:
   experiment_ref:
     type: ref
     nullable: false
-    uri_scheme: pals
+    uri_scheme: als
     namespace: workspace
     module: experiments
     target_entity: experiment

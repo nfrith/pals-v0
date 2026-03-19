@@ -19,7 +19,7 @@ frontmatter_contract:
     nullable: true
     items:
       type: ref
-      uri_scheme: pals
+      uri_scheme: als
       namespace: workspace
       module: backlog
       target_entity: story

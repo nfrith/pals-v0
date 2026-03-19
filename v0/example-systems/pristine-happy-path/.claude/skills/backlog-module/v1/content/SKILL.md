@@ -1,6 +1,6 @@
 ---
 name: backlog-module
-description: Operate on the PALS backlog module for read/write workflows, schema-aware validation, and versioned evolution tasks.
+description: Operate on the ALS backlog module for read/write workflows, schema-aware validation, and versioned evolution tasks.
 ---
 
 # Backlog Module Skill
@@ -27,7 +27,7 @@ Return:
 ## Write Rules
 
 1. Enforce schema in `workspace/backlog/.schema/`.
-2. Enforce canonical references using entity-tagged qualified logical URIs, for example `pals://workspace/backlog/story/STORY-0001`.
+2. Enforce canonical references using entity-tagged qualified logical URIs, for example `als://workspace/backlog/story/STORY-0001`.
 3. Keep all declared body sections present. Use `null` for explicit empty content.
 4. Section headings must match schema headings exactly.
 

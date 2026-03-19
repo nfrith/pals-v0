@@ -1,7 +1,7 @@
 ---
 module_id: experiments
 namespace: workspace
-uri_scheme: pals
+uri_scheme: als
 module_version: 2
 schema_version: 2
 entity_paths:

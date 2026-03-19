@@ -56,9 +56,15 @@ interface ModuleWorkState {
   shape_schema: string | null;
   diagnostics: CompilerDiagnostic[];
   files_checked: number;
+  files_ignored: number;
   file_error_map: Map<string, boolean>;
   parsed_records: ParsedRecord[];
   context: LoadedModuleContext | null;
+}
+
+interface MarkdownDiscoveryResult {
+  record_file_paths: string[];
+  ignored_file_paths: string[];
 }
 
 export interface EffectiveEntityContract {
@@ -155,6 +161,7 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
         state.shape_schema,
         state.diagnostics,
         state.files_checked,
+        state.files_ignored,
         state.file_error_map,
       ),
     );
@@ -179,6 +186,7 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
       shape_schema: null,
       diagnostics: shapeResult.diagnostics,
       files_checked: 0,
+      files_ignored: 0,
       file_error_map: new Map<string, boolean>(),
       parsed_records: [],
       context: null,
@@ -200,15 +208,15 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
   const diagnostics: CompilerDiagnostic[] = [...shapeResult.diagnostics];
   diagnostics.push(...validateShapeContracts(context, systemConfig));
 
-  const filePaths = discoverMarkdownFiles(context.module_path_abs);
+  const discovery = discoverMarkdownFiles(context.module_path_abs);
   const fileErrorMap = new Map<string, boolean>();
-  for (const fileAbs of filePaths) {
+  for (const fileAbs of discovery.record_file_paths) {
     fileErrorMap.set(toRepoRelative(fileAbs), false);
   }
 
   const parsedRecords: ParsedRecord[] = [];
 
-  for (const fileAbs of filePaths) {
+  for (const fileAbs of discovery.record_file_paths) {
     const recordParse = parseRecord(context, fileAbs);
     diagnostics.push(...recordParse.diagnostics);
     markErroredFiles(fileErrorMap, recordParse.diagnostics);
@@ -223,7 +231,8 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
     module_version: registryEntry.version,
     shape_schema: context.shape.schema,
     diagnostics,
-    files_checked: filePaths.length,
+    files_checked: discovery.record_file_paths.length,
+    files_ignored: discovery.ignored_file_paths.length,
     file_error_map: fileErrorMap,
     parsed_records: parsedRecords,
     context,
@@ -1199,8 +1208,11 @@ function safeStat(pathAbs: string): ReturnType<typeof statSync> | null {
   }
 }
 
-function discoverMarkdownFiles(rootAbs: string): string[] {
-  const results: string[] = [];
+function discoverMarkdownFiles(rootAbs: string): MarkdownDiscoveryResult {
+  const result: MarkdownDiscoveryResult = {
+    record_file_paths: [],
+    ignored_file_paths: [],
+  };
 
   function walk(dir: string): void {
     const entries = readdirSync(dir, { withFileTypes: true });
@@ -1212,14 +1224,28 @@ function discoverMarkdownFiles(rootAbs: string): string[] {
         continue;
       }
 
-      if (entry.isFile() && entry.name.endsWith(".md")) {
-        results.push(fullPath);
+      if (!entry.isFile()) continue;
+
+      if (isReservedAgentMarkdownFile(entry.name)) {
+        result.ignored_file_paths.push(fullPath);
+        continue;
+      }
+
+      if (entry.name.endsWith(".md")) {
+        result.record_file_paths.push(fullPath);
       }
     }
   }
 
   walk(rootAbs);
-  return results.sort();
+  result.record_file_paths.sort();
+  result.ignored_file_paths.sort();
+  return result;
+}
+
+function isReservedAgentMarkdownFile(fileName: string): boolean {
+  const lowerFileName = fileName.toLowerCase();
+  return lowerFileName === "agents.md" || lowerFileName === "claude.md";
 }
 
 function parseYamlFile<T>(
@@ -1335,12 +1361,14 @@ function buildModuleReport(
   shapeSchema: string | null,
   diagnostics: CompilerDiagnostic[],
   filesChecked: number,
+  filesIgnored: number,
   fileErrorMap: Map<string, boolean>,
 ): ModuleValidationReport {
   const summary: ModuleValidationSummary = {
     files_checked: filesChecked,
     files_passed: filesChecked - [...fileErrorMap.values()].filter(Boolean).length,
     files_failed: [...fileErrorMap.values()].filter(Boolean).length,
+    files_ignored: filesIgnored,
     error_count: diagnostics.filter((diagnostic) => diagnostic.severity === "error").length,
     warning_count: diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length,
   };
@@ -1368,6 +1396,7 @@ function buildSystemOutput(
   const filesChecked = moduleReports.reduce((sum, report) => sum + report.summary.files_checked, 0);
   const filesPassed = moduleReports.reduce((sum, report) => sum + report.summary.files_passed, 0);
   const filesFailed = moduleReports.reduce((sum, report) => sum + report.summary.files_failed, 0);
+  const filesIgnored = moduleReports.reduce((sum, report) => sum + report.summary.files_ignored, 0);
 
   return {
     status: computeStatus(diagnostics),
@@ -1381,6 +1410,7 @@ function buildSystemOutput(
       files_checked: filesChecked,
       files_passed: filesPassed,
       files_failed: filesFailed,
+      files_ignored: filesIgnored,
       error_count: errorCount,
       warning_count: warningCount,
     },

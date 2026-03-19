@@ -24,6 +24,10 @@ Rules:
 - Each `path` segment must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
 - Module paths cannot be absolute, contain empty segments, contain `.` or `..`, or contain hidden segments like `.pals`
 - The module's data lives at `{path}/`
+- The module subtree may contain reserved non-record markdown files named `AGENTS.md` or `CLAUDE.md` at any depth
+- Matching for reserved agent files is case-insensitive, including the `.md` extension
+- Reserved agent files are ignored during ALS record validation and do not need entity path matches
+- Other markdown files in the module subtree remain subject to normal ALS discovery and validation rules
 - The declared `path` must exist as a directory when validating
 - No two modules may have identical or overlapping mount paths
 - Shape files are inferred at `.als/modules/{module_id}/v{version}.yaml`

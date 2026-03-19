@@ -32,6 +32,7 @@ export interface ModuleValidationSummary {
   files_checked: number;
   files_passed: number;
   files_failed: number;
+  files_ignored: number;
   error_count: number;
   warning_count: number;
 }
@@ -58,6 +59,7 @@ export interface SystemValidationOutput {
     files_checked: number;
     files_passed: number;
     files_failed: number;
+    files_ignored: number;
     error_count: number;
     warning_count: number;
   };

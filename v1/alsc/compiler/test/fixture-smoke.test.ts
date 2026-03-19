@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { withFixtureSandbox } from "./helpers/fixture.ts";
+import { validateFixture, withFixtureSandbox } from "./helpers/fixture.ts";
 
 const compilerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test.concurrent("centralized metadata fixture validates clean", async () => {
   await withFixtureSandbox("fixture-smoke", async ({ root }) => {
+    const baseline = validateFixture(root);
     const process = Bun.spawnSync({
       cmd: ["bun", "src/index.ts", root],
       cwd: compilerRoot,
@@ -22,11 +23,11 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
       );
     }
 
-    let result: { status: string; summary: { error_count: number; modules_checked: number } };
+    let result: { status: string; summary: { error_count: number; files_ignored: number; modules_checked: number } };
     try {
       result = JSON.parse(stdout) as {
         status: string;
-        summary: { error_count: number; modules_checked: number };
+        summary: { error_count: number; files_ignored: number; modules_checked: number };
       };
     } catch (error) {
       throw new Error(
@@ -36,6 +37,7 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
 
     expect(result.status).toBe("pass");
     expect(result.summary.error_count).toBe(0);
+    expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
     expect(result.summary.modules_checked).toBe(5);
   });
 });

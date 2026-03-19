@@ -6,6 +6,26 @@ const moduleMountPath = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\/[a-
 const nonEmptyString = z.string().min(1);
 const positiveInt = z.number().int().positive();
 
+export function splitModuleMountPath(modulePath: string): string[] {
+  return modulePath.split("/");
+}
+
+export function isPathPrefix(prefix: string[], full: string[]): boolean {
+  if (prefix.length > full.length) return false;
+
+  for (let index = 0; index < prefix.length; index += 1) {
+    if (prefix[index] !== full[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function modulePathsOverlap(left: string[], right: string[]): boolean {
+  return isPathPrefix(left, right) || isPathPrefix(right, left);
+}
+
 const targetSchema = z.object({
   module: entityName,
   entity: entityName,
@@ -287,6 +307,31 @@ export const systemConfigSchema = z.object({
     version: positiveInt,
     skill: nonEmptyString,
   })),
+}).superRefine((value, ctx) => {
+  const seenModulePaths: Array<{ module_id: string; path: string; segments: string[] }> = [];
+
+  for (const [moduleId, moduleConfig] of Object.entries(value.modules)) {
+    const modulePathSegments = splitModuleMountPath(moduleConfig.path);
+    const overlappingModule = seenModulePaths.find((existing) => modulePathsOverlap(modulePathSegments, existing.segments));
+    if (overlappingModule) {
+      const issueMessage = moduleConfig.path === overlappingModule.path
+        ? `module ${moduleId} duplicates module mount path ${moduleConfig.path} already used by ${overlappingModule.module_id}`
+        : `module ${moduleId} mount path ${moduleConfig.path} overlaps with ${overlappingModule.module_id} at ${overlappingModule.path}`;
+
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: issueMessage,
+        path: ["modules", moduleId, "path"],
+      });
+      continue;
+    }
+
+    seenModulePaths.push({
+      module_id: moduleId,
+      path: moduleConfig.path,
+      segments: modulePathSegments,
+    });
+  }
 });
 
 export type ModuleShape = z.infer<typeof moduleShapeSchema>;

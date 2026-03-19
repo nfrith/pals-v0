@@ -9,7 +9,10 @@ import { parsePathTemplate, matchPath, type ParsedPathTemplate } from "./parser/
 import { parseRefUri, refTargetEntity } from "./refs.ts";
 import {
   findLegacyRequiredIssues,
+  isPathPrefix,
   moduleShapeSchema,
+  modulePathsOverlap,
+  splitModuleMountPath,
   systemConfigSchema,
   type EntityShape,
   type FieldShape,
@@ -1077,13 +1080,21 @@ function validateSystemLayout(
     const modulePathSegments = splitModuleMountPath(modulePath);
     const overlappingModule = seenModulePaths.find((existing) => modulePathsOverlap(modulePathSegments, existing.segments));
     if (overlappingModule) {
+      const conflictMessage = describeModulePathConflict(
+        moduleId,
+        modulePath,
+        modulePathSegments,
+        overlappingModule.module_id,
+        overlappingModule.path,
+        overlappingModule.segments,
+      );
       diagnostics.push(
         diag(
           codes.SYSTEM_MODULE_PATH_CONFLICT,
           "error",
           "system_config",
           modulePath,
-          `Module '${moduleId}' mount path '${modulePath}' overlaps with '${overlappingModule.module_id}' at '${overlappingModule.path}'`,
+          conflictMessage,
           {
             module_id: moduleId,
             field: "path",
@@ -1154,31 +1165,37 @@ function resolveModulePath(systemRootAbs: string, modulePath: string): string {
   return resolve(systemRootAbs, modulePath);
 }
 
-function splitModuleMountPath(modulePath: string): string[] {
-  return modulePath.split("/");
-}
-
-function modulePathsOverlap(left: string[], right: string[]): boolean {
-  return isPathPrefix(left, right) || isPathPrefix(right, left);
-}
-
-function isPathPrefix(prefix: string[], full: string[]): boolean {
-  if (prefix.length > full.length) return false;
-
-  for (let index = 0; index < prefix.length; index += 1) {
-    if (prefix[index] !== full[index]) {
-      return false;
-    }
+function describeModulePathConflict(
+  moduleId: string,
+  modulePath: string,
+  modulePathSegments: string[],
+  overlappingModuleId: string,
+  overlappingModulePath: string,
+  overlappingModuleSegments: string[],
+): string {
+  if (modulePath === overlappingModulePath) {
+    return `Module '${moduleId}' duplicates mount path '${modulePath}' already used by '${overlappingModuleId}'`;
   }
 
-  return true;
+  if (isPathPrefix(modulePathSegments, overlappingModuleSegments)) {
+    return `Module '${moduleId}' mount path '${modulePath}' is an ancestor of '${overlappingModuleId}' at '${overlappingModulePath}'`;
+  }
+
+  return `Module '${moduleId}' mount path '${modulePath}' is nested under '${overlappingModuleId}' at '${overlappingModulePath}'`;
 }
 
 function safeStat(pathAbs: string): ReturnType<typeof statSync> | null {
   try {
     return statSync(pathAbs);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      if (errorCode === "ENOENT" || errorCode === "ENOTDIR") {
+        return null;
+      }
+    }
+
+    throw error;
   }
 }
 
@@ -1259,7 +1276,7 @@ function parseYamlFile<T>(
     success: false,
     diagnostics: rawDiagnostics.concat(
       parsed.error.issues.map((issue) =>
-        diag(code, "error", phase, fileRel, issue.message, {
+        diag(resolveParseIssueCode(code, phase, issue), "error", phase, fileRel, issue.message, {
           module_id: module_id ?? undefined,
           field: issue.path.join(".") || null,
           expected: issue.code,
@@ -1268,6 +1285,25 @@ function parseYamlFile<T>(
       ),
     ),
   };
+}
+
+function resolveParseIssueCode(
+  defaultCode: string,
+  phase: "system_config" | "module_shape",
+  issue: ZodError["issues"][number],
+): string {
+  if (
+    phase === "system_config"
+    && issue.code === "custom"
+    && issue.path[0] === "modules"
+    && issue.path[2] === "path"
+    && typeof issue.message === "string"
+    && issue.message.includes("mount path")
+  ) {
+    return codes.SYSTEM_MODULE_PATH_CONFLICT;
+  }
+
+  return defaultCode;
 }
 
 function getSelectedModuleIds(

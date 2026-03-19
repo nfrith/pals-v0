@@ -67,7 +67,8 @@ test.concurrent("exact duplicate module paths are rejected", async () => {
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
-    expectSystemDiagnostic(result, codes.SYSTEM_MODULE_PATH_CONFLICT, "workspace/backlog");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_MODULE_PATH_CONFLICT, ".als/system.yaml");
+    expect(diagnostic.message).toContain("workspace/backlog");
   });
 });
 
@@ -81,7 +82,22 @@ test.concurrent("nested module paths are rejected", async () => {
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
-    expectSystemDiagnostic(result, codes.SYSTEM_MODULE_PATH_CONFLICT, "workspace/backlog/archive");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_MODULE_PATH_CONFLICT, ".als/system.yaml");
+    expect(diagnostic.message).toContain("workspace/backlog/archive");
+  });
+});
+
+test.concurrent("ancestor module paths are rejected", async () => {
+  await withFixtureSandbox("system-path-conflict-ancestor", async ({ root }) => {
+    await updateSystemYaml(root, (config) => {
+      const modules = config.modules as Record<string, Record<string, unknown>>;
+      modules["client-registry"].path = "workspace";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_MODULE_PATH_CONFLICT, ".als/system.yaml");
+    expect(diagnostic.message).toContain("workspace");
   });
 });
 

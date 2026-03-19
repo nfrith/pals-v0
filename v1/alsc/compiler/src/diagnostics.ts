@@ -3,6 +3,7 @@ import type { CompilerDiagnostic, DiagnosticSeverity, ValidationPhase } from "./
 export const codes = {
   SYSTEM_INVALID: "PAL-CV-SYS-001",
   SYSTEM_FILTER_UNKNOWN: "PAL-CV-SYS-002",
+  // PAL-CV-SYS-003 was retired when system roots were removed from als-system@1.
   SYSTEM_MODULE_PATH_INVALID: "PAL-CV-SYS-004",
   SYSTEM_MODULE_PATH_CONFLICT: "PAL-CV-SYS-005",
   SHAPE_INVALID: "PAL-CV-SHAPE-001",

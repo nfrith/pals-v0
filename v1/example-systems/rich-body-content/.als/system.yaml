@@ -1,0 +1,33 @@
+schema: als-system@1
+system_id: rich-body-content
+
+modules:
+  playbooks:
+    path: operations/playbooks
+    version: 1
+    skill: .claude/skills/playbooks-module/SKILL.md
+
+  postmortems:
+    path: operations/postmortems
+    version: 1
+    skill: .claude/skills/postmortems-module/SKILL.md
+
+  protocols:
+    path: operations/protocols
+    version: 1
+    skill: .claude/skills/protocols-module/SKILL.md
+
+  evaluations:
+    path: governance/evaluations
+    version: 1
+    skill: .claude/skills/evaluations-module/SKILL.md
+
+  decisions:
+    path: governance/decisions
+    version: 1
+    skill: .claude/skills/decisions-module/SKILL.md
+
+  infra:
+    path: infra
+    version: 1
+    skill: .claude/skills/infra-module/SKILL.md

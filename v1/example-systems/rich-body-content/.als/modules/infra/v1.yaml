@@ -1,0 +1,262 @@
+schema: als-module@1
+
+dependencies: []
+
+entities:
+  region:
+    path: regions/{id}/{id}.md
+
+    identity:
+      id_field: id
+
+    fields:
+      id:
+        type: id
+        allow_null: false
+
+      name:
+        type: string
+        allow_null: false
+
+      provider:
+        type: enum
+        allow_null: false
+        allowed_values: [aws, gcp, azure]
+
+      status:
+        type: enum
+        allow_null: false
+        allowed_values: [provisioning, active, draining, decommissioned]
+
+    sections:
+      - name: OVERVIEW
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: what this region serves, why it exists, and any geographic or compliance constraints
+          exclude: cluster-level details or service inventories
+
+      - name: CAPACITY
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: resource limits, current utilization, and scaling thresholds
+          exclude: per-service resource allocations
+
+  cluster:
+    path: regions/{region}/clusters/{id}/{id}.md
+
+    identity:
+      id_field: id
+      parent:
+        entity: region
+        ref_field: region_ref
+
+    fields:
+      id:
+        type: id
+        allow_null: false
+
+      name:
+        type: string
+        allow_null: false
+
+      region_ref:
+        type: ref
+        allow_null: false
+        target:
+          module: infra
+          entity: region
+
+      orchestrator:
+        type: enum
+        allow_null: false
+        allowed_values: [kubernetes, ecs, nomad]
+
+      status:
+        type: enum
+        allow_null: false
+        allowed_values: [provisioning, active, maintenance, draining]
+
+    sections:
+      - name: CONFIGURATION
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: true
+        guidance:
+          include: cluster configuration, node pool specs, and key infrastructure parameters
+          exclude: individual service deployment configs
+
+      - name: NETWORKING
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: true
+          allow_code_blocks: true
+        guidance:
+          include: VPC layout, CIDR ranges, ingress/egress rules, and DNS configuration
+          exclude: application-level routing rules
+
+      - name: NOTES
+        allow_null: true
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: operational quirks, maintenance windows, and known limitations
+          exclude: service-level documentation
+
+  service:
+    path: regions/{region}/clusters/{cluster}/services/{id}/{id}.md
+
+    identity:
+      id_field: id
+      parent:
+        entity: cluster
+        ref_field: cluster_ref
+
+    fields:
+      id:
+        type: id
+        allow_null: false
+
+      name:
+        type: string
+        allow_null: false
+
+      cluster_ref:
+        type: ref
+        allow_null: false
+        target:
+          module: infra
+          entity: cluster
+
+      runtime:
+        type: enum
+        allow_null: false
+        allowed_values: [node, bun, python, go, rust]
+
+      replicas:
+        type: number
+        allow_null: false
+
+      status:
+        type: enum
+        allow_null: false
+        allowed_values: [deploying, healthy, degraded, down]
+
+    sections:
+      - name: DEPLOYMENT_CONFIG
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: true
+          allow_blockquotes: true
+          allow_code_blocks: true
+        guidance:
+          include: container config, resource limits, environment setup, and deployment manifests
+          exclude: release-specific change notes
+
+      - name: DEPENDENCIES
+        allow_null: false
+        content:
+          allowed_blocks: [bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: false
+        guidance:
+          include: upstream and downstream service dependencies with connection details
+          exclude: internal implementation details
+
+      - name: HEALTH_CHECKS
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list, ordered_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: true
+        guidance:
+          include: health check endpoints, expected responses, and monitoring commands
+          exclude: deployment procedures or release history
+
+  release:
+    path: regions/{region}/clusters/{cluster}/services/{service}/releases/{id}.md
+
+    identity:
+      id_field: id
+      parent:
+        entity: service
+        ref_field: service_ref
+
+    fields:
+      id:
+        type: id
+        allow_null: false
+
+      service_ref:
+        type: ref
+        allow_null: false
+        target:
+          module: infra
+          entity: service
+
+      version:
+        type: string
+        allow_null: false
+
+      status:
+        type: enum
+        allow_null: false
+        allowed_values: [pending, rolling-out, active, rolled-back, superseded]
+
+      deployed_on:
+        type: date
+        allow_null: false
+
+    sections:
+      - name: CHANGES
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: true
+        guidance:
+          include: what changed in this release with relevant code or config diffs
+          exclude: deployment procedure or rollback instructions
+
+      - name: ROLLBACK_PLAN
+        allow_null: false
+        content:
+          allowed_blocks: [paragraph, ordered_list, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: true
+          allow_code_blocks: true
+        guidance:
+          include: how to roll back this specific release, with commands and warnings
+          exclude: general rollback procedures covered in protocols
+
+      - name: VERIFICATION
+        allow_null: false
+        content:
+          allowed_blocks: [ordered_list, bullet_list]
+          allow_subheadings: false
+          allow_blockquotes: false
+          allow_code_blocks: true
+        guidance:
+          include: commands and checks to confirm this release is healthy
+          exclude: the changes themselves or rollback steps

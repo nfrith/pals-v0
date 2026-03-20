@@ -1,0 +1,165 @@
+schema: als-module@1
+
+dependencies:
+  - module: people
+  - module: operations
+
+entities:
+  incident-report:
+    path: reports/{id}.md
+
+    identity:
+      id_field: id
+
+    fields:
+      id:
+        type: id
+        allow_null: false
+
+      title:
+        type: string
+        allow_null: false
+
+      severity:
+        type: enum
+        allow_null: false
+        allowed_values: [sev-1, sev-2, sev-3]
+
+      status:
+        type: enum
+        allow_null: false
+        allowed_values: [active, monitoring, recovered, closed]
+
+      opened_on:
+        type: date
+        allow_null: false
+
+      stabilized_on:
+        type: date
+        allow_null: true
+
+      incident_commander_ref:
+        type: ref
+        allow_null: false
+        target:
+          module: people
+          entity: person
+
+      scribe_ref:
+        type: ref
+        allow_null: false
+        target:
+          module: people
+          entity: person
+
+      related_runbook_refs:
+        type: list
+        allow_null: true
+        items:
+          type: ref
+          target:
+            module: operations
+            entity: runbook
+
+    body:
+      title:
+        source_field: title
+
+      preamble:
+        allow_null: false
+        content:
+          blocks:
+            paragraph: {}
+            bullet_list: {}
+        guidance:
+          include: one-screen framing for what happened and why this record matters
+          exclude: detailed chronology and deep technical evidence that belong in named sections
+
+      sections:
+        - name: SUMMARY
+          allow_null: false
+          content:
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              blockquote: {}
+          guidance:
+            include: incident overview, detection story, and current recovery state
+            exclude: minute-by-minute sequencing and raw evidence dumps
+
+        - name: IMPACT
+          allow_null: false
+          content:
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+          guidance:
+            include: affected flows, blast radius, and user-visible consequences
+            exclude: speculative root-cause analysis
+
+        - name: TIMELINE
+          allow_null: false
+          content:
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+          guidance:
+            include: ordered sequence of detection, mitigation, and stabilization events
+            exclude: long-form design commentary
+
+        - name: TECHNICAL_ANALYSIS
+          allow_null: false
+          content:
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              blockquote: {}
+              code: {}
+          guidance:
+            include: failure path, evidence, logs, and architectural implications
+            exclude: people-management follow-up work
+
+        - name: RECOVERY
+          allow_null: false
+          content:
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              blockquote: {}
+              code: {}
+          guidance:
+            include: mitigation steps, verification work, and rollback details
+            exclude: future improvement planning
+
+        - name: FOLLOW_UP
+          allow_null: false
+          content:
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+          guidance:
+            include: owned action items, policy changes, and decision handoffs
+            exclude: repeated incident summary text

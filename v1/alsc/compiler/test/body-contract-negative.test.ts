@@ -174,6 +174,41 @@ test.concurrent("tables are rejected when the region does not declare table supp
   });
 });
 
+test.concurrent("valid gfm tables are accepted when the region declares table support", async () => {
+  await withFixtureSandbox("body-table-allowed", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const definitions = entities.item.section_definitions as Record<string, Record<string, unknown>>;
+      const description = definitions.DESCRIPTION;
+      const content = description.content as Record<string, unknown>;
+      content.blocks = {
+        table: {
+          syntax: "gfm",
+        },
+      };
+    });
+
+    const descriptionTableByPath: Record<string, string> = {
+      "workspace/backlog/items/ITEM-0001.md": "| Region | Effect |\n| --- | --- |\n| backlog | variant-aware item shape |\n",
+      "workspace/backlog/items/ITEM-0002.md": "| Area | Goal |\n| --- | --- |\n| diagnostics | easier triage during fixture development |\n",
+      "workspace/backlog/items/ITEM-0003.md": "| Question | Intent |\n| --- | --- |\n| status buckets | evaluate rollup value without changing validation |\n",
+    };
+
+    for (const [path, table] of Object.entries(descriptionTableByPath)) {
+      await updateRecord(root, path, (record) => {
+        record.content = record.content.replace(
+          /## DESCRIPTION\n\n[\s\S]*?\n## /,
+          `## DESCRIPTION\n\n${table}\n## `,
+        );
+      });
+    }
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("pass");
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
 test.concurrent("malformed pipe text is not treated as a table", async () => {
   await withFixtureSandbox("body-table-malformed", async ({ root }) => {
     await updateShapeYaml(root, "backlog", 1, (shape) => {
@@ -198,6 +233,21 @@ test.concurrent("malformed pipe text is not treated as a table", async () => {
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
     expectModuleDiagnosticContaining(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "unsupported markdown block 'paragraph'", "ITEM-0001.md");
+  });
+});
+
+test.concurrent("tables are rejected inside outline nodes that do not declare table support", async () => {
+  await withExampleSystemSandbox("rich-body-design-reference", "body-outline-table-forbidden", async ({ root }) => {
+    await updateRecord(root, incidentPath, (record) => {
+      record.content = record.content.replace(
+        "### Affected Flows\n\n- Incident-recovery agents handling multi-step retries\n- Escalation planners that depend on the latest safety policy manifest\n",
+        "### Affected Flows\n\n| Flow | Impact |\n| --- | --- |\n| Incident-recovery agents | degraded |\n\n- Incident-recovery agents handling multi-step retries\n- Escalation planners that depend on the latest safety policy manifest\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(result, "incident-response", codes.BODY_CONSTRAINT_VIOLATION, "unsupported markdown block 'table'", "INC-0001.md");
   });
 });
 

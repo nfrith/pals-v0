@@ -43,7 +43,7 @@ export interface ParsedBody {
 
 export function parseBody(body: string): ParsedBody {
   const tree = parseMarkdownTree(body, "record body");
-  const children = tree.children ?? [];
+  const children = rootChildren(tree, "record body");
   const h1s = children.filter((child) => child.type === "heading" && child.depth === 1);
   const title = h1s.length > 0 ? headingText(h1s[0]) : null;
   const content_before_title = h1s.length > 0
@@ -191,15 +191,10 @@ function validateFreeformContent(
 ): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
   const tree = parseMarkdownTree(source, `region '${label}'`);
-  const children = tree.children ?? [];
+  const children = rootChildren(tree, `region '${label}'`);
   const counts = {
     paragraph: 0,
-    bullet_list: 0,
-    ordered_list: 0,
-    table: 0,
-    heading: 0,
     blockquote: 0,
-    code: 0,
   };
 
   for (const child of children) {
@@ -213,7 +208,6 @@ function validateFreeformContent(
 
     if (child.type === "list") {
       const blockName = child.ordered === true ? "ordered_list" : "bullet_list";
-      counts[blockName] += 1;
       const blockConfig = contentShape.blocks[blockName];
       if (!blockConfig) {
         diagnostics.push(blockViolation(label, file, module_id, entity, blockName, contentShape.blocks));
@@ -247,7 +241,6 @@ function validateFreeformContent(
     }
 
     if (child.type === "heading") {
-      counts.heading += 1;
       const blockConfig = contentShape.blocks.heading;
       if (!blockConfig) {
         diagnostics.push(blockViolation(label, file, module_id, entity, "heading", contentShape.blocks));
@@ -292,7 +285,6 @@ function validateFreeformContent(
     }
 
     if (child.type === "table") {
-      counts.table += 1;
       if (!contentShape.blocks.table) {
         diagnostics.push(blockViolation(label, file, module_id, entity, "table", contentShape.blocks));
       }
@@ -308,7 +300,6 @@ function validateFreeformContent(
     }
 
     if (child.type === "code") {
-      counts.code += 1;
       const blockConfig = contentShape.blocks.code;
       if (!blockConfig) {
         diagnostics.push(blockViolation(label, file, module_id, entity, "code", contentShape.blocks));
@@ -349,7 +340,7 @@ function validateOutlineContent(
 ): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
   const tree = parseMarkdownTree(source, `region '${label}'`);
-  const children = tree.children ?? [];
+  const children = rootChildren(tree, `region '${label}'`);
   const matchedIndices: number[] = [];
   let searchFrom = 0;
 
@@ -513,7 +504,7 @@ function collectNodeText(node: MdastNode, parts: string[]): void {
   }
 }
 
-class MarkdownProcessingError extends Error {
+export class MarkdownProcessingError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
     this.name = "MarkdownProcessingError";
@@ -532,6 +523,14 @@ function parseMarkdownTree(source: string, label: string): MdastNode {
       { cause: error },
     );
   }
+}
+
+function rootChildren(tree: MdastNode, label: string): MdastNode[] {
+  if (!Array.isArray(tree.children)) {
+    throw new MarkdownProcessingError(`Markdown root for ${label} is missing child nodes`);
+  }
+
+  return tree.children;
 }
 
 function nodeStartOffset(node: MdastNode, label: string): number {

@@ -4,7 +4,7 @@ import matter from "gray-matter";
 import { parse as parseYaml } from "yaml";
 import { ZodError } from "zod";
 import { codes, computeStatus, diag } from "./diagnostics.ts";
-import { parseBody, validateRegionMarkdown, validateSectionMarkdown, type ParsedBody } from "./markdown.ts";
+import { MarkdownProcessingError, parseBody, validateRegionMarkdown, validateSectionMarkdown, type ParsedBody } from "./markdown.ts";
 import { parsePathTemplate, matchPath, type ParsedPathTemplate } from "./parser/path-template.ts";
 import { parseRefUri, refTargetEntity } from "./refs.ts";
 import {
@@ -83,6 +83,13 @@ interface EffectiveBodyContract {
   title?: TitleShape;
   preamble?: BodyRegionShape;
   sections: SectionShape[];
+}
+
+class FrontmatterProcessingError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "FrontmatterProcessingError";
+  }
 }
 
 type RenderedTitleExpectation =
@@ -1085,11 +1092,16 @@ function parseRecord(
   const diagnostics: CompilerDiagnostic[] = [];
   const fileRel = toRepoRelative(fileAbs);
   const fileRelWithinModule = relative(context.module_path_abs, fileAbs).replace(/\\/g, "/");
+  const fileContents = readFileSync(fileAbs, "utf-8");
 
   let parsedMatter;
   try {
-    parsedMatter = matter(readFileSync(fileAbs, "utf-8"));
+    parsedMatter = parseFrontmatter(fileContents);
   } catch (error) {
+    if (!(error instanceof FrontmatterProcessingError)) {
+      throw error;
+    }
+
     diagnostics.push(
       diag(codes.PARSE_FRONTMATTER, "error", "parse", fileRel, `Failed to parse frontmatter`, {
         module_id: context.module_id,
@@ -1117,6 +1129,10 @@ function parseRecord(
   try {
     body = parseBody(parsedMatter.content);
   } catch (error) {
+    if (!(error instanceof MarkdownProcessingError)) {
+      throw error;
+    }
+
     diagnostics.push(
       diag(codes.PARSE_MARKDOWN, "error", "parse", fileRel, "Failed to parse markdown body", {
         module_id: context.module_id,
@@ -1518,9 +1534,10 @@ function parseYamlFile<T>(
 ): { success: true; data: T; diagnostics: CompilerDiagnostic[] } | { success: false; diagnostics: CompilerDiagnostic[] } {
   let raw: unknown;
   const fileRel = toRepoRelative(fileAbs);
+  const fileContents = readFileSync(fileAbs, "utf-8");
 
   try {
-    raw = parseYaml(readFileSync(fileAbs, "utf-8"));
+    raw = parseYaml(fileContents);
   } catch (error) {
     return {
       success: false,
@@ -1572,6 +1589,17 @@ function parseYamlFile<T>(
       ),
     ),
   };
+}
+
+function parseFrontmatter(source: string) {
+  try {
+    return matter(source);
+  } catch (error) {
+    throw new FrontmatterProcessingError(
+      `Failed to parse frontmatter: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
 }
 
 function resolveParseIssueCode(

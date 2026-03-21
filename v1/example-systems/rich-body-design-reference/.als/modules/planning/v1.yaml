@@ -45,11 +45,14 @@ entities:
 
     body:
       title:
-        source_field: title
+        source:
+          kind: field
+          field: title
 
       preamble:
         allow_null: false
         content:
+          mode: freeform
           blocks:
             paragraph: {}
             bullet_list: {}
@@ -61,6 +64,7 @@ entities:
         - name: GOAL
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -74,6 +78,7 @@ entities:
         - name: ASSUMPTIONS
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -89,6 +94,7 @@ entities:
         - name: OPTIONS
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -105,6 +111,7 @@ entities:
         - name: EXECUTION_TRANSCRIPT
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -121,6 +128,7 @@ entities:
         - name: NEXT_ACTIONS
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}

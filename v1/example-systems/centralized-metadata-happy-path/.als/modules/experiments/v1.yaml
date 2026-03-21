@@ -24,39 +24,43 @@ entities:
         allow_null: false
         allowed_values: [draft, active, completed]
 
-    sections:
-      - name: HYPOTHESIS
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: primary belief being tested by this program
-          exclude: run-level observations
+    body:
+      title:
+        source:
+          kind: field
+          field: title
 
-      - name: SUCCESS_CRITERIA
-        allow_null: false
-        content:
-          allowed_blocks: [bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: measurable outcomes for program-level success
-          exclude: tactical implementation notes
+      sections:
+        - name: HYPOTHESIS
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: primary belief being tested by this program
+            exclude: run-level observations
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: optional context and caveats
-          exclude: required acceptance details
+        - name: SUCCESS_CRITERIA
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              bullet_list: {}
+              ordered_list: {}
+          guidance:
+            include: measurable outcomes for program-level success
+            exclude: tactical implementation notes
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: optional context and caveats
+            exclude: required acceptance details
 
   experiment:
     path: programs/{program}/experiments/{id}/{id}.md
@@ -95,39 +99,45 @@ entities:
           module: people
           entity: person
 
-    sections:
-      - name: DESIGN
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: experiment setup, boundaries, and methodology
-          exclude: final interpretation of results
+    body:
+      title:
+        source:
+          kind: field
+          field: title
 
-      - name: METRICS
-        allow_null: false
-        content:
-          allowed_blocks: [bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: metrics to track during runs
-          exclude: narrative-only notes
+      sections:
+        - name: DESIGN
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+          guidance:
+            include: experiment setup, boundaries, and methodology
+            exclude: final interpretation of results
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: optional caveats and implementation details
-          exclude: decision outcomes from completed runs
+        - name: METRICS
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              bullet_list: {}
+              ordered_list: {}
+          guidance:
+            include: metrics to track during runs
+            exclude: narrative-only notes
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: optional caveats and implementation details
+            exclude: decision outcomes from completed runs
 
   run:
     path: programs/{program}/experiments/{experiment}/runs/{id}.md
@@ -168,36 +178,40 @@ entities:
         type: date
         allow_null: true
 
-    sections:
-      - name: OBSERVATIONS
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: objective observations gathered during this run
-          exclude: final cross-run decision policy
+    body:
+      title:
+        source:
+          kind: authored
 
-      - name: DECISION
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: run-level interpretation and local decision
-          exclude: module-wide strategy changes
+      sections:
+        - name: OBSERVATIONS
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+          guidance:
+            include: objective observations gathered during this run
+            exclude: final cross-run decision policy
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: optional operational context
-          exclude: mandatory observations
+        - name: DECISION
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: run-level interpretation and local decision
+            exclude: module-wide strategy changes
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: optional operational context
+            exclude: mandatory observations

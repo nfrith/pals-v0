@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { codes } from "../src/diagnostics.ts";
-import { systemConfigSchema, type VariantEntityShape } from "../src/schema.ts";
+import { moduleShapeSchema, systemConfigSchema, type VariantEntityShape } from "../src/schema.ts";
 import { resolveEffectiveEntityContract } from "../src/validate.ts";
 
 test("missing section definitions surface a shape diagnostic instead of crashing", () => {
@@ -21,6 +21,14 @@ test("missing section definitions surface a shape diagnostic instead of crashing
       },
     },
     discriminator: "type",
+    body: {
+      title: {
+        source: {
+          kind: "field",
+          field: "id",
+        },
+      },
+    },
     section_definitions: {},
     variants: {
       app: {
@@ -44,7 +52,7 @@ test("missing section definitions surface a shape diagnostic instead of crashing
     },
   );
 
-  expect(result.sections).toBeNull();
+  expect(result.body).toBeNull();
   expect(result.known_field_names).toEqual(["id", "type"]);
   expect(result.diagnostics).toHaveLength(1);
   expect(result.body_diagnostics).toHaveLength(0);
@@ -101,4 +109,53 @@ test("system config schema rejects overlapping module mount paths", () => {
   }
 
   expect(result.error.issues.some((issue) => issue.path.join(".") === "modules.workspace.path")).toBe(true);
+});
+
+test("variant entity shapes can omit body without crashing schema validation", () => {
+  expect(() => {
+    const result = moduleShapeSchema.safeParse({
+      schema: "als-module@1",
+      dependencies: [],
+      entities: {
+        item: {
+          path: "items/{id}.md",
+          identity: {
+            id_field: "id",
+          },
+          fields: {
+            id: {
+              type: "id",
+              allow_null: false,
+            },
+            type: {
+              type: "enum",
+              allow_null: false,
+              allowed_values: ["app"],
+            },
+          },
+          discriminator: "type",
+          body: undefined,
+          section_definitions: {
+            DESCRIPTION: {
+              allow_null: false,
+              content: {
+                mode: "freeform",
+                blocks: {
+                  paragraph: {},
+                },
+              },
+            },
+          },
+          variants: {
+            app: {
+              fields: {},
+              sections: ["DESCRIPTION"],
+            },
+          },
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+  }).not.toThrow();
 });

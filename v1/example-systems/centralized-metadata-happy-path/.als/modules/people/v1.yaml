@@ -29,36 +29,41 @@ entities:
         items:
           type: string
 
-    sections:
-      - name: PROFILE
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: who this person is and the role they play in this workspace
-          exclude: transient task updates
+    body:
+      title:
+        source:
+          kind: field
+          field: display_name
 
-      - name: CONTACT
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: stable contact channels or handles
-          exclude: private credentials or secrets
+      sections:
+        - name: PROFILE
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: who this person is and the role they play in this workspace
+            exclude: transient task updates
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: optional context and collaboration notes
-          exclude: authoritative policy statements
+        - name: CONTACT
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+          guidance:
+            include: stable contact channels or handles
+            exclude: private credentials or secrets
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: optional context and collaboration notes
+            exclude: authoritative policy statements

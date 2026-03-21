@@ -41,11 +41,14 @@ entities:
 
     body:
       title:
-        source_field: title
+        source:
+          kind: field
+          field: title
 
       preamble:
         allow_null: false
         content:
+          mode: freeform
           blocks:
             paragraph: {}
             bullet_list: {}
@@ -57,6 +60,7 @@ entities:
         - name: PREREQUISITES
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -71,6 +75,7 @@ entities:
         - name: EXECUTION
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -87,6 +92,7 @@ entities:
         - name: VERIFICATION
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -102,6 +108,7 @@ entities:
         - name: ESCALATION
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -116,6 +123,7 @@ entities:
         - name: NOTES
           allow_null: true
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}

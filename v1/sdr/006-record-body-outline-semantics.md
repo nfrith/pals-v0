@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -21,9 +21,14 @@ Proposed
 - Declared body-region membership controls presence. If a region is declared, it must appear. If a region is not declared, authored content for that region is invalid.
 - `title` is first-class.
 - If `title` is declared, exactly one `h1` is required.
-- If `title` is declared, the `h1` text must match an explicitly named field such as `title`.
+- `title.source` must support three forms: `field`, `authored`, and `template`.
+- If `title.source.kind` is `field`, the `h1` text must match the referenced field exactly.
+- If `title.source.kind` is `template`, the `h1` text must match the rendered template exactly.
+- If `title.source.kind` is `authored`, the `h1` is still required exactly once but is not matched to a field.
 - There is no implicit rule that the `h1` must match `id`.
 - `preamble` is first-class. Any authored content between the `h1` region and the first `h2` section belongs to `preamble` and must be declared explicitly if present.
+- Top-level `preamble` and outline-level `preamble` use the same exact schema shape and the same exact name.
+- `preamble` means content immediately inside a container before its first declared child heading.
 - `sections` remain ordered and explicitly declared, but section extraction is based on Markdown heading structure, not raw-text delimiters.
 - Body outline extraction is mdast-based. Structural headings are determined from heading nodes and depth, not from regex matches such as `^## (.+)$`.
 - Top-level body content that cannot be assigned to a declared `title`, declared `preamble`, or declared `section` is invalid.
@@ -33,8 +38,9 @@ Proposed
 
 - Required: every authored top-level body region is declared in the shape contract.
 - Required: a declared `title` region produces exactly one `h1`.
-- Required: a declared `title` region names the field whose value the `h1` must match.
+- Required: a declared `title` region declares how the `h1` is sourced using `field`, `authored`, or `template`.
 - Required: a declared `preamble` region models top-level content before the first declared `h2` section.
+- Required: `preamble` means content immediately before the first declared child heading in its container.
 - Required: declared sections are interpreted as `h2` outline regions in the order declared by the shape.
 - Required: section extraction follows Markdown AST semantics rather than raw line matching.
 - Allowed: records with no `h1` when the shape does not declare a `title` region.
@@ -48,13 +54,14 @@ Proposed
 
 - Shape parsing needs an explicit body-contract model that can represent `title`, `preamble`, and ordered `sections`.
 - Record-body parsing needs an mdast-based outline pass that identifies top-level heading regions by depth.
-- Validation needs dedicated diagnostics for undeclared `title` regions, undeclared `preamble` regions, missing declared regions, and title-to-field mismatches.
+- Validation needs dedicated diagnostics for undeclared `title` regions, undeclared `preamble` regions, missing declared regions, and title-source mismatches.
 - Existing body-order checks need to operate on mdast-derived outline regions rather than regex-derived section names.
 
 ## Docs and Fixture Impact
 
 - Shape-language docs must describe an explicit body contract rather than only ordered `##` sections.
 - Docs must state that `h1` is no longer informal when a `title` region is declared.
+- Docs must describe the `title.source` union and the shared `preamble` shape used at top level and inside outline content.
 - Docs must state that pre-section prose is either a declared `preamble` region or invalid.
 - The existing `centralized-metadata-happy-path` fixture remains the current structural smoke fixture and is not rewritten to force this model.
 - A separate rich-body design-reference fixture must show declared `title`, declared `preamble`, and ordered `h2` sections on realistic records.

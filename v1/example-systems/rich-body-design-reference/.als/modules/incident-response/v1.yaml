@@ -63,13 +63,17 @@ entities:
 
     body:
       title:
-        source_field: title
+        source:
+          kind: field
+          field: title
 
       preamble:
         allow_null: false
         content:
+          mode: freeform
           blocks:
-            paragraph: {}
+            paragraph:
+              min_count: 1
             bullet_list: {}
         guidance:
           include: one-screen framing for what happened and why this record matters
@@ -79,14 +83,34 @@ entities:
         - name: SUMMARY
           allow_null: false
           content:
-            blocks:
-              paragraph: {}
-              bullet_list: {}
-              ordered_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
-              blockquote: {}
+            mode: outline
+            preamble:
+              allow_null: false
+              content:
+                mode: freeform
+                blocks:
+                  paragraph:
+                    min_count: 1
+                    max_count: 1
+            nodes:
+              - heading:
+                  depth: 3
+                  text: Detection
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
+
+              - heading:
+                  depth: 3
+                  text: Recovery Lead Notes
+                content:
+                  mode: freeform
+                  blocks:
+                    blockquote:
+                      min_count: 1
+                      max_count: 1
           guidance:
             include: incident overview, detection story, and current recovery state
             exclude: minute-by-minute sequencing and raw evidence dumps
@@ -94,12 +118,34 @@ entities:
         - name: IMPACT
           allow_null: false
           content:
-            blocks:
-              paragraph: {}
-              bullet_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
+            mode: outline
+            nodes:
+              - heading:
+                  depth: 3
+                  text: Affected Flows
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
+
+              - heading:
+                  depth: 3
+                  text: What Users Saw
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
+
+              - heading:
+                  depth: 3
+                  text: What Did Not Break
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
           guidance:
             include: affected flows, blast radius, and user-visible consequences
             exclude: speculative root-cause analysis
@@ -107,13 +153,11 @@ entities:
         - name: TIMELINE
           allow_null: false
           content:
+            mode: freeform
             blocks:
-              paragraph: {}
+              ordered_list:
+                min_items: 1
               bullet_list: {}
-              ordered_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
           guidance:
             include: ordered sequence of detection, mitigation, and stabilization events
             exclude: long-form design commentary
@@ -121,15 +165,41 @@ entities:
         - name: TECHNICAL_ANALYSIS
           allow_null: false
           content:
-            blocks:
-              paragraph: {}
-              bullet_list: {}
-              ordered_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
-              blockquote: {}
-              code: {}
+            mode: outline
+            nodes:
+              - heading:
+                  depth: 3
+                  text: Failure Path
+                content:
+                  mode: freeform
+                  blocks:
+                    paragraph:
+                      min_count: 1
+                    bullet_list: {}
+                    code:
+                      require_language: true
+                    heading:
+                      min_depth: 4
+                      max_depth: 4
+
+              - heading:
+                  depth: 3
+                  text: Why Alerts Lagged
+                content:
+                  mode: freeform
+                  blocks:
+                    blockquote:
+                      min_count: 1
+                      max_count: 1
+
+              - heading:
+                  depth: 3
+                  text: Contributing Conditions
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
           guidance:
             include: failure path, evidence, logs, and architectural implications
             exclude: people-management follow-up work
@@ -137,15 +207,37 @@ entities:
         - name: RECOVERY
           allow_null: false
           content:
-            blocks:
-              paragraph: {}
-              bullet_list: {}
-              ordered_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
-              blockquote: {}
-              code: {}
+            mode: outline
+            nodes:
+              - heading:
+                  depth: 3
+                  text: Mitigation Steps
+                content:
+                  mode: freeform
+                  blocks:
+                    ordered_list:
+                      min_items: 1
+                    code:
+                      require_language: true
+
+              - heading:
+                  depth: 3
+                  text: Verification
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
+
+              - heading:
+                  depth: 3
+                  text: Stop Conditions
+                content:
+                  mode: freeform
+                  blocks:
+                    blockquote:
+                      min_count: 1
+                      max_count: 1
           guidance:
             include: mitigation steps, verification work, and rollback details
             exclude: future improvement planning
@@ -153,13 +245,25 @@ entities:
         - name: FOLLOW_UP
           allow_null: false
           content:
-            blocks:
-              paragraph: {}
-              bullet_list: {}
-              ordered_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
+            mode: outline
+            nodes:
+              - heading:
+                  depth: 3
+                  text: Immediate Actions
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
+
+              - heading:
+                  depth: 3
+                  text: Ownership
+                content:
+                  mode: freeform
+                  blocks:
+                    bullet_list:
+                      min_items: 1
           guidance:
             include: owned action items, policy changes, and decision handoffs
             exclude: repeated incident summary text

@@ -195,7 +195,8 @@ test.concurrent("legacy required keys on inline sections are rejected", async ()
   await withFixtureSandbox("shape-legacy-required-inline-section", async ({ root }) => {
     await updateShapeYaml(root, "people", 1, (shape) => {
       const entities = shape.entities as Record<string, Record<string, unknown>>;
-      const sections = entities.person.sections as Array<Record<string, unknown>>;
+      const body = entities.person.body as Record<string, unknown>;
+      const sections = body.sections as Array<Record<string, unknown>>;
       sections[0].required = true;
     });
 

@@ -4,10 +4,11 @@ import matter from "gray-matter";
 import { parse as parseYaml } from "yaml";
 import { ZodError } from "zod";
 import { codes, computeStatus, diag } from "./diagnostics.ts";
-import { parseBodySections, validateSectionMarkdown, type ParsedBody } from "./markdown.ts";
+import { parseBody, validateRegionMarkdown, validateSectionMarkdown, type ParsedBody } from "./markdown.ts";
 import { parsePathTemplate, matchPath, type ParsedPathTemplate } from "./parser/path-template.ts";
 import { parseRefUri, refTargetEntity } from "./refs.ts";
 import {
+  type BodyRegionShape,
   findLegacyRequiredIssues,
   isPathPrefix,
   moduleShapeSchema,
@@ -19,6 +20,7 @@ import {
   type ModuleShape,
   type SectionDefinitionShape,
   type SectionShape,
+  type TitleShape,
   type SystemConfig,
   type VariantEntityShape,
 } from "./schema.ts";
@@ -72,10 +74,21 @@ interface MarkdownDiscoveryResult {
 export interface EffectiveEntityContract {
   fields: Record<string, FieldShape>;
   known_field_names: string[];
-  sections: SectionShape[] | null;
+  body: EffectiveBodyContract | null;
   diagnostics: CompilerDiagnostic[];
   body_diagnostics: CompilerDiagnostic[];
 }
+
+interface EffectiveBodyContract {
+  title?: TitleShape;
+  preamble?: BodyRegionShape;
+  sections: SectionShape[];
+}
+
+type RenderedTitleExpectation =
+  | { kind: "authored" }
+  | { kind: "expected"; value: string }
+  | { kind: "invalid_source"; field: string; actual: unknown };
 
 export interface EffectiveEntityContractContext {
   module_id: string;
@@ -257,7 +270,7 @@ function validateRecord(
   });
   diagnostics.push(...validateFrontmatter(record, context, effectiveContract.fields, effectiveContract.known_field_names));
   diagnostics.push(...effectiveContract.diagnostics);
-  diagnostics.push(...validateBody(record, effectiveContract.sections, effectiveContract.body_diagnostics));
+  diagnostics.push(...validateBody(record, effectiveContract.body, effectiveContract.body_diagnostics));
   diagnostics.push(...validateIdentity(record));
   diagnostics.push(...validateReferences(record, context, recordIndex, effectiveContract.fields));
   return diagnostics;
@@ -466,7 +479,7 @@ function validateFieldValue(
 
 function validateBody(
   record: ParsedRecord,
-  declaredSections: SectionShape[] | null,
+  declaredBody: EffectiveBodyContract | null,
   bodyDiagnostics: CompilerDiagnostic[],
 ): CompilerDiagnostic[] {
   if (bodyDiagnostics.length > 0) {
@@ -474,9 +487,114 @@ function validateBody(
   }
 
   const diagnostics: CompilerDiagnostic[] = [];
-  if (!declaredSections) return diagnostics;
+  if (!declaredBody) return diagnostics;
 
-  for (const section of declaredSections) {
+  if (record.body.titles.length > 1) {
+    diagnostics.push(
+      diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, "Multiple top-level h1 headings are not allowed", {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: "title",
+        expected: "exactly one top-level h1",
+        actual: record.body.titles,
+      }),
+    );
+  }
+
+  if (declaredBody.title) {
+    if (record.body.content_before_title.trim().length > 0) {
+      diagnostics.push(
+        diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, "Content before the declared h1 title is not allowed", {
+          module_id: record.module_id,
+          entity: record.entity_name,
+          field: "title",
+          expected: "h1 as first structural body region",
+          actual: record.body.content_before_title.trim(),
+        }),
+      );
+    }
+
+    if (!record.body.title) {
+      diagnostics.push(
+        diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, "Missing declared h1 title", {
+          module_id: record.module_id,
+          entity: record.entity_name,
+          field: "title",
+          expected: "exactly one h1",
+          actual: null,
+        }),
+      );
+    } else {
+      const expectedTitle = renderExpectedTitle(declaredBody.title, record.frontmatter);
+      if (expectedTitle.kind === "invalid_source") {
+        diagnostics.push(
+          diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, `Cannot validate the declared h1 title because frontmatter field '${expectedTitle.field}' is not a non-empty string`, {
+            module_id: record.module_id,
+            entity: record.entity_name,
+            field: "title",
+            expected: {
+              source_field: expectedTitle.field,
+              type: "non-empty string",
+            },
+            actual: expectedTitle.actual,
+          }),
+        );
+      } else if (expectedTitle.kind === "expected" && record.body.title !== expectedTitle.value) {
+        diagnostics.push(
+          diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, "The h1 title does not match the declared title source", {
+            module_id: record.module_id,
+            entity: record.entity_name,
+            field: "title",
+            expected: expectedTitle.value,
+            actual: record.body.title,
+          }),
+        );
+      }
+    }
+  } else if (record.body.titles.length > 0) {
+    diagnostics.push(
+      diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, "Undeclared h1 title content is not allowed", {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: "title",
+        expected: "no top-level h1",
+        actual: record.body.titles,
+      }),
+    );
+  }
+
+  if (declaredBody.preamble) {
+    diagnostics.push(
+      ...validateRegionMarkdown("preamble", declaredBody.preamble, record.body.preamble, record.file_rel, record.module_id, record.entity_name, 2),
+    );
+  } else if (record.body.preamble.trim().length > 0) {
+    diagnostics.push(
+      diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, "Undeclared top-level preamble content is not allowed", {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: "preamble",
+        expected: "no top-level preamble",
+        actual: record.body.preamble.trim(),
+      }),
+    );
+  }
+
+  const duplicateSectionNames = Array.from(new Set(record.body.duplicate_section_names));
+  for (const sectionName of duplicateSectionNames) {
+    diagnostics.push(
+      diag(codes.BODY_CONSTRAINT_VIOLATION, "error", "record_body", record.file_rel, `Duplicate top-level section '## ${sectionName}' is not allowed`, {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: sectionName,
+        expected: "unique top-level section names",
+        actual: sectionName,
+      }),
+    );
+  }
+
+  const membershipDiagnosticsStart = diagnostics.length;
+
+  for (const section of declaredBody.sections) {
     if (!record.body.by_name.has(section.name)) {
       diagnostics.push(
         diag(codes.BODY_MISSING_SECTION, "error", "record_body", record.file_rel, `Missing declared section '## ${section.name}'`, {
@@ -491,25 +609,25 @@ function validateBody(
   }
 
   for (const section of record.body.ordered) {
-    if (!declaredSections.find((declared) => declared.name === section.name)) {
+    if (!declaredBody.sections.find((declared) => declared.name === section.name)) {
       diagnostics.push(
         diag(codes.BODY_UNKNOWN_SECTION, "error", "record_body", record.file_rel, `Unknown section '## ${section.name}'`, {
           module_id: record.module_id,
           entity: record.entity_name,
           field: section.name,
-          expected: declaredSections.map((declared) => declared.name),
+          expected: declaredBody.sections.map((declared) => declared.name),
           actual: section.name,
         }),
       );
     }
   }
 
-  const hasMembershipErrors = diagnostics.length > 0;
+  const hasMembershipErrors = diagnostics.length > membershipDiagnosticsStart;
   const actualKnownOrder = record.body.ordered
     .map((section) => section.name)
-    .filter((sectionName) => declaredSections.some((declared) => declared.name === sectionName));
-  const expectedOrder = declaredSections.map((section) => section.name);
-  if (!hasMembershipErrors && actualKnownOrder.join("||") !== expectedOrder.join("||")) {
+    .filter((sectionName) => declaredBody.sections.some((declared) => declared.name === sectionName));
+  const expectedOrder = declaredBody.sections.map((section) => section.name);
+  if (!hasMembershipErrors && duplicateSectionNames.length === 0 && actualKnownOrder.join("||") !== expectedOrder.join("||")) {
     diagnostics.push(
       diag(codes.BODY_ORDER_MISMATCH, "error", "record_body", record.file_rel, "Section order does not match shape definition", {
         module_id: record.module_id,
@@ -520,7 +638,8 @@ function validateBody(
     );
   }
 
-  for (const section of declaredSections) {
+  for (const section of declaredBody.sections) {
+    if (duplicateSectionNames.includes(section.name)) continue;
     const content = record.body.by_name.get(section.name);
     if (content === undefined) continue;
     diagnostics.push(...validateSectionMarkdown(section, content, record.file_rel, record.module_id, record.entity_name));
@@ -604,7 +723,11 @@ export function resolveEffectiveEntityContract(
     return {
       fields: entityShape.fields,
       known_field_names: Object.keys(entityShape.fields).sort(),
-      sections: entityShape.sections,
+      body: {
+        title: entityShape.body.title,
+        preamble: entityShape.body.preamble,
+        sections: entityShape.body.sections,
+      },
       diagnostics: [],
       body_diagnostics: [],
     };
@@ -618,7 +741,7 @@ export function resolveEffectiveEntityContract(
     return {
       fields: entityShape.fields,
       known_field_names: knownFieldNames,
-      sections: null,
+      body: null,
       diagnostics: [
         unresolvedVariantDiagnostic(
           meta,
@@ -645,7 +768,7 @@ export function resolveEffectiveEntityContract(
     return {
       fields: entityShape.fields,
       known_field_names: knownFieldNames,
-      sections: null,
+      body: null,
       diagnostics: [
         unresolvedVariantDiagnostic(
           meta,
@@ -672,7 +795,7 @@ export function resolveEffectiveEntityContract(
     return {
       fields: entityShape.fields,
       known_field_names: knownFieldNames,
-      sections: null,
+      body: null,
       diagnostics: [
         unresolvedVariantDiagnostic(
           meta,
@@ -729,7 +852,13 @@ export function resolveEffectiveEntityContract(
   return {
     fields,
     known_field_names: Object.keys(fields).sort(),
-    sections: diagnostics.length > 0 ? null : sections,
+    body: diagnostics.length > 0
+      ? null
+      : {
+          title: entityShape.body?.title,
+          preamble: entityShape.body?.preamble,
+          sections,
+        },
     diagnostics,
     body_diagnostics: [],
   };
@@ -737,6 +866,46 @@ export function resolveEffectiveEntityContract(
 
 function isVariantEntityShape(entityShape: EntityShape): entityShape is VariantEntityShape {
   return "discriminator" in entityShape;
+}
+
+function renderExpectedTitle(title: TitleShape, frontmatter: Record<string, unknown>): RenderedTitleExpectation {
+  const { source } = title;
+
+  if (source.kind === "authored") {
+    return { kind: "authored" };
+  }
+
+  if (source.kind === "field") {
+    const value = frontmatter[source.field];
+    if (typeof value !== "string" || value.length === 0) {
+      return {
+        kind: "invalid_source",
+        field: source.field,
+        actual: value,
+      };
+    }
+    return { kind: "expected", value };
+  }
+
+  const parts: string[] = [];
+  for (const part of source.parts) {
+    if (part.kind === "literal") {
+      parts.push(part.value);
+      continue;
+    }
+
+    const value = frontmatter[part.field];
+    if (typeof value !== "string" || value.length === 0) {
+      return {
+        kind: "invalid_source",
+        field: part.field,
+        actual: value,
+      };
+    }
+    parts.push(value);
+  }
+
+  return { kind: "expected", value: parts.join("") };
 }
 
 function materializeSectionShape(name: string, definition: SectionDefinitionShape | undefined): SectionShape | null {
@@ -944,7 +1113,20 @@ function parseRecord(
 
   const entityShape = context.shape.entities[entityMatch.entity_name];
   const frontmatter = parsedMatter.data as Record<string, unknown>;
-  const body = parseBodySections(parsedMatter.content);
+  let body: ParsedBody;
+  try {
+    body = parseBody(parsedMatter.content);
+  } catch (error) {
+    diagnostics.push(
+      diag(codes.PARSE_MARKDOWN, "error", "parse", fileRel, "Failed to parse markdown body", {
+        module_id: context.module_id,
+        entity: entityMatch.entity_name,
+        field: "body",
+        actual: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return { record: null, diagnostics };
+  }
   const canonicalUri = buildCanonicalUri(context, entityMatch.entity_name, frontmatter.id, entityMatch.bindings);
 
   const record: ParsedRecord = {

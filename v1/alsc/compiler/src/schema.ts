@@ -6,6 +6,94 @@ const moduleMountPath = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\/[a-
 const nonEmptyString = z.string().min(1);
 const positiveInt = z.number().int().positive();
 
+export interface GuidanceShape {
+  include?: string;
+  exclude?: string;
+}
+
+export interface CountConstraintShape {
+  min_count?: number;
+  max_count?: number;
+}
+
+export interface ItemConstraintShape {
+  min_items?: number;
+  max_items?: number;
+}
+
+export interface HeadingConstraintShape {
+  min_depth?: number;
+  max_depth?: number;
+}
+
+export interface CodeConstraintShape {
+  require_language?: boolean;
+}
+
+export interface FreeformBlocksShape {
+  paragraph?: CountConstraintShape;
+  bullet_list?: ItemConstraintShape;
+  ordered_list?: ItemConstraintShape;
+  heading?: HeadingConstraintShape;
+  blockquote?: CountConstraintShape;
+  code?: CodeConstraintShape;
+}
+
+export interface FreeformContentShape {
+  mode: "freeform";
+  blocks: FreeformBlocksShape;
+}
+
+export type TitleTemplatePartShape =
+  | { kind: "field"; field: string }
+  | { kind: "literal"; value: string };
+
+export type TitleSourceShape =
+  | { kind: "field"; field: string }
+  | { kind: "authored" }
+  | { kind: "template"; parts: TitleTemplatePartShape[] };
+
+export interface TitleShape {
+  source: TitleSourceShape;
+}
+
+export type ContentShape = FreeformContentShape | OutlineContentShape;
+
+export interface BodyRegionShape {
+  allow_null: boolean;
+  content: ContentShape;
+  guidance?: GuidanceShape;
+}
+
+export interface OutlineNodeShape {
+  heading: {
+    depth: number;
+    text: string;
+  };
+  content: FreeformContentShape;
+}
+
+export interface OutlineContentShape {
+  mode: "outline";
+  preamble?: BodyRegionShape;
+  nodes: OutlineNodeShape[];
+}
+
+export interface SectionShape extends BodyRegionShape {
+  name: string;
+}
+
+export type SectionDefinitionShape = BodyRegionShape;
+
+export interface SharedBodyShape {
+  title?: TitleShape;
+  preamble?: BodyRegionShape;
+}
+
+export interface BodyShape extends SharedBodyShape {
+  sections: SectionShape[];
+}
+
 export function splitModuleMountPath(modulePath: string): string[] {
   return modulePath.split("/");
 }
@@ -79,34 +167,156 @@ const fieldSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const sectionSchema = z.object({
-  name: nonEmptyString,
-  allow_null: z.boolean(),
-  content: z.object({
-    allowed_blocks: z.array(z.enum(["paragraph", "bullet_list", "ordered_list"])).min(1),
-    allow_subheadings: z.boolean(),
-    allow_blockquotes: z.boolean(),
-    allow_code_blocks: z.boolean(),
-  }),
-  guidance: z.object({
-    include: nonEmptyString,
-    exclude: nonEmptyString,
-  }),
+const headingDepth = z.number().int().min(1).max(6);
+
+const guidanceSchema: z.ZodType<GuidanceShape> = z.object({
+  include: nonEmptyString.optional(),
+  exclude: nonEmptyString.optional(),
+}).superRefine((value, ctx) => {
+  if (!value.include && !value.exclude) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "guidance must include at least one of include or exclude",
+    });
+  }
 });
 
-const sectionDefinitionSchema = z.object({
-  allow_null: z.boolean(),
-  content: z.object({
-    allowed_blocks: z.array(z.enum(["paragraph", "bullet_list", "ordered_list"])).min(1),
-    allow_subheadings: z.boolean(),
-    allow_blockquotes: z.boolean(),
-    allow_code_blocks: z.boolean(),
-  }),
-  guidance: z.object({
-    include: nonEmptyString,
-    exclude: nonEmptyString,
-  }),
+const countConstraintSchema: z.ZodType<CountConstraintShape> = z.object({
+  min_count: positiveInt.optional(),
+  max_count: positiveInt.optional(),
+}).superRefine((value, ctx) => {
+  if (value.min_count !== undefined && value.max_count !== undefined && value.min_count > value.max_count) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "min_count cannot be greater than max_count",
+      path: ["min_count"],
+    });
+  }
 });
+
+const itemConstraintSchema: z.ZodType<ItemConstraintShape> = z.object({
+  min_items: positiveInt.optional(),
+  max_items: positiveInt.optional(),
+}).superRefine((value, ctx) => {
+  if (value.min_items !== undefined && value.max_items !== undefined && value.min_items > value.max_items) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "min_items cannot be greater than max_items",
+      path: ["min_items"],
+    });
+  }
+});
+
+const headingConstraintSchema: z.ZodType<HeadingConstraintShape> = z.object({
+  min_depth: headingDepth.optional(),
+  max_depth: headingDepth.optional(),
+}).superRefine((value, ctx) => {
+  if (value.min_depth !== undefined && value.max_depth !== undefined && value.min_depth > value.max_depth) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "min_depth cannot be greater than max_depth",
+      path: ["min_depth"],
+    });
+  }
+});
+
+const codeConstraintSchema: z.ZodType<CodeConstraintShape> = z.object({
+  require_language: z.boolean().optional(),
+});
+
+const freeformBlocksSchema: z.ZodType<FreeformBlocksShape> = z.object({
+  paragraph: countConstraintSchema.optional(),
+  bullet_list: itemConstraintSchema.optional(),
+  ordered_list: itemConstraintSchema.optional(),
+  heading: headingConstraintSchema.optional(),
+  blockquote: countConstraintSchema.optional(),
+  code: codeConstraintSchema.optional(),
+}).superRefine((value, ctx) => {
+  if (Object.keys(value).length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "freeform content must declare at least one block type",
+      path: ["blocks"],
+    });
+  }
+});
+
+const freeformContentSchema: z.ZodType<FreeformContentShape> = z.object({
+  mode: z.literal("freeform"),
+  blocks: freeformBlocksSchema,
+});
+
+const titleTemplatePartSchema: z.ZodType<TitleTemplatePartShape> = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("field"),
+    field: fieldName,
+  }),
+  z.object({
+    kind: z.literal("literal"),
+    value: nonEmptyString,
+  }),
+]);
+
+const titleSourceSchema: z.ZodType<TitleSourceShape> = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("field"),
+    field: fieldName,
+  }),
+  z.object({
+    kind: z.literal("authored"),
+  }),
+  z.object({
+    kind: z.literal("template"),
+    parts: z.array(titleTemplatePartSchema).min(1),
+  }),
+]);
+
+const titleSchema: z.ZodType<TitleShape> = z.object({
+  source: titleSourceSchema,
+});
+
+let regionDefinitionSchema: z.ZodType<BodyRegionShape>;
+let contentSchema: z.ZodType<ContentShape>;
+
+const outlineNodeSchema: z.ZodType<OutlineNodeShape> = z.object({
+  heading: z.object({
+    depth: headingDepth,
+    text: nonEmptyString,
+  }),
+  content: freeformContentSchema,
+});
+
+const outlineContentSchema: z.ZodType<OutlineContentShape> = z.lazy(() => z.object({
+  mode: z.literal("outline"),
+  preamble: regionDefinitionSchema.optional(),
+  nodes: z.array(outlineNodeSchema).min(1),
+}));
+
+contentSchema = z.lazy(() => z.union([freeformContentSchema, outlineContentSchema]));
+
+regionDefinitionSchema = z.lazy(() => z.object({
+  allow_null: z.boolean(),
+  content: contentSchema,
+  guidance: guidanceSchema.optional(),
+}));
+
+const sectionSchema: z.ZodType<SectionShape> = z.lazy(() => z.object({
+  name: nonEmptyString,
+  allow_null: z.boolean(),
+  content: contentSchema,
+  guidance: guidanceSchema.optional(),
+}));
+
+const sharedBodySchema: z.ZodType<SharedBodyShape> = z.object({
+  title: titleSchema.optional(),
+  preamble: regionDefinitionSchema.optional(),
+});
+
+const plainBodySchema: z.ZodType<BodyShape> = sharedBodySchema.extend({
+  sections: z.array(sectionSchema).min(1),
+});
+
+const sectionDefinitionSchema: z.ZodType<SectionDefinitionShape> = regionDefinitionSchema;
 
 const variantSchema = z.object({
   fields: z.record(fieldName, fieldSchema),
@@ -138,11 +348,12 @@ const entityBaseSchema = z.object({
 });
 
 const plainEntitySchema = entityBaseSchema.extend({
-  sections: z.array(sectionSchema).min(1),
+  body: plainBodySchema,
 });
 
 const variantEntitySchema = entityBaseSchema.extend({
   discriminator: fieldName,
+  body: sharedBodySchema.optional(),
   section_definitions: z.record(nonEmptyString, sectionDefinitionSchema),
   variants: z.record(nonEmptyString, variantSchema),
 });
@@ -164,14 +375,18 @@ const entitySchema = z.union([plainEntitySchema, variantEntitySchema]).superRefi
     });
   }
 
-  if ("sections" in value) {
+  if (value.body?.title) {
+    validateTitleSource(value.body.title.source, value.fields, ctx, ["body", "title", "source"]);
+  }
+
+  if (!("discriminator" in value)) {
     const seenSectionNames = new Set<string>();
-    for (const section of value.sections) {
+    for (const section of value.body.sections) {
       if (seenSectionNames.has(section.name)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `duplicate section name ${section.name}`,
-          path: ["sections"],
+          path: ["body", "sections"],
         });
       }
       seenSectionNames.add(section.name);
@@ -339,10 +554,8 @@ export type SystemConfig = z.infer<typeof systemConfigSchema>;
 export type EntityShape = z.infer<typeof entitySchema>;
 export type PlainEntityShape = z.infer<typeof plainEntitySchema>;
 export type VariantEntityShape = z.infer<typeof variantEntitySchema>;
-export type SectionDefinitionShape = z.infer<typeof sectionDefinitionSchema>;
 export type EntityVariantShape = z.infer<typeof variantSchema>;
 export type FieldShape = z.infer<typeof fieldSchema>;
-export type SectionShape = z.infer<typeof sectionSchema>;
 
 interface RawShapeIssue {
   path: Array<string | number>;
@@ -353,6 +566,57 @@ export function findLegacyRequiredIssues(raw: unknown): RawShapeIssue[] {
   const issues: RawShapeIssue[] = [];
   walkShapeValue(raw, [], issues);
   return issues;
+}
+
+function validateTitleSource(
+  titleSource: z.infer<typeof titleSourceSchema>,
+  fields: Record<string, z.infer<typeof fieldSchema>>,
+  ctx: z.RefinementCtx,
+  path: Array<string | number>,
+): void {
+  const referencedFields = collectTitleSourceFieldNames(titleSource);
+
+  for (const referencedField of referencedFields) {
+    const targetField = fields[referencedField];
+    if (!targetField) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `title source field ${referencedField} is not declared`,
+        path,
+      });
+      continue;
+    }
+
+    if (targetField.type !== "id" && targetField.type !== "string") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `title source field ${referencedField} must be type=id or type=string`,
+        path,
+      });
+    }
+
+    if (targetField.allow_null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `title source field ${referencedField} must be non-null`,
+        path,
+      });
+    }
+  }
+}
+
+function collectTitleSourceFieldNames(titleSource: z.infer<typeof titleSourceSchema>): string[] {
+  if (titleSource.kind === "field") {
+    return [titleSource.field];
+  }
+
+  if (titleSource.kind === "template") {
+    return titleSource.parts
+      .filter((part): part is Extract<z.infer<typeof titleTemplatePartSchema>, { kind: "field" }> => part.kind === "field")
+      .map((part) => part.field);
+  }
+
+  return [];
 }
 
 function walkShapeValue(

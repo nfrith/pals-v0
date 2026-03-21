@@ -42,14 +42,19 @@ entities:
             module: people
             entity: person
 
+    body:
+      title:
+        source:
+          kind: field
+          field: id
+
     section_definitions:
       DESCRIPTION:
         allow_null: false
         content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
+          mode: freeform
+          blocks:
+            paragraph: {}
         guidance:
           include: what this item is, why it exists, and the relevant operating context
           exclude: timestamped progress notes and variant-specific implementation detail that belongs elsewhere
@@ -57,10 +62,10 @@ entities:
       ACTIVITY_LOG:
         allow_null: false
         content:
-          allowed_blocks: [bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
+          mode: freeform
+          blocks:
+            bullet_list: {}
+            ordered_list: {}
         guidance:
           include: dated work log entries, decisions, and notable state changes in chronological order
           exclude: evergreen requirements or long-form architectural rationale
@@ -68,10 +73,10 @@ entities:
       REQUIREMENTS:
         allow_null: true
         content:
-          allowed_blocks: [bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
+          mode: freeform
+          blocks:
+            bullet_list: {}
+            ordered_list: {}
         guidance:
           include: completion criteria, constraints, and checklist-style requirements
           exclude: session history and exploratory findings
@@ -79,10 +84,11 @@ entities:
       ARCHITECTURE:
         allow_null: true
         content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
+          mode: freeform
+          blocks:
+            paragraph: {}
+            bullet_list: {}
+            ordered_list: {}
         guidance:
           include: technical design choices, structural implications, and implementation approach
           exclude: raw research conclusions and generic task history
@@ -90,10 +96,9 @@ entities:
       HYPOTHESIS:
         allow_null: true
         content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
+          mode: freeform
+          blocks:
+            paragraph: {}
         guidance:
           include: the belief or question being tested for exploratory work
           exclude: settled implementation plans
@@ -101,10 +106,11 @@ entities:
       FINDINGS:
         allow_null: true
         content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
+          mode: freeform
+          blocks:
+            paragraph: {}
+            bullet_list: {}
+            ordered_list: {}
         guidance:
           include: conclusions, evidence summaries, and next-step implications from research work
           exclude: speculative work that has not been observed or learned yet

@@ -28,69 +28,85 @@ entities:
         allow_null: false
         allowed_values: [draft, approved, active, retired]
 
-    sections:
-      - name: PURPOSE
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what this protocol achieves and when to use it
-          exclude: step-by-step instructions
+    body:
+      title:
+        source:
+          kind: field
+          field: id
 
-      - name: PREREQUISITES
-        allow_null: false
-        content:
-          allowed_blocks: [bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: true
-          allow_code_blocks: true
-        guidance:
-          include: tools, access, and conditions required before starting
-          exclude: the actual procedure steps
+      sections:
+        - name: PURPOSE
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: what this protocol achieves and when to use it
+            exclude: step-by-step instructions
 
-      - name: STEPS
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: true
-          allow_blockquotes: true
-          allow_code_blocks: true
-        guidance:
-          include: the full procedure as ordered steps, with validation commands and warnings for dangerous operations
-          exclude: rollback instructions or post-completion verification
+        - name: PREREQUISITES
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              bullet_list: {}
+              blockquote: {}
+              code: {}
+          guidance:
+            include: tools, access, and conditions required before starting
+            exclude: the actual procedure steps
 
-      - name: ROLLBACK
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, ordered_list, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: true
-          allow_code_blocks: true
-        guidance:
-          include: how to reverse the procedure if something goes wrong
-          exclude: the forward procedure or verification steps
+        - name: STEPS
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              blockquote: {}
+              code: {}
+          guidance:
+            include: the full procedure as ordered steps, with validation commands and warnings for dangerous operations
+            exclude: rollback instructions or post-completion verification
 
-      - name: VALIDATION
-        allow_null: false
-        content:
-          allowed_blocks: [ordered_list, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: true
-        guidance:
-          include: commands and checks to verify the procedure succeeded
-          exclude: the procedure itself or rollback steps
+        - name: ROLLBACK
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              ordered_list: {}
+              bullet_list: {}
+              blockquote: {}
+              code: {}
+          guidance:
+            include: how to reverse the procedure if something goes wrong
+            exclude: the forward procedure or verification steps
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: edge cases, known gotchas, and environment-specific considerations
-          exclude: general documentation about the tools involved
+        - name: VALIDATION
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              ordered_list: {}
+              bullet_list: {}
+              code: {}
+          guidance:
+            include: commands and checks to verify the procedure succeeded
+            exclude: the procedure itself or rollback steps
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: edge cases, known gotchas, and environment-specific considerations
+            exclude: general documentation about the tools involved

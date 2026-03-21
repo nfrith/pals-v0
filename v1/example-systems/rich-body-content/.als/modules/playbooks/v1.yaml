@@ -32,58 +32,77 @@ entities:
         allow_null: false
         allowed_values: [draft, current, deprecated]
 
-    sections:
-      - name: OVERVIEW
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what this integration does, why we use it, and what it replaces if anything
-          exclude: setup instructions or endpoint specifics
+    body:
+      title:
+        source:
+          kind: template
+          parts:
+            - kind: field
+              field: id
+            - kind: literal
+              value: " "
+            - kind: field
+              field: title
 
-      - name: AUTHENTICATION
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: true
-          allow_code_blocks: true
-        guidance:
-          include: how to authenticate, key management, env var names, and example config
-          exclude: endpoint-specific request details
+      sections:
+        - name: OVERVIEW
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: what this integration does, why we use it, and what it replaces if anything
+            exclude: setup instructions or endpoint specifics
 
-      - name: ENDPOINTS
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: true
-          allow_blockquotes: false
-          allow_code_blocks: true
-        guidance:
-          include: each endpoint as a subheading with method, path, request/response examples
-          exclude: auth setup details covered in the previous section
+        - name: AUTHENTICATION
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              blockquote: {}
+              code: {}
+          guidance:
+            include: how to authenticate, key management, env var names, and example config
+            exclude: endpoint-specific request details
 
-      - name: ERROR_HANDLING
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: true
-          allow_code_blocks: true
-        guidance:
-          include: common error codes, retry policy, and failure modes with example responses
-          exclude: happy-path request/response flows
+        - name: ENDPOINTS
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              code: {}
+          guidance:
+            include: each endpoint as a subheading with method, path, request/response examples
+            exclude: auth setup details covered in the previous section
 
-      - name: CHANGELOG
-        allow_null: false
-        content:
-          allowed_blocks: [bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: dated entries for integration changes, version bumps, and breaking changes
-          exclude: general service news unrelated to our integration
+        - name: ERROR_HANDLING
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              blockquote: {}
+              code: {}
+          guidance:
+            include: common error codes, retry policy, and failure modes with example responses
+            exclude: happy-path request/response flows
+
+        - name: CHANGELOG
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              bullet_list: {}
+          guidance:
+            include: dated entries for integration changes, version bumps, and breaking changes
+            exclude: general service news unrelated to our integration

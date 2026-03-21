@@ -1,0 +1,35 @@
+# Rich Body Content
+
+This fixture is the active design sandbox for the forward-looking ALS v1 body contract.
+
+## Purpose
+
+- The records here already exercise richer Markdown than the original happy-path fixture.
+- The module shapes here intentionally use a draft body schema based on SDR 006 and SDR 007.
+- The goal is to make the YAML surface easy to inspect and revise before compiler work begins.
+
+## Draft Body Surface
+
+The shapes in this fixture use:
+
+- `body.title.source.kind`
+- optional `body.preamble`
+- ordered `body.sections`
+- `content.mode: freeform | outline`
+- unified `content.blocks` for `freeform`
+- exact `outline.nodes` with explicit heading text and explicit heading depth
+- optional `outline.preamble` for prose before the first required outlined heading
+
+## Intentional Choices In This Fixture
+
+- Most existing records in this fixture currently render `h1` as the record `id`, not the human-readable `title`.
+- Most shapes here still bind `body.title.source.kind: field` to `id`, but `playbooks` now demonstrates `kind: template`.
+- Those are fixture choices, not spec claims about what `h1` should normally be.
+- `body.preamble` is omitted in most shapes because the current records mostly begin their declared sections immediately after the `h1`.
+
+## Current Riff Targets
+
+- `body.title.source` now needs clear reference docs for all three source kinds: `field`, `authored`, and `template`.
+- `body.preamble` and section-level `preamble` should stay the same exact schema shape unless a real counterexample appears.
+- How much optionality should `outline` nodes support beyond required ordered nodes plus explicit `preamble`?
+- How much block-level detail belongs in the core shape language before mdast coverage expands further?

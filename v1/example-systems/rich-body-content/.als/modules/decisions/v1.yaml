@@ -27,58 +27,69 @@ entities:
         type: date
         allow_null: true
 
-    sections:
-      - name: CONTEXT
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: background, constraints, and what prompted this decision
-          exclude: options analysis or final decision
+    body:
+      title:
+        source:
+          kind: field
+          field: id
 
-      - name: OPTIONS
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: true
-          allow_blockquotes: true
-          allow_code_blocks: false
-        guidance:
-          include: each option as a subheading with description, pros, cons, and relevant quotes or references
-          exclude: the final decision or action items
+      sections:
+        - name: CONTEXT
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: background, constraints, and what prompted this decision
+            exclude: options analysis or final decision
 
-      - name: DECISION
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what was decided, the primary reasoning, and any conditions
-          exclude: rehashing the options already covered above
+        - name: OPTIONS
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              blockquote: {}
+          guidance:
+            include: each option as a subheading with description, pros, cons, and relevant quotes or references
+            exclude: the final decision or action items
 
-      - name: ACTION_ITEMS
-        allow_null: true
-        content:
-          allowed_blocks: [ordered_list, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: concrete next steps with owners and dates where known
-          exclude: background context or decision rationale
+        - name: DECISION
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: what was decided, the primary reasoning, and any conditions
+            exclude: rehashing the options already covered above
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: true
-          allow_code_blocks: false
-        guidance:
-          include: dissenting opinions, caveats, or follow-up triggers
-          exclude: action items or options already documented above
+        - name: ACTION_ITEMS
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              ordered_list: {}
+              bullet_list: {}
+          guidance:
+            include: concrete next steps with owners and dates where known
+            exclude: background context or decision rationale
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              blockquote: {}
+          guidance:
+            include: dissenting opinions, caveats, or follow-up triggers
+            exclude: action items or options already documented above

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateFixture, withFixtureSandbox } from "./helpers/fixture.ts";
+import { validateFixture, withExampleSystemSandbox, withFixtureSandbox } from "./helpers/fixture.ts";
 
 const compilerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -39,5 +39,42 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
     expect(result.summary.error_count).toBe(0);
     expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
     expect(result.summary.modules_checked).toBe(5);
+  });
+});
+
+test.concurrent("rich body design reference validates clean", async () => {
+  await withExampleSystemSandbox("rich-body-design-reference", "rich-body-smoke", async ({ root }) => {
+    const baseline = validateFixture(root);
+    const process = Bun.spawnSync({
+      cmd: ["bun", "src/index.ts", root],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = new TextDecoder().decode(process.stdout);
+    const stderr = new TextDecoder().decode(process.stderr);
+
+    if (process.exitCode !== 0) {
+      throw new Error(
+        `Smoke validation subprocess failed with exit ${process.exitCode}\nstdout:\n${stdout || "<empty>"}\nstderr:\n${stderr || "<empty>"}`,
+      );
+    }
+
+    let result: { status: string; summary: { error_count: number; files_ignored: number; modules_checked: number } };
+    try {
+      result = JSON.parse(stdout) as {
+        status: string;
+        summary: { error_count: number; files_ignored: number; modules_checked: number };
+      };
+    } catch (error) {
+      throw new Error(
+        `Smoke validation subprocess returned invalid JSON: ${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout || "<empty>"}\nstderr:\n${stderr || "<empty>"}`,
+      );
+    }
+
+    expect(result.status).toBe("pass");
+    expect(result.summary.error_count).toBe(0);
+    expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
+    expect(result.summary.modules_checked).toBe(6);
   });
 });

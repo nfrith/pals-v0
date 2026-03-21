@@ -27,28 +27,33 @@ entities:
         allow_null: false
         allowed_values: [active, deprecated, draft]
 
-    sections:
-      - name: PURPOSE
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what this config does and why it exists
-          exclude: setup instructions or install steps
+    body:
+      title:
+        source:
+          kind: field
+          field: name
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: quirks, gotchas, or context for future edits
-          exclude: full change history
+      sections:
+        - name: PURPOSE
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: what this config does and why it exists
+            exclude: setup instructions or install steps
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: quirks, gotchas, or context for future edits
+            exclude: full change history
 
   profile:
     path: profiles/{id}.md
@@ -74,25 +79,32 @@ entities:
         allow_null: false
         allowed_values: [active, archived]
 
-    sections:
-      - name: SETUP
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what this profile provisions and the order of operations
-          exclude: individual config file details tracked in config entities
+    body:
+      title:
+        source:
+          kind: field
+          field: name
 
-      - name: NOTES
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: machine-specific quirks or environment constraints
-          exclude: general tool documentation
+      sections:
+        - name: SETUP
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+          guidance:
+            include: what this profile provisions and the order of operations
+            exclude: individual config file details tracked in config entities
+
+        - name: NOTES
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: machine-specific quirks or environment constraints
+            exclude: general tool documentation

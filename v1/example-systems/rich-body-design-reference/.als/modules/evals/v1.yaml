@@ -38,11 +38,14 @@ entities:
 
     body:
       title:
-        source_field: title
+        source:
+          kind: field
+          field: title
 
       preamble:
         allow_null: false
         content:
+          mode: freeform
           blocks:
             paragraph: {}
             bullet_list: {}
@@ -54,6 +57,7 @@ entities:
         - name: TARGET_BEHAVIOR
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -68,6 +72,7 @@ entities:
         - name: FIXTURE_SET
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -83,6 +88,7 @@ entities:
         - name: FAILURE_MODES
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -98,6 +104,7 @@ entities:
         - name: ADJUDICATION
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -114,6 +121,7 @@ entities:
         - name: REPORTING
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}

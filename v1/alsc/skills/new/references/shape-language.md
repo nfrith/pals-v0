@@ -57,8 +57,8 @@ Rules:
 
 Entities have two supported shapes:
 
-1. Plain entities with a single shared ordered `sections` list
-2. Variant entities with root/base `fields`, a `discriminator`, a `section_definitions` library, and per-variant `fields` + full ordered `sections`
+1. Plain entities with a shared `fields` set and an explicit `body` contract
+2. Variant entities with root/base `fields`, a `discriminator`, an optional shared `body`, a `section_definitions` library, and per-variant `fields` + full ordered `sections`
 
 ### Plain entity
 
@@ -75,8 +75,24 @@ entity-name:
   fields:
     # ... field definitions
 
-  sections:
-    # ... section definitions
+  body:
+    title:
+      source:
+        kind: field
+        field: title
+
+    preamble:
+      allow_null: true
+      content:
+        mode: freeform
+        blocks:
+          paragraph: {}
+      guidance:
+        include: framing context before the main sections
+        exclude: section-specific detail
+
+    sections:
+      # ... inline section definitions
 ```
 
 ### Variant entity
@@ -102,24 +118,35 @@ entity-name:
       allow_null: false
       allowed_values: [app, research]
 
-  section_definitions:                # reusable section definitions keyed by section name
+  body:                               # optional shared top-level body regions
+    title:
+      source:
+        kind: field
+        field: title
+    preamble:
+      allow_null: true
+      content:
+        mode: freeform
+        blocks:
+          paragraph: {}
+
+  section_definitions:                # reusable h2 section definitions keyed by section name
     DESCRIPTION:
       allow_null: false
       content:
-        allowed_blocks: [paragraph]
-        allow_subheadings: false
-        allow_blockquotes: false
-        allow_code_blocks: false
+        mode: freeform
+        blocks:
+          paragraph: {}
       guidance:
         include: what this item is and why it exists
         exclude: status history
     ACTIVITY_LOG:
       allow_null: false
       content:
-        allowed_blocks: [bullet_list, ordered_list]
-        allow_subheadings: false
-        allow_blockquotes: false
-        allow_code_blocks: false
+        mode: freeform
+        blocks:
+          bullet_list: {}
+          ordered_list: {}
       guidance:
         include: dated progress history
         exclude: evergreen requirements
@@ -131,7 +158,7 @@ entity-name:
           type: enum
           allow_null: false
           allowed_values: [draft, active, completed]
-      sections: [DESCRIPTION, ACTIVITY_LOG]   # authoritative full section order for app records
+      sections: [DESCRIPTION, ACTIVITY_LOG]   # authoritative full h2 section order for app records
 
     research:
       fields:
@@ -141,6 +168,12 @@ entity-name:
           allowed_values: [draft, findings-ready, completed]
       sections: [DESCRIPTION, ACTIVITY_LOG]
 ```
+
+Rules:
+- Plain entities declare their full body contract in `body`.
+- Variant entities continue to use `section_definitions` plus each variant's `sections` list for authoritative `h2` section order.
+- Variant entities may also declare shared `body.title` and shared `body.preamble` at the entity root.
+- Variant entities may omit `body` entirely when they do not declare a shared title or shared preamble.
 
 ### Path templates
 
@@ -251,47 +284,210 @@ people:
       entity: person
 ```
 
-### Section definitions
+### Body regions
 
-Plain entities define sections inline. Sections render as `## SECTION_NAME` headings in the file.
+`body` is the explicit top-level body contract for a record. It may declare:
+
+- `title`: the record `h1`
+- `preamble`: top-level content between the `h1` and the first declared `h2`, or before the first `h2` when no title is declared
+- `sections`: the ordered `h2` regions for plain entities
+
+Every authored top-level body region must be declared. There are no invisible body zones.
+For plain entities, `body.sections` must be a non-empty ordered list.
+
+#### Title region
+
+Field-bound title:
 
 ```yaml
-sections:
-  - name: DESCRIPTION
-    allow_null: false
-    content:
-      allowed_blocks: [paragraph, bullet_list, ordered_list]
-      allow_subheadings: false
-      allow_blockquotes: false
-      allow_code_blocks: false
-    guidance:
-      include: what content belongs in this section
-      exclude: what content does not belong in this section
+body:
+  title:
+    source:
+      kind: field
+      field: title
+```
+
+Authored title:
+
+```yaml
+body:
+  title:
+    source:
+      kind: authored
+```
+
+Templated title:
+
+```yaml
+body:
+  title:
+    source:
+      kind: template
+      parts:
+        - kind: field
+          field: id
+        - kind: literal
+          value: " "
+        - kind: field
+          field: title
 ```
 
 Rules:
-- every declared section must be present in the record body
-- `name`: rendered as `## NAME` in the markdown file (`UPPER_SNAKE_CASE` is recommended, not required)
-- `allow_null`: if true, the section can contain the literal word `null` instead of real content
-- `content.allowed_blocks`: at least one of `paragraph`, `bullet_list`, `ordered_list`
-- `content.allow_subheadings/allow_blockquotes/allow_code_blocks`: boolean flags for additional block types
-- `guidance.include` / `guidance.exclude`: prose hints for what belongs (and what does not) in this section
-- Sections must appear in the record in the same order they are declared in the shape
-- No duplicate section names within an entity
+- `body.title` is optional.
+- If `body.title` is declared, the record must contain exactly one `h1`.
+- There is no implicit `title == id` rule.
+- `source.kind` must be one of `field`, `authored`, or `template`.
+- `field` sources must reference a declared field of type `id` or `string` with `allow_null: false`.
+- `authored` means the `h1` text is authored directly in the record body and is not matched to a field.
+- `template.parts` must be a non-empty ordered list.
+- Template parts must be either:
+  - `{ kind: field, field: <field_name> }`
+  - `{ kind: literal, value: <string> }`
+- Field parts use the same field restrictions as `source.kind: field`.
+- The rendered field or template value must match the authored `h1` text exactly.
+
+#### Region definitions
+
+`body.preamble`, inline `body.sections` entries, `section_definitions` values, and `outline.preamble` all use the same region-definition shape.
+
+```yaml
+preamble:
+  allow_null: false
+  content:
+    mode: freeform
+    blocks:
+      paragraph: {}
+  guidance:
+    include: what belongs here
+    exclude: what does not belong here
+```
+
+```yaml
+- name: DESCRIPTION
+  allow_null: false
+  content:
+    mode: freeform
+    blocks:
+      paragraph: {}
+  guidance:
+    include: what belongs here
+    exclude: what does not belong here
+```
+
+Rules:
+- `allow_null`: if true, the region may contain the literal word `null` instead of authored Markdown content.
+- `content`: required content contract.
+- `guidance`: optional authoring hints.
+- If `guidance` is present, `include` and `exclude` are optional non-empty strings.
+- Inline `body.sections` entries must declare `name`, rendered as `## NAME` in the markdown file.
+- `section_definitions` keys are section names for variant entities and render as `## SECTION_NAME`.
+- Every declared section must appear in the record body.
+- Sections must appear in the same order they are declared by the shape.
+- No duplicate section names within an entity.
+
+#### Content contracts
+
+Every non-title body region declares a `content` contract with exactly one mode:
+
+- `mode: freeform`
+- `mode: outline`
+
+##### Freeform content
+
+```yaml
+content:
+  mode: freeform
+  blocks:
+    paragraph:
+      min_count: 1
+    bullet_list:
+      max_items: 8
+    heading:
+      min_depth: 3
+      max_depth: 4
+    blockquote: {}
+    code:
+      require_language: true
+```
+
+Rules:
+- `blocks` must declare at least one block type.
+- Supported block types in the current v1 body contract are:
+  - `paragraph`
+  - `bullet_list`
+  - `ordered_list`
+  - `heading`
+  - `blockquote`
+  - `code`
+- Tables are not part of the current v1 body contract. They are deferred to a later pass.
+- `{}` means the block type is allowed with no extra constraints.
+- Supported block options in the current v1 body contract are:
+  - `paragraph.min_count` / `paragraph.max_count`
+  - `blockquote.min_count` / `blockquote.max_count`
+  - `bullet_list.min_items` / `bullet_list.max_items`
+  - `ordered_list.min_items` / `ordered_list.max_items`
+  - `heading.min_depth` / `heading.max_depth`
+  - `code.require_language`
+- In top-level `body.preamble` and top-level `body.sections[*]` regions, structural heading depth is `2`: `h1` is reserved for the declared title and `h2` is reserved for declared sections.
+- Because of that structural depth, freeform `heading` content in those top-level regions can only match `h3` or deeper.
+
+##### Outline content
+
+```yaml
+content:
+  mode: outline
+  preamble:
+    allow_null: false
+    content:
+      mode: freeform
+      blocks:
+        paragraph:
+          min_count: 1
+  nodes:
+    - heading:
+        depth: 3
+        text: Detection
+      content:
+        mode: freeform
+        blocks:
+          bullet_list: {}
+    - heading:
+        depth: 3
+        text: Recovery Lead Notes
+      content:
+        mode: freeform
+        blocks:
+          blockquote: {}
+```
+
+Rules:
+- `outline.preamble` is optional.
+- `outline.preamble` uses the same exact region-definition shape as `body.preamble`.
+- `nodes` must be a non-empty ordered list.
+- Each node must declare:
+  - `heading.depth`
+  - `heading.text`
+  - `content`
+- `heading.depth` is explicit and exact.
+- In current v1, outline nodes are ordered, required, and exact.
+- In current v1, outline does not define optional nodes, repeated nodes, or other cardinality syntax.
+- `node.content` currently uses `mode: freeform`.
+- If a node's freeform content allows headings, those headings must be deeper than that node's declared `heading.depth`.
+- Use `outline` when the heading tree itself is part of the schema contract.
+- Use `freeform` when headings are allowed but their exact labels and order are not declared by the schema.
 
 ### Variant section definitions
 
-Variant entities define reusable section contracts in `section_definitions` and then reference them by name from each variant.
+Variant entities define reusable `h2` section contracts in `section_definitions` and then reference them by name from each variant.
 
 ```yaml
 section_definitions:
   DESCRIPTION:
     allow_null: false
     content:
-      allowed_blocks: [paragraph]
-      allow_subheadings: false
-      allow_blockquotes: false
-      allow_code_blocks: false
+      mode: freeform
+      blocks:
+        paragraph: {}
     guidance:
       include: what this item is and why it exists
       exclude: historical updates
@@ -307,12 +503,13 @@ variants:
 ```
 
 Rules:
-- `discriminator` must point to a root/base field that is `type: enum` and `allow_null: false`
-- Variant keys form a bijection with the discriminator enum values: every enum value needs a variant, and extra variant keys are invalid
-- Variant-local field names cannot collide with root/base field names
-- Every section name referenced by a variant must exist in `section_definitions`
-- A variant's `sections` list is the authoritative full section order for records of that variant
-- If the discriminator is missing, non-string, or invalid, the compiler emits `PAL-RV-FM-008`, validates only root/base fields, emits `PAL-RV-BODY-004` for the body, and does not guess variant-specific fields or body sections
+- `discriminator` must point to a root/base field that is `type: enum` and `allow_null: false`.
+- Variant keys form a bijection with the discriminator enum values: every enum value needs a variant, and extra variant keys are invalid.
+- Variant-local field names cannot collide with root/base field names.
+- Every section name referenced by a variant must exist in `section_definitions`.
+- A variant's `sections` list is the authoritative full `h2` section order for records of that variant.
+- Shared `body.title` and shared `body.preamble`, when declared, apply to every variant of the entity.
+- If the discriminator is missing, non-string, or invalid, the compiler emits `PAL-RV-FM-008`, validates only root/base fields, emits `PAL-RV-BODY-004` for the body, and does not guess variant-specific fields or body sections.
 
 ## Naming rules and conventions
 
@@ -325,7 +522,7 @@ Rules:
 
 ## What a record file looks like
 
-A record is a markdown file with YAML frontmatter and headed sections:
+A record is a markdown file with YAML frontmatter, a validated body title when declared, optional declared preamble content, and headed sections:
 
 ```markdown
 ---
@@ -336,7 +533,9 @@ status: active
 owner_ref: "[jane](als://my-system/people/person/PPL-001)"
 ---
 
-# Item 001
+# Example item
+
+Short framing paragraph before the declared sections.
 
 ## DESCRIPTION
 
@@ -347,8 +546,9 @@ This is the description content.
 - 2026-03-17: Created the example record.
 ```
 
-- The `# Title` heading after frontmatter is informal — the compiler does not validate it
+- If `body.title` is declared, the `# Title` heading after frontmatter is validated according to `title.source`
 - Each declared frontmatter field must appear explicitly, using YAML `null` when `allow_null: true` and no value is available
-- Each declared section appears as `## SECTION_NAME`
-- Nullable sections with no content use the literal word `null`
+- If `body.preamble` is declared, authored content before the first declared `##` belongs to that preamble region
+- Each declared section appears as `## SECTION_NAME` in the order declared by the shape
+- Nullable body regions with no content use the literal word `null`
 - Empty string is not a valid value for `type: string` fields

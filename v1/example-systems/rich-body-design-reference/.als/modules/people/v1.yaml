@@ -33,12 +33,15 @@ entities:
 
     body:
       title:
-        source_field: title
+        source:
+          kind: field
+          field: title
 
       sections:
         - name: BIO
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -52,6 +55,7 @@ entities:
         - name: WORKSTYLE
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
@@ -66,6 +70,7 @@ entities:
         - name: ESCALATION_PREFERENCES
           allow_null: false
           content:
+            mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}

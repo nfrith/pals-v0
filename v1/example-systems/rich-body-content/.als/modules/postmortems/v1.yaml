@@ -36,69 +36,84 @@ entities:
         type: date
         allow_null: true
 
-    sections:
-      - name: SUMMARY
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: one-paragraph executive summary of what happened and what was affected
-          exclude: detailed timeline or root cause analysis
+    body:
+      title:
+        source:
+          kind: field
+          field: id
 
-      - name: TIMELINE
-        allow_null: false
-        content:
-          allowed_blocks: [bullet_list, ordered_list]
-          allow_subheadings: true
-          allow_blockquotes: true
-          allow_code_blocks: false
-        guidance:
-          include: chronological events grouped by phase, with quoted log excerpts or alerts where relevant
-          exclude: root cause speculation or remediation steps
+      sections:
+        - name: SUMMARY
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+          guidance:
+            include: one-paragraph executive summary of what happened and what was affected
+            exclude: detailed timeline or root cause analysis
 
-      - name: ROOT_CAUSE
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: true
-        guidance:
-          include: causal chain from trigger to impact, with supporting code or config evidence
-          exclude: timeline details or remediation steps
+        - name: TIMELINE
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              blockquote: {}
+          guidance:
+            include: chronological events grouped by phase, with quoted log excerpts or alerts where relevant
+            exclude: root cause speculation or remediation steps
 
-      - name: IMPACT
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what was affected, duration, user-facing consequences, and metrics
-          exclude: root cause or remediation details
+        - name: ROOT_CAUSE
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              code: {}
+          guidance:
+            include: causal chain from trigger to impact, with supporting code or config evidence
+            exclude: timeline details or remediation steps
 
-      - name: REMEDIATION
-        allow_null: false
-        content:
-          allowed_blocks: [paragraph, bullet_list, ordered_list]
-          allow_subheadings: true
-          allow_blockquotes: false
-          allow_code_blocks: true
-        guidance:
-          include: immediate fixes taken and planned follow-up actions with owners
-          exclude: timeline replay or impact assessment
+        - name: IMPACT
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: what was affected, duration, user-facing consequences, and metrics
+            exclude: root cause or remediation details
 
-      - name: LESSONS
-        allow_null: true
-        content:
-          allowed_blocks: [paragraph, bullet_list]
-          allow_subheadings: false
-          allow_blockquotes: false
-          allow_code_blocks: false
-        guidance:
-          include: what we learned, what we would do differently, and systemic patterns
-          exclude: action items already captured in remediation
+        - name: REMEDIATION
+          allow_null: false
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+              ordered_list: {}
+              heading:
+                min_depth: 3
+                max_depth: 4
+              code: {}
+          guidance:
+            include: immediate fixes taken and planned follow-up actions with owners
+            exclude: timeline replay or impact assessment
+
+        - name: LESSONS
+          allow_null: true
+          content:
+            mode: freeform
+            blocks:
+              paragraph: {}
+              bullet_list: {}
+          guidance:
+            include: what we learned, what we would do differently, and systemic patterns
+            exclude: action items already captured in remediation

@@ -9,19 +9,21 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { CompilerDiagnostic, ModuleValidationReport, SystemValidationOutput } from "../../src/types.ts";
 import { validateSystem } from "../../src/validate.ts";
 
-const fixtureRoot = fileURLToPath(
-  new URL("../../../../example-systems/centralized-metadata-happy-path/", import.meta.url),
+const exampleSystemsRoot = fileURLToPath(
+  new URL("../../../../example-systems/", import.meta.url),
 );
+
+const fixtureRoot = join(exampleSystemsRoot, "centralized-metadata-happy-path");
 
 export interface FixtureSandbox {
   root: string;
 }
 
-async function createFixtureSandbox(label = "fixture"): Promise<FixtureSandbox> {
+async function createFixtureSandbox(label = "fixture", sourceRoot = fixtureRoot): Promise<FixtureSandbox> {
   const safeLabel = label.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
   const root = join(tmpdir(), `als-compiler-${safeLabel}-${randomUUID()}`);
   await mkdir(root, { recursive: false });
-  copyFixtureTree(fixtureRoot, root);
+  copyFixtureTree(sourceRoot, root);
   return { root };
 }
 
@@ -34,6 +36,33 @@ export async function withFixtureSandbox(
   run: (sandbox: FixtureSandbox) => Promise<void> | void,
 ): Promise<void> {
   const sandbox = await createFixtureSandbox(label);
+  let runError: unknown = null;
+
+  try {
+    await run(sandbox);
+  } catch (error) {
+    runError = error;
+  }
+
+  try {
+    await cleanupFixtureSandbox(sandbox);
+  } catch (cleanupError) {
+    if (!runError) {
+      throw cleanupError;
+    }
+  }
+
+  if (runError) {
+    throw runError;
+  }
+}
+
+export async function withExampleSystemSandbox(
+  fixtureName: string,
+  label: string,
+  run: (sandbox: FixtureSandbox) => Promise<void> | void,
+): Promise<void> {
+  const sandbox = await createFixtureSandbox(label, join(exampleSystemsRoot, fixtureName));
   let runError: unknown = null;
 
   try {
@@ -164,6 +193,35 @@ export function expectModuleDiagnostic(
   if (!diagnostic) {
     throw new Error(
       `Expected module diagnostic ${describeSearch(code, fileSuffix)} in module '${moduleId}'. Actual diagnostics: ${describeDiagnostics(moduleReport.diagnostics)}`,
+    );
+  }
+
+  return diagnostic;
+}
+
+export function expectModuleDiagnosticContaining(
+  result: SystemValidationOutput,
+  moduleId: string,
+  code: string,
+  messageFragment: string,
+  fileSuffix?: string,
+): CompilerDiagnostic {
+  const moduleReport = findModuleReport(result, moduleId);
+  if (!moduleReport) {
+    throw new Error(
+      `Expected module report '${moduleId}'. Actual modules: ${result.modules.map((report) => report.module_id).join(", ") || "<none>"}`,
+    );
+  }
+
+  const diagnostic = moduleReport.diagnostics.find(
+    (item) =>
+      item.code === code &&
+      item.message.includes(messageFragment) &&
+      (!fileSuffix || item.file.endsWith(fileSuffix)),
+  );
+  if (!diagnostic) {
+    throw new Error(
+      `Expected module diagnostic ${describeSearch(code, fileSuffix)} containing "${messageFragment}" in module '${moduleId}'. Actual diagnostics: ${describeDiagnostics(moduleReport.diagnostics)}`,
     );
   }
 

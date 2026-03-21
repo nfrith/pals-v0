@@ -87,6 +87,8 @@ entities:
             blocks:
               paragraph: {}
               bullet_list: {}
+              table:
+                syntax: gfm
           guidance:
             include: what was affected, duration, user-facing consequences, and metrics
             exclude: root cause or remediation details

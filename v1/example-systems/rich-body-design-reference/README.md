@@ -14,6 +14,7 @@ It exists alongside `centralized-metadata-happy-path`, not as a replacement for 
   - nested lists
   - blockquotes
   - fenced code blocks
+  - GFM tables declared explicitly in shape YAML
 - The records are meant to look like documents real agent systems would maintain during operations, research, planning, and evaluation.
 
 ## Important Note

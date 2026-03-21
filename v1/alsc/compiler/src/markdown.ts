@@ -1,4 +1,6 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
+import { gfmTable } from "micromark-extension-gfm-table";
 import { codes, diag } from "./diagnostics.ts";
 import type {
   BodyRegionShape,
@@ -194,6 +196,7 @@ function validateFreeformContent(
     paragraph: 0,
     bullet_list: 0,
     ordered_list: 0,
+    table: 0,
     heading: 0,
     blockquote: 0,
     code: 0,
@@ -284,6 +287,14 @@ function validateFreeformContent(
             actual: depth,
           }),
         );
+      }
+      continue;
+    }
+
+    if (child.type === "table") {
+      counts.table += 1;
+      if (!contentShape.blocks.table) {
+        diagnostics.push(blockViolation(label, file, module_id, entity, "table", contentShape.blocks));
       }
       continue;
     }
@@ -511,7 +522,10 @@ class MarkdownProcessingError extends Error {
 
 function parseMarkdownTree(source: string, label: string): MdastNode {
   try {
-    return fromMarkdown(source) as MdastNode;
+    return fromMarkdown(source, {
+      extensions: [gfmTable()],
+      mdastExtensions: [gfmTableFromMarkdown()],
+    }) as MdastNode;
   } catch (error) {
     throw new MarkdownProcessingError(
       `Failed to parse markdown for ${label}: ${error instanceof Error ? error.message : String(error)}`,

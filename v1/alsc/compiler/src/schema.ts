@@ -30,10 +30,15 @@ export interface CodeConstraintShape {
   require_language?: boolean;
 }
 
+export interface TableBlockShape {
+  syntax: "gfm";
+}
+
 export interface FreeformBlocksShape {
   paragraph?: CountConstraintShape;
   bullet_list?: ItemConstraintShape;
   ordered_list?: ItemConstraintShape;
+  table?: TableBlockShape;
   heading?: HeadingConstraintShape;
   blockquote?: CountConstraintShape;
   code?: CodeConstraintShape;
@@ -224,10 +229,15 @@ const codeConstraintSchema: z.ZodType<CodeConstraintShape> = z.object({
   require_language: z.boolean().optional(),
 });
 
+const tableBlockSchema: z.ZodType<TableBlockShape> = z.object({
+  syntax: z.literal("gfm"),
+});
+
 const freeformBlocksSchema: z.ZodType<FreeformBlocksShape> = z.object({
   paragraph: countConstraintSchema.optional(),
   bullet_list: itemConstraintSchema.optional(),
   ordered_list: itemConstraintSchema.optional(),
+  table: tableBlockSchema.optional(),
   heading: headingConstraintSchema.optional(),
   blockquote: countConstraintSchema.optional(),
   code: codeConstraintSchema.optional(),

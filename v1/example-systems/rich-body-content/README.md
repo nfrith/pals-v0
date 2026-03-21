@@ -17,6 +17,7 @@ The shapes in this fixture use:
 - ordered `body.sections`
 - `content.mode: freeform | outline`
 - unified `content.blocks` for `freeform`
+- table blocks declared as `table.syntax: gfm`
 - exact `outline.nodes` with explicit heading text and explicit heading depth
 - optional `outline.preamble` for prose before the first required outlined heading
 

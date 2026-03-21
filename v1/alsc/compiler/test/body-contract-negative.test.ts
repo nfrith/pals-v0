@@ -159,6 +159,48 @@ test.concurrent("field-backed title sources fail closed on non-string frontmatte
   });
 });
 
+test.concurrent("tables are rejected when the region does not declare table support", async () => {
+  await withFixtureSandbox("body-table-forbidden", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "| Region | Effect |\n| --- | --- |\n| backlog | variant-aware item shape |\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "unsupported markdown block 'table'", "ITEM-0001.md");
+  });
+});
+
+test.concurrent("malformed pipe text is not treated as a table", async () => {
+  await withFixtureSandbox("body-table-malformed", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const definitions = entities.item.section_definitions as Record<string, Record<string, unknown>>;
+      const description = definitions.DESCRIPTION;
+      const content = description.content as Record<string, unknown>;
+      content.blocks = {
+        table: {
+          syntax: "gfm",
+        },
+      };
+    });
+
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "| Region | Effect |\n| backlog | variant-aware item shape |\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "unsupported markdown block 'paragraph'", "ITEM-0001.md");
+  });
+});
+
 test.concurrent("template title mismatches are rejected", async () => {
   await withFixtureSandbox("body-template-title-fail", async ({ root }) => {
     await updateShapeYaml(root, "backlog", 1, (shape) => {

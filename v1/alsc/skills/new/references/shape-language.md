@@ -402,6 +402,8 @@ content:
       min_count: 1
     bullet_list:
       max_items: 8
+    table:
+      syntax: gfm
     heading:
       min_depth: 3
       max_depth: 4
@@ -416,18 +418,30 @@ Rules:
   - `paragraph`
   - `bullet_list`
   - `ordered_list`
+  - `table`
   - `heading`
   - `blockquote`
   - `code`
-- Tables are not part of the current v1 body contract. They are deferred to a later pass.
 - `{}` means the block type is allowed with no extra constraints.
 - Supported block options in the current v1 body contract are:
   - `paragraph.min_count` / `paragraph.max_count`
   - `blockquote.min_count` / `blockquote.max_count`
   - `bullet_list.min_items` / `bullet_list.max_items`
   - `ordered_list.min_items` / `ordered_list.max_items`
+  - `table.syntax`
   - `heading.min_depth` / `heading.max_depth`
   - `code.require_language`
+- `table.syntax` is required and must currently be `gfm`.
+- ALS v1 table support currently means GitHub Flavored Markdown pipe tables.
+- Current GFM table limits are part of the ALS v1 contract:
+  - one header row
+  - one delimiter row
+  - zero or more body rows
+  - inline markdown only inside cells
+  - no multiline cell blocks
+  - no headerless tables
+  - no row spans or column spans
+- HTML tables and other markdown table dialects are not part of the current v1 body contract.
 - In top-level `body.preamble` and top-level `body.sections[*]` regions, structural heading depth is `2`: `h1` is reserved for the declared title and `h2` is reserved for declared sections.
 - Because of that structural depth, freeform `heading` content in those top-level regions can only match `h3` or deeper.
 

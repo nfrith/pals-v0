@@ -109,6 +109,8 @@ entities:
               paragraph: {}
               bullet_list: {}
               ordered_list: {}
+              table:
+                syntax: gfm
               heading:
                 min_depth: 3
                 max_depth: 4

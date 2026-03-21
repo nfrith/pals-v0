@@ -52,6 +52,8 @@ entities:
             blocks:
               paragraph: {}
               bullet_list: {}
+              table:
+                syntax: gfm
               heading:
                 min_depth: 3
                 max_depth: 4

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { codes } from "../src/diagnostics.ts";
-import { expectModuleDiagnostic, updateShapeYaml, validateFixture, withFixtureSandbox } from "./helpers/fixture.ts";
+import { expectModuleDiagnostic, updateShapeYaml, validateFixture, withExampleSystemSandbox, withFixtureSandbox } from "./helpers/fixture.ts";
 
 test.concurrent("shape files must declare the expected schema literal", async () => {
   await withFixtureSandbox("shape-schema-literal", async ({ root }) => {
@@ -337,5 +337,43 @@ test.concurrent("variant-local ref fields must also have declared dependencies",
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
     expectModuleDiagnostic(result, "backlog", codes.SHAPE_CONTRACT_INVALID, ".als/modules/backlog/v1.yaml");
+  });
+});
+
+test.concurrent("table blocks must use a supported syntax", async () => {
+  await withExampleSystemSandbox("rich-body-design-reference", "shape-table-syntax", async ({ root }) => {
+    await updateShapeYaml(root, "research", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const synthesis = entities.synthesis;
+      const body = synthesis.body as Record<string, unknown>;
+      const sections = body.sections as Array<Record<string, unknown>>;
+      const targetSection = sections.find((section) => section.name === "SYNTHESIS");
+      const content = targetSection?.content as Record<string, unknown>;
+      const blocks = content.blocks as Record<string, Record<string, unknown>>;
+      blocks.table.syntax = "grid";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "research", codes.SHAPE_INVALID, ".als/modules/research/v1.yaml");
+  });
+});
+
+test.concurrent("table blocks must declare syntax explicitly", async () => {
+  await withExampleSystemSandbox("rich-body-design-reference", "shape-table-missing-syntax", async ({ root }) => {
+    await updateShapeYaml(root, "planning", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const dossier = entities.dossier;
+      const body = dossier.body as Record<string, unknown>;
+      const sections = body.sections as Array<Record<string, unknown>>;
+      const targetSection = sections.find((section) => section.name === "OPTIONS");
+      const content = targetSection?.content as Record<string, unknown>;
+      const blocks = content.blocks as Record<string, Record<string, unknown>>;
+      delete blocks.table.syntax;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "planning", codes.SHAPE_INVALID, ".als/modules/planning/v1.yaml");
   });
 });

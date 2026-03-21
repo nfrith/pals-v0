@@ -92,6 +92,8 @@ entities:
               paragraph:
                 min_count: 1
               bullet_list: {}
+              table:
+                syntax: gfm
               heading:
                 min_depth: 3
                 max_depth: 3

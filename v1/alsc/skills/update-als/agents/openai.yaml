@@ -1,4 +1,0 @@
-interface:
-  display_name: "Update ALS"
-  short_description: "Update ALS compiler, docs, and fixtures"
-  default_prompt: "Use $update-als to plan and implement an ALS compiler or semantics update."

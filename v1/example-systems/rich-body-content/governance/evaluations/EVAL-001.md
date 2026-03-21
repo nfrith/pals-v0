@@ -97,6 +97,14 @@ Weaknesses:
 
 ## ANALYSIS
 
+The comparison collapses quickly once cost, migration effort, and durability posture are placed side by side.
+
+| Candidate | Estimated monthly cost | APAC latency outlook | Migration effort | Primary concern |
+| --- | --- | --- | --- | --- |
+| AWS S3 | ~$282 | Medium | Low | Egress remains the dominant cost line item. |
+| Cloudflare R2 | ~$30 | High | Low | Multi-region durability and operational maturity are still weaker than S3. |
+| Google Cloud Storage | ~$304 | Medium | High | It requires new IAM and deployment integration with no cost upside. |
+
 ### AWS S3 Cost Model
 
 At current usage: $46 storage + $0.32 read ops + $145 APAC egress + $54 NA egress + $18 EU egress = approximately $263/month in a dual-region setup with replication.

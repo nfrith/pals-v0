@@ -1,10 +1,17 @@
 import { basename, join, relative, resolve } from "node:path";
 import { readFileSync, readdirSync, statSync, type Dirent } from "node:fs";
 import matter from "gray-matter";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, YAMLParseError } from "yaml";
 import { ZodError } from "zod";
 import { codes, computeStatus, diag } from "./diagnostics.ts";
-import { MarkdownProcessingError, parseBody, validateRegionMarkdown, validateSectionMarkdown, type ParsedBody } from "./markdown.ts";
+import {
+  MarkdownProcessingError,
+  parseBody,
+  validateBodyMarkdownSurface,
+  validateRegionMarkdown,
+  validateSectionMarkdown,
+  type ParsedBody,
+} from "./markdown.ts";
 import { parsePathTemplate, matchPath, type ParsedPathTemplate } from "./parser/path-template.ts";
 import { parseRefUri, refTargetEntity } from "./refs.ts";
 import {
@@ -495,6 +502,10 @@ function validateBody(
 
   const diagnostics: CompilerDiagnostic[] = [];
   if (!declaredBody) return diagnostics;
+
+  diagnostics.push(
+    ...validateBodyMarkdownSurface(record.body.markdown_surface, record.file_rel, record.module_id, record.entity_name),
+  );
 
   if (record.body.titles.length > 1) {
     diagnostics.push(
@@ -1092,7 +1103,23 @@ function parseRecord(
   const diagnostics: CompilerDiagnostic[] = [];
   const fileRel = toRepoRelative(fileAbs);
   const fileRelWithinModule = relative(context.module_path_abs, fileAbs).replace(/\\/g, "/");
-  const fileContents = readFileSync(fileAbs, "utf-8");
+  const fileRead = safeReadTextFile(fileAbs);
+  if (fileRead.error) {
+    diagnostics.push(
+      diag(codes.PARSE_FRONTMATTER, "error", "parse", fileRel, "Could not read record file", {
+        module_id: context.module_id,
+        expected: "readable markdown file",
+        actual: {
+          code: fileRead.error.code ?? null,
+          message: fileRead.error.message,
+        },
+        hint: "Check file permissions and rerun validation.",
+      }),
+    );
+    return { record: null, diagnostics };
+  }
+
+  const fileContents = fileRead.contents;
 
   let parsedMatter;
   try {
@@ -1431,6 +1458,27 @@ function safeReadDir(pathAbs: string): { entries: Dirent[]; error: null } | { en
   }
 }
 
+function safeReadTextFile(pathAbs: string): { contents: string; error: null } | { contents: null; error: NodeJS.ErrnoException } {
+  try {
+    return {
+      contents: readFileSync(pathAbs, "utf-8"),
+      error: null,
+    };
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      if (errorCode === "EACCES" || errorCode === "EPERM" || errorCode === "ENOENT" || errorCode === "ENOTDIR" || errorCode === "EISDIR") {
+        return {
+          contents: null,
+          error: error as NodeJS.ErrnoException,
+        };
+      }
+    }
+
+    throw error;
+  }
+}
+
 function discoverMarkdownFiles(rootAbs: string, moduleId: string): MarkdownDiscoveryResult {
   const result: MarkdownDiscoveryResult = {
     record_file_paths: [],
@@ -1534,11 +1582,33 @@ function parseYamlFile<T>(
 ): { success: true; data: T; diagnostics: CompilerDiagnostic[] } | { success: false; diagnostics: CompilerDiagnostic[] } {
   let raw: unknown;
   const fileRel = toRepoRelative(fileAbs);
-  const fileContents = readFileSync(fileAbs, "utf-8");
+  const fileRead = safeReadTextFile(fileAbs);
+  if (fileRead.error) {
+    return {
+      success: false,
+      diagnostics: [
+        diag(code, "error", phase, fileRel, "Could not read YAML file", {
+          module_id: module_id ?? undefined,
+          expected: "readable YAML file",
+          actual: {
+            code: fileRead.error.code ?? null,
+            message: fileRead.error.message,
+          },
+          hint: "Check file permissions and rerun validation.",
+        }),
+      ],
+    };
+  }
+
+  const fileContents = fileRead.contents;
 
   try {
     raw = parseYaml(fileContents);
   } catch (error) {
+    if (!(error instanceof YAMLParseError)) {
+      throw error;
+    }
+
     return {
       success: false,
       diagnostics: [

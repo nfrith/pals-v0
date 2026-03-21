@@ -431,6 +431,20 @@ Rules:
   - `table.syntax`
   - `heading.min_depth` / `heading.max_depth`
   - `code.require_language`
+- Phrasing-level validation is only partially enforced by the compiler in current v1.
+- The compiler intentionally rejects raw HTML and reference-style syntax, but it does not exhaustively validate every other inline node.
+- Authored records in current v1 currently use this inline markdown subset:
+  - plain text
+  - `strong`
+  - `emphasis`
+  - `inlineCode`
+  - inline links
+  - inline images
+  - hard line breaks
+- Reference-style links and reference-style images are not supported in current v1.
+- Markdown `definition` nodes are not supported in current v1.
+- Raw HTML is not allowed anywhere in ALS v1 record bodies, including inside paragraphs, headings, and other phrasing content.
+- Thematic breaks such as `---`, `***`, and `___` are not supported in current v1.
 - `table.syntax` is required and must currently be `gfm`.
 - ALS v1 table support currently means GitHub Flavored Markdown pipe tables.
 - Current GFM table limits are part of the ALS v1 contract:

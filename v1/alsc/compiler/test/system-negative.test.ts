@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { chmod } from "node:fs/promises";
+import { join } from "node:path";
 import { codes } from "../src/diagnostics.ts";
 import {
   expectSystemDiagnostic,
@@ -8,6 +10,10 @@ import {
   withFixtureSandbox,
   writePath,
 } from "./helpers/fixture.ts";
+
+function isRootUser(): boolean {
+  return typeof process.getuid === "function" && process.getuid() === 0;
+}
 
 for (const invalidPath of [
   "./clients/registry",
@@ -133,5 +139,24 @@ test.concurrent("unknown module filters fail cleanly", async () => {
     const result = validateFixture(root, "ghost-module");
     expect(result.status).toBe("fail");
     expectSystemDiagnostic(result, codes.SYSTEM_FILTER_UNKNOWN, ".als/system.yaml");
+  });
+});
+
+test.concurrent("unreadable system config files fail cleanly", async () => {
+  await withFixtureSandbox("system-unreadable-config", async ({ root }) => {
+    if (isRootUser()) return;
+
+    const systemConfigPath = join(root, ".als/system.yaml");
+    await chmod(systemConfigPath, 0o000);
+
+    try {
+      const result = validateFixture(root);
+      expect(result.status).toBe("fail");
+      const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_INVALID, ".als/system.yaml");
+      expect(diagnostic.message).toContain("Could not read YAML file");
+      expect(diagnostic.hint).toContain("Check file permissions");
+    } finally {
+      await chmod(systemConfigPath, 0o600);
+    }
   });
 });

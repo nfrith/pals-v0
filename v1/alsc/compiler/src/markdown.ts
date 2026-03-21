@@ -12,8 +12,8 @@ import type {
 import type { CompilerDiagnostic } from "./types.ts";
 
 interface MdastPosition {
-  start?: { offset?: number };
-  end?: { offset?: number };
+  start?: { line?: number; column?: number; offset?: number };
+  end?: { line?: number; column?: number; offset?: number };
 }
 
 interface MdastNode {
@@ -26,9 +26,38 @@ interface MdastNode {
   position?: MdastPosition;
 }
 
+const REFERENCE_STYLE_MARKDOWN_NODE_TYPES = ["definition", "linkReference", "imageReference"] as const;
+const INTENTIONALLY_REJECTED_MARKDOWN_NODE_TYPES = [
+  ...REFERENCE_STYLE_MARKDOWN_NODE_TYPES,
+  "html",
+  "thematicBreak",
+] as const;
+
+type ReferenceStyleMarkdownNodeType = (typeof REFERENCE_STYLE_MARKDOWN_NODE_TYPES)[number];
+
 export interface ParsedBodySection {
   name: string;
   content: string;
+}
+
+export interface ParsedBodyMarkdownSurface {
+  reference_style: {
+    node_types: ReferenceStyleMarkdownNodeType[];
+    line?: number;
+    column?: number;
+  } | null;
+  flow_html: {
+    line?: number;
+    column?: number;
+  } | null;
+  inline_html: {
+    line?: number;
+    column?: number;
+  } | null;
+  thematic_break: {
+    line?: number;
+    column?: number;
+  } | null;
 }
 
 export interface ParsedBody {
@@ -39,11 +68,13 @@ export interface ParsedBody {
   ordered: ParsedBodySection[];
   by_name: Map<string, string>;
   duplicate_section_names: string[];
+  markdown_surface: ParsedBodyMarkdownSurface;
 }
 
 export function parseBody(body: string): ParsedBody {
   const tree = parseMarkdownTree(body, "record body");
   const children = rootChildren(tree, "record body");
+  const markdown_surface = summarizeUnsupportedMarkdown(tree);
   const h1s = children.filter((child) => child.type === "heading" && child.depth === 1);
   const title = h1s.length > 0 ? headingText(h1s[0]) : null;
   const content_before_title = h1s.length > 0
@@ -84,6 +115,7 @@ export function parseBody(body: string): ParsedBody {
     ordered,
     by_name,
     duplicate_section_names,
+    markdown_surface,
   };
 }
 
@@ -145,6 +177,107 @@ export function validateRegionMarkdown(
     }
 
     throw error;
+  }
+
+  return dedupeDiagnostics(diagnostics);
+}
+
+export function validateBodyMarkdownSurface(
+  surface: ParsedBodyMarkdownSurface,
+  file: string,
+  module_id: string,
+  entity: string,
+): CompilerDiagnostic[] {
+  const diagnostics: CompilerDiagnostic[] = [];
+
+  // `parseBody()` already walked the full AST; this helper only translates that
+  // stable summary into author-facing diagnostics.
+  if (surface.reference_style) {
+    diagnostics.push(
+      diag(
+        codes.BODY_UNSUPPORTED_MARKDOWN,
+        "error",
+        "record_body",
+        file,
+        "Reference-style links and images are not supported in ALS v1 record bodies",
+        {
+          module_id,
+          entity,
+          field: "body",
+          expected: "inline [text](url) or ![alt](url) syntax",
+          actual: surface.reference_style.node_types,
+          hint: "Rewrite reference-style links, images, and definitions using inline markdown syntax.",
+          line: surface.reference_style.line,
+          column: surface.reference_style.column,
+        },
+      ),
+    );
+  }
+
+  if (surface.flow_html) {
+    diagnostics.push(
+      diag(
+        codes.BODY_UNSUPPORTED_MARKDOWN,
+        "error",
+        "record_body",
+        file,
+        "HTML blocks are not allowed in ALS v1 record bodies",
+        {
+          module_id,
+          entity,
+          field: "body",
+          expected: "supported ALS v1 markdown blocks",
+          actual: "html",
+          hint: "Rewrite the block using supported markdown instead of raw HTML.",
+          line: surface.flow_html.line,
+          column: surface.flow_html.column,
+        },
+      ),
+    );
+  }
+
+  if (surface.inline_html) {
+    diagnostics.push(
+      diag(
+        codes.BODY_UNSUPPORTED_MARKDOWN,
+        "error",
+        "record_body",
+        file,
+        "Inline HTML is not allowed in ALS v1 record bodies",
+        {
+          module_id,
+          entity,
+          field: "body",
+          expected: "plain markdown phrasing content without raw HTML",
+          actual: "html",
+          hint: "Rewrite the phrasing content with plain text, emphasis, links, images, or inline code.",
+          line: surface.inline_html.line,
+          column: surface.inline_html.column,
+        },
+      ),
+    );
+  }
+
+  if (surface.thematic_break) {
+    diagnostics.push(
+      diag(
+        codes.BODY_UNSUPPORTED_MARKDOWN,
+        "error",
+        "record_body",
+        file,
+        "Thematic breaks are not supported in ALS v1 record bodies",
+        {
+          module_id,
+          entity,
+          field: "body",
+          expected: "supported ALS v1 body blocks",
+          actual: "thematicBreak",
+          hint: "Use headings or other supported body blocks instead of '---', '***', or '___'.",
+          line: surface.thematic_break.line,
+          column: surface.thematic_break.column,
+        },
+      ),
+    );
   }
 
   return dedupeDiagnostics(diagnostics);
@@ -320,6 +453,13 @@ function validateFreeformContent(
       continue;
     }
 
+    // The whole-body markdown-surface scan owns diagnostics for intentionally
+    // rejected syntax, so region-level block validation must not also emit a
+    // generic unsupported-block error for the same node.
+    if (isIntentionallyRejectedTopLevelMarkdown(child)) {
+      continue;
+    }
+
     diagnostics.push(blockViolation(label, file, module_id, entity, String(child.type), contentShape.blocks));
   }
 
@@ -476,6 +616,83 @@ function blockViolation(
   });
 }
 
+function summarizeUnsupportedMarkdown(root: MdastNode): ParsedBodyMarkdownSurface {
+  const referenceStyleNodeTypes = new Set<ReferenceStyleMarkdownNodeType>();
+  let referenceStyleNode: MdastNode | null = null;
+  let flowHtmlNode: MdastNode | null = null;
+  let inlineHtmlNode: MdastNode | null = null;
+  let thematicBreakNode: MdastNode | null = null;
+
+  visitMarkdownTree(root, undefined, (node, parent) => {
+    if (isReferenceStyleMarkdownNode(node)) {
+      referenceStyleNode ??= node;
+      referenceStyleNodeTypes.add(node.type);
+      return;
+    }
+
+    if (node.type === "html") {
+      if (parent?.type === "root") {
+        flowHtmlNode ??= node;
+      } else {
+        inlineHtmlNode ??= node;
+      }
+      return;
+    }
+
+    if (node.type === "thematicBreak") {
+      thematicBreakNode ??= node;
+    }
+  });
+
+  return {
+    reference_style: referenceStyleNode
+      ? {
+        node_types: Array.from(referenceStyleNodeTypes).sort(),
+        line: nodeLine(referenceStyleNode),
+        column: nodeColumn(referenceStyleNode),
+      }
+      : null,
+    flow_html: flowHtmlNode
+      ? {
+        line: nodeLine(flowHtmlNode),
+        column: nodeColumn(flowHtmlNode),
+      }
+      : null,
+    inline_html: inlineHtmlNode
+      ? {
+        line: nodeLine(inlineHtmlNode),
+        column: nodeColumn(inlineHtmlNode),
+      }
+      : null,
+    thematic_break: thematicBreakNode
+      ? {
+        line: nodeLine(thematicBreakNode),
+        column: nodeColumn(thematicBreakNode),
+      }
+      : null,
+  };
+}
+
+function visitMarkdownTree(
+  node: MdastNode,
+  parent: MdastNode | undefined,
+  visit: (node: MdastNode, parent: MdastNode | undefined) => void,
+): void {
+  visit(node, parent);
+
+  for (const child of node.children ?? []) {
+    visitMarkdownTree(child, node, visit);
+  }
+}
+
+function isIntentionallyRejectedTopLevelMarkdown(node: MdastNode): boolean {
+  return node.type !== undefined && INTENTIONALLY_REJECTED_MARKDOWN_NODE_TYPES.includes(node.type as typeof INTENTIONALLY_REJECTED_MARKDOWN_NODE_TYPES[number]);
+}
+
+function isReferenceStyleMarkdownNode(node: MdastNode): node is MdastNode & { type: ReferenceStyleMarkdownNodeType } {
+  return node.type !== undefined && REFERENCE_STYLE_MARKDOWN_NODE_TYPES.includes(node.type as ReferenceStyleMarkdownNodeType);
+}
+
 function findOutlineNodeIndex(children: MdastNode[], startIndex: number, expectedNode: OutlineNodeShape): number {
   for (let index = startIndex; index < children.length; index += 1) {
     const child = children[index];
@@ -549,6 +766,14 @@ function nodeEndOffset(node: MdastNode, label: string): number {
   }
 
   return offset;
+}
+
+function nodeLine(node: MdastNode): number | undefined {
+  return node.position?.start?.line;
+}
+
+function nodeColumn(node: MdastNode): number | undefined {
+  return node.position?.start?.column;
 }
 
 function sliceRange(source: string, startOffset: number, endOffset: number, label: string): string {

@@ -14,6 +14,15 @@ import {
 const itemPath = "workspace/backlog/items/ITEM-0001.md";
 const incidentPath = "workspace/incident-response/reports/INC-0001.md";
 
+function moduleDiagnostics(
+  result: ReturnType<typeof validateFixture>,
+  moduleId: string,
+) {
+  const moduleReport = result.modules.find((report) => report.module_id === moduleId);
+  expect(moduleReport).toBeDefined();
+  return moduleReport!.diagnostics;
+}
+
 test.concurrent("missing declared h1 titles are rejected", async () => {
   await withFixtureSandbox("body-missing-title", async ({ root }) => {
     await updateRecord(root, itemPath, (record) => {
@@ -156,6 +165,223 @@ test.concurrent("field-backed title sources fail closed on non-string frontmatte
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
     expectModuleDiagnosticContaining(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "Cannot validate the declared h1 title", "ITEM-0001.md");
+  });
+});
+
+test.concurrent("top-level definitions are rejected with a dedicated markdown diagnostic", async () => {
+  await withFixtureSandbox("body-definition-unsupported", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "[backlog-link]: https://example.com/backlog\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Reference-style links and images are not supported",
+      "ITEM-0001.md",
+    );
+    expect(moduleDiagnostics(result, "backlog").filter((diagnostic) => diagnostic.code === codes.BODY_UNSUPPORTED_MARKDOWN)).toHaveLength(1);
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("reference-style links are rejected with a dedicated markdown diagnostic", async () => {
+  await withFixtureSandbox("body-reference-link-unsupported", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "A [reference-style link][backlog-link].\n\n[backlog-link]: https://example.com/backlog\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Reference-style links and images are not supported",
+      "ITEM-0001.md",
+    );
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("reference-style links are rejected when nested inside allowed list content", async () => {
+  await withFixtureSandbox("body-reference-link-list-nested", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "- Preserve a single backlog item identity shape for refs and search.\n",
+        "- Preserve a [reference-style link][backlog-doc] for refs and search.\n\n  [backlog-doc]: https://example.com/backlog-doc\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Reference-style links and images are not supported",
+      "ITEM-0001.md",
+    );
+    expect(moduleDiagnostics(result, "backlog").filter((diagnostic) => diagnostic.code === codes.BODY_UNSUPPORTED_MARKDOWN)).toHaveLength(1);
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("reference-style images are rejected with a dedicated markdown diagnostic", async () => {
+  await withFixtureSandbox("body-reference-image-unsupported", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "![Backlog diagram][backlog-image]\n\n[backlog-image]: https://example.com/backlog.png\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Reference-style links and images are not supported",
+      "ITEM-0001.md",
+    );
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("html blocks are rejected with a dedicated markdown diagnostic", async () => {
+  await withFixtureSandbox("body-flow-html-unsupported", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "<div>Backlog HTML block</div>\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "HTML blocks are not allowed",
+      "ITEM-0001.md",
+    );
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("inline html is rejected with a dedicated markdown diagnostic", async () => {
+  await withFixtureSandbox("body-inline-html-unsupported", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "Refactor the <span>backlog</span> module without raw HTML.\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Inline HTML is not allowed",
+      "ITEM-0001.md",
+    );
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("inline html is rejected when nested inside allowed list content", async () => {
+  await withFixtureSandbox("body-inline-html-list-nested", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "- Preserve a single backlog item identity shape for refs and search.\n",
+        "- Preserve a <span>single</span> backlog item identity shape for refs and search.\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Inline HTML is not allowed",
+      "ITEM-0001.md",
+    );
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("thematic breaks are rejected with a dedicated markdown diagnostic", async () => {
+  await withFixtureSandbox("body-thematic-break-unsupported", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "***\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_UNSUPPORTED_MARKDOWN,
+      "Thematic breaks are not supported",
+      "ITEM-0001.md",
+    );
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("flow and inline html produce distinct markdown diagnostics", async () => {
+  await withFixtureSandbox("body-html-flow-inline-combined", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "<div>Backlog HTML block</div>\n",
+      ).replace(
+        "Represent type as a discriminator and treat app-specific structure as a variant layered on top of shared item identity and shared base sections.\n",
+        "Represent the <span>type</span> as a discriminator and treat app-specific structure as a variant layered on top of shared item identity and shared base sections.\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const markdownDiagnostics = moduleDiagnostics(result, "backlog").filter((diagnostic) =>
+      diagnostic.code === codes.BODY_UNSUPPORTED_MARKDOWN
+    );
+    expect(markdownDiagnostics).toHaveLength(2);
+    expect(markdownDiagnostics.some((diagnostic) => diagnostic.message.includes("HTML blocks are not allowed"))).toBe(true);
+    expect(markdownDiagnostics.some((diagnostic) => diagnostic.message.includes("Inline HTML is not allowed"))).toBe(true);
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
+  });
+});
+
+test.concurrent("inline links remain allowed in body content", async () => {
+  await withFixtureSandbox("body-inline-link-allowed", async ({ root }) => {
+    await updateRecord(root, itemPath, (record) => {
+      record.content = record.content.replace(
+        "Refactor the backlog module so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+        "Refactor the [backlog contract](https://example.com/backlog-contract) so one item entity can represent different work types without forcing every type into one shared workflow.\n",
+      );
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("pass");
+    expectNoModuleDiagnostic(result, "backlog", codes.BODY_UNSUPPORTED_MARKDOWN, "ITEM-0001.md");
   });
 });
 

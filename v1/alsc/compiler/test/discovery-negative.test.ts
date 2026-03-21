@@ -165,6 +165,25 @@ test.concurrent("unreadable directories fail cleanly and discovery continues", a
   });
 });
 
+test.concurrent("unreadable record files fail cleanly and validation continues", async () => {
+  await withFixtureSandbox("discovery-unreadable-record", async ({ root }) => {
+    if (isRootUser()) return;
+
+    const lockedFile = join(root, "workspace/backlog/items/ITEM-0001.md");
+    await chmod(lockedFile, 0o000);
+
+    try {
+      const result = validateFixture(root);
+      expect(result.status).toBe("fail");
+      const diagnostic = expectModuleDiagnostic(result, "backlog", codes.PARSE_FRONTMATTER, "ITEM-0001.md");
+      expect(diagnostic.message).toContain("Could not read record file");
+      expect(diagnostic.hint).toContain("Check file permissions");
+    } finally {
+      await chmod(lockedFile, 0o600);
+    }
+  });
+});
+
 test.concurrent("record ids must match filename stems", async () => {
   await withFixtureSandbox("discovery-filename-id", async ({ root }) => {
     await renamePath(

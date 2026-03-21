@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { codes } from "../src/diagnostics.ts";
-import { expectModuleDiagnostic, updateShapeYaml, validateFixture, withExampleSystemSandbox, withFixtureSandbox } from "./helpers/fixture.ts";
+import {
+  expectModuleDiagnostic,
+  updateShapeYaml,
+  updateTextFile,
+  validateFixture,
+  withExampleSystemSandbox,
+  withFixtureSandbox,
+} from "./helpers/fixture.ts";
 
 test.concurrent("shape files must declare the expected schema literal", async () => {
   await withFixtureSandbox("shape-schema-literal", async ({ root }) => {
@@ -11,6 +18,17 @@ test.concurrent("shape files must declare the expected schema literal", async ()
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
     expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1.yaml");
+  });
+});
+
+test.concurrent("malformed shape yaml fails parsing cleanly", async () => {
+  await withFixtureSandbox("shape-yaml-parse-error", async ({ root }) => {
+    await updateTextFile(root, ".als/modules/backlog/v1.yaml", () => "schema: [broken\n");
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1.yaml");
+    expect(diagnostic.message).toContain("Failed to parse YAML");
   });
 });
 

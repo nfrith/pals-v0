@@ -4,17 +4,17 @@ Assessment of what breaks when ALS v1 is deployed to a production system and the
 
 ---
 
-## 1. `als-module@1` is a promise with no redemption plan
+## 1. Shape-file format changes ride on ALS-version cutovers
 
-The `@1` suffix implies a version contract, but there's no design for what `@2` means. When you add a new field type (say `type: url`), a new block type, or change how variants work, you need to answer:
+ALS v1 no longer uses a separate top-level shape-file `schema` header. That avoids a permanent second version knob in authored source, but it means future shape-file format changes have to be handled as part of whole-system ALS upgrade tooling.
 
-- Does the compiler handle `@1` and `@2` shapes simultaneously?
-- Do existing `@1` shapes need rewriting?
-- Can a single system mix `@1` and `@2` modules?
+When you add a new field type (say `type: url`), a new block type, or change how variants work, you still need to answer:
 
-Right now the Zod schema in `schema.ts` is hardcoded to one version. The `@1` header is cosmetic -- the compiler ignores it semantically. The moment you need `@2`, you're doing surgery on the compiler with no compatibility contract to guide you.
+- Does the new compiler rewrite existing shape files mechanically?
+- Do old shape files need supervised review during upgrade?
+- Is the change safe as a deterministic cutover, or does it require semantic assistance?
 
-**What hits you in prod:** You update the compiler binary. Your existing shapes still say `als-module@1`. The new compiler's Zod schema either accepts them (lucky, additive change) or rejects them (you now need to rewrite every shape file in every production system before validation passes again).
+**What hits you in prod:** You update the compiler and raise `als_version`. Existing shape files may now need an upgrade rewrite even though they no longer carry their own format header. That is viable, but only if ALS upgrade tooling owns the rewrite explicitly instead of pretending the compiler can infer it for free.
 
 ## 2. `declaration = presence` makes every field addition a breaking change
 
@@ -71,11 +71,11 @@ Sections are identified by string names in both the shape (`ACTIVITY_LOG`) and t
 
 **What hits you in prod:** You realize three levels of nesting (`program/experiment/run`) is too deep and want to flatten. That's a shape change PLUS a mass file reorganization PLUS potential ref updates. The spec change is the easy part.
 
-## 7. The compiler output format has no version contract
+## 7. The compiler output contract still needs compatibility discipline
 
-`SystemValidationOutput` is a TypeScript interface. If you've built CI checks, dashboards, or any tooling that parses compiler output, changing the output structure breaks those consumers silently. There's no output schema version to negotiate.
+The validator now emits a versioned output contract, which is the right direction. But versioning the output does not remove the need to manage compatibility intentionally.
 
-**What hits you in prod:** You add a new diagnostic phase. The output JSON gains a new field. Your CI script that counts `error_count` works fine. Your dashboard that renders diagnostics by phase gets an unrecognized phase and either crashes or silently drops data.
+**What hits you in prod:** You add a new diagnostic phase or reshape one part of the output. Consumers that key only on the declared output schema can adapt cleanly if you honor that contract. Consumers that still assume a looser or undocumented structure can still break.
 
 ## 8. No "what would break" introspection
 
@@ -101,6 +101,6 @@ This is a common and reasonable choice for a v1. But it means that the first tim
 
 The irony is that you already identified this in v0 (the `als-mutate`/`als-migrate` skills existed for a reason) and consciously deferred it. The question isn't whether you'll need it -- you already know you will. The question is whether the current design makes it harder to add later than it needs to be.
 
-My honest assessment: **it does**, primarily because of the `declaration = presence` rule (SDR 001) and the lack of a spec-version header that the compiler actually interprets. Those two decisions, both reasonable in isolation, combine to make every evolution a cliff rather than a slope. You can't add a field without touching every record, and you can't update the compiler without implicitly updating the spec for every system it touches.
+My honest assessment: **it does**, primarily because of the `declaration = presence` rule (SDR 001) and the fact that ALS upgrades still need explicit cutover tooling rather than a first-class migration lifecycle in the language. Those two decisions combine to make every evolution a cliff rather than a slope. You can't add a field without touching every record, and you can't update ALS semantics safely in production without owning the rewrite path.
 
 If I were you, before shipping to prod, I'd think hard about whether SDR 001 needs a companion SDR that defines a `default` or `added_in_version` mechanism -- not to make fields optional (that dilutes the strictness you want), but to give the migration window a spec-governed shape instead of leaving it to ad-hoc scripts.

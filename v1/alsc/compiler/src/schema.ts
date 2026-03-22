@@ -494,7 +494,6 @@ const entitySchema = z.union([plainEntitySchema, variantEntitySchema]).superRefi
 });
 
 export const moduleShapeSchema = z.object({
-  schema: z.literal("als-module@1"),
   dependencies: z.array(z.object({
     module: entityName,
   })),
@@ -525,7 +524,7 @@ export const moduleShapeSchema = z.object({
 });
 
 export const systemConfigSchema = z.object({
-  schema: z.literal("als-system@1"),
+  als_version: positiveInt,
   system_id: nonEmptyString,
   modules: z.record(entityName, z.object({
     path: moduleMountPath,
@@ -646,7 +645,7 @@ function walkShapeValue(
   if ("required" in value) {
     issues.push({
       path: path.concat("required"),
-      message: "legacy key 'required' is not allowed in als-module@1",
+      message: "legacy key 'required' is not allowed in ALS v1 shape files",
     });
   }
 

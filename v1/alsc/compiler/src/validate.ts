@@ -3,7 +3,14 @@ import { readFileSync, readdirSync, statSync, type Dirent } from "node:fs";
 import matter from "gray-matter";
 import { parse as parseYaml, YAMLParseError } from "yaml";
 import { ZodError } from "zod";
-import { codes, computeStatus, diag } from "./diagnostics.ts";
+import {
+  ALS_UPGRADE_ASSISTANCE,
+  ALS_UPGRADE_MODE,
+  SUPPORTED_ALS_VERSIONS,
+  VALIDATION_OUTPUT_SCHEMA_LITERAL,
+  isSupportedAlsVersion,
+} from "./contracts.ts";
+import { codes, computeStatus, diag, reasons } from "./diagnostics.ts";
 import {
   MarkdownProcessingError,
   parseBody,
@@ -62,7 +69,6 @@ interface ModuleWorkState {
   module_id: string;
   module_path_rel: string;
   module_version: number;
-  shape_schema: string | null;
   diagnostics: CompilerDiagnostic[];
   files_checked: number;
   files_ignored: number;
@@ -121,18 +127,23 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
   const parsedSystem = parseYamlFile<SystemConfig>(systemConfigPathAbs, systemConfigSchema, "system_config", codes.SYSTEM_INVALID, null);
 
   if (!parsedSystem.success) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(parsedSystem.diagnostics), moduleReports);
+    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(parsedSystem.diagnostics), moduleReports, null);
   }
 
   const systemConfig = parsedSystem.data;
+  const alsVersionDiagnostics = validateAlsVersionSupport(systemConfig, systemConfigPathAbs);
+  if (alsVersionDiagnostics.length > 0) {
+    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(alsVersionDiagnostics), moduleReports, systemConfig.als_version);
+  }
+
   const selectedModuleIds = getSelectedModuleIds(systemConfig, moduleFilter, systemConfigPathAbs, systemDiagnostics);
   if (selectedModuleIds.length === 0) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports);
+    return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports, systemConfig.als_version);
   }
 
   const layoutDiagnostics = validateSystemLayout(systemRootAbs, systemConfig);
   if (layoutDiagnostics.length > 0) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(layoutDiagnostics), moduleReports);
+    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(layoutDiagnostics), moduleReports, systemConfig.als_version);
   }
 
   const moduleStates = selectedModuleIds.map((moduleId) => loadModuleState(systemRootAbs, systemConfig, moduleId));
@@ -187,7 +198,6 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
         state.module_id,
         state.module_path_rel,
         state.module_version,
-        state.shape_schema,
         state.diagnostics,
         state.files_checked,
         state.files_ignored,
@@ -196,7 +206,7 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
     );
   }
 
-  return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports);
+  return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports, systemConfig.als_version);
 }
 
 function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, moduleId: string): ModuleWorkState {
@@ -212,7 +222,6 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
       module_id: moduleId,
       module_path_rel: modulePathRel,
       module_version: registryEntry.version,
-      shape_schema: null,
       diagnostics: shapeResult.diagnostics,
       files_checked: 0,
       files_ignored: 0,
@@ -260,7 +269,6 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
     module_id: moduleId,
     module_path_rel: modulePathRel,
     module_version: registryEntry.version,
-    shape_schema: context.shape.schema,
     diagnostics,
     files_checked: discovery.record_file_paths.length + discovery.errored_file_paths.length,
     files_ignored: discovery.ignored_file_paths.length,
@@ -513,6 +521,7 @@ function validateBody(
         module_id: record.module_id,
         entity: record.entity_name,
         field: "title",
+        reason: reasons.BODY_TITLE_MULTIPLE_H1,
         expected: "exactly one top-level h1",
         actual: record.body.titles,
       }),
@@ -526,6 +535,7 @@ function validateBody(
           module_id: record.module_id,
           entity: record.entity_name,
           field: "title",
+          reason: reasons.BODY_TITLE_CONTENT_BEFORE_DECLARED,
           expected: "h1 as first structural body region",
           actual: record.body.content_before_title.trim(),
         }),
@@ -538,6 +548,7 @@ function validateBody(
           module_id: record.module_id,
           entity: record.entity_name,
           field: "title",
+          reason: reasons.BODY_TITLE_MISSING_DECLARED,
           expected: "exactly one h1",
           actual: null,
         }),
@@ -550,6 +561,7 @@ function validateBody(
             module_id: record.module_id,
             entity: record.entity_name,
             field: "title",
+            reason: reasons.BODY_TITLE_SOURCE_INVALID,
             expected: {
               source_field: expectedTitle.field,
               type: "non-empty string",
@@ -563,6 +575,7 @@ function validateBody(
             module_id: record.module_id,
             entity: record.entity_name,
             field: "title",
+            reason: reasons.BODY_TITLE_MISMATCH,
             expected: expectedTitle.value,
             actual: record.body.title,
           }),
@@ -575,6 +588,7 @@ function validateBody(
         module_id: record.module_id,
         entity: record.entity_name,
         field: "title",
+        reason: reasons.BODY_TITLE_UNDECLARED,
         expected: "no top-level h1",
         actual: record.body.titles,
       }),
@@ -591,6 +605,7 @@ function validateBody(
         module_id: record.module_id,
         entity: record.entity_name,
         field: "preamble",
+        reason: reasons.BODY_PREAMBLE_UNDECLARED,
         expected: "no top-level preamble",
         actual: record.body.preamble.trim(),
       }),
@@ -604,6 +619,7 @@ function validateBody(
         module_id: record.module_id,
         entity: record.entity_name,
         field: sectionName,
+        reason: reasons.BODY_SECTION_DUPLICATE,
         expected: "unique top-level section names",
         actual: sectionName,
       }),
@@ -1589,6 +1605,7 @@ function parseYamlFile<T>(
       diagnostics: [
         diag(code, "error", phase, fileRel, "Could not read YAML file", {
           module_id: module_id ?? undefined,
+          reason: reasons.YAML_READ_FAILED,
           expected: "readable YAML file",
           actual: {
             code: fileRead.error.code ?? null,
@@ -1614,6 +1631,7 @@ function parseYamlFile<T>(
       diagnostics: [
         diag(code, "error", phase, fileRel, "Failed to parse YAML", {
           module_id: module_id ?? undefined,
+          reason: reasons.YAML_PARSE_FAILED,
           actual: error instanceof Error ? error.message : String(error),
         }),
       ],
@@ -1621,15 +1639,18 @@ function parseYamlFile<T>(
   }
 
   const rawDiagnostics = phase === "module_shape"
-    ? findLegacyRequiredIssues(raw).map((issue) =>
-      diag(code, "error", phase, fileRel, issue.message, {
-        module_id: module_id ?? undefined,
-        field: issue.path.join(".") || null,
-        expected: "field/section definition without legacy required key",
-        actual: issue.path,
-      }),
+    ? collectRemovedSourceSchemaDiagnostics(raw, phase, fileRel, module_id).concat(
+      findLegacyRequiredIssues(raw).map((issue) =>
+        diag(code, "error", phase, fileRel, issue.message, {
+          module_id: module_id ?? undefined,
+          field: issue.path.join(".") || null,
+          reason: reasons.SHAPE_LEGACY_REQUIRED_KEY,
+          expected: "field/section definition without legacy required key",
+          actual: issue.path,
+        }),
+      ),
     )
-    : [];
+    : collectRemovedSourceSchemaDiagnostics(raw, phase, fileRel, module_id);
   const parsed = schema.safeParse(raw);
   if (parsed.success && rawDiagnostics.length === 0) {
     return {
@@ -1653,6 +1674,7 @@ function parseYamlFile<T>(
         diag(resolveParseIssueCode(code, phase, issue), "error", phase, fileRel, issue.message, {
           module_id: module_id ?? undefined,
           field: issue.path.join(".") || null,
+          reason: resolveParseIssueReason(phase, issue),
           expected: issue.code,
           actual: issue.path,
         }),
@@ -1677,6 +1699,10 @@ function resolveParseIssueCode(
   phase: "system_config" | "module_shape",
   issue: ZodError["issues"][number],
 ): string {
+  if (phase === "system_config" && issue.path[0] === "als_version") {
+    return codes.SYSTEM_ALS_VERSION_INVALID;
+  }
+
   if (
     phase === "system_config"
     && issue.code === "custom"
@@ -1689,6 +1715,17 @@ function resolveParseIssueCode(
   }
 
   return defaultCode;
+}
+
+function resolveParseIssueReason(
+  phase: "system_config" | "module_shape",
+  issue: ZodError["issues"][number],
+): string | undefined {
+  if (phase === "system_config" && issue.path[0] === "als_version") {
+    return reasons.SYSTEM_ALS_VERSION_INVALID;
+  }
+
+  return undefined;
 }
 
 function getSelectedModuleIds(
@@ -1713,11 +1750,70 @@ function getSelectedModuleIds(
   return [moduleFilter];
 }
 
+function collectRemovedSourceSchemaDiagnostics(
+  raw: unknown,
+  phase: "system_config" | "module_shape",
+  fileRel: string,
+  module_id: string | null,
+): CompilerDiagnostic[] {
+  if (!isPlainObject(raw) || !Object.hasOwn(raw, "schema")) {
+    return [];
+  }
+
+  const reason = phase === "system_config" ? reasons.SYSTEM_SCHEMA_REMOVED : reasons.MODULE_SHAPE_SCHEMA_REMOVED;
+  const expected = phase === "system_config"
+    ? "system config without top-level schema field"
+    : "module shape without top-level schema field";
+
+  return [
+    diag(
+      phase === "system_config" ? codes.SYSTEM_INVALID : codes.SHAPE_INVALID,
+      "error",
+      phase,
+      fileRel,
+      "Top-level source field 'schema' has been removed from ALS v1 authored YAML",
+      {
+        module_id: module_id ?? undefined,
+        field: "schema",
+        reason,
+        expected,
+        actual: raw.schema,
+        hint: "Remove the top-level 'schema' field and rely on als_version plus file location instead.",
+      },
+    ),
+  ];
+}
+
+function validateAlsVersionSupport(
+  systemConfig: SystemConfig,
+  systemConfigPathAbs: string,
+): CompilerDiagnostic[] {
+  if (isSupportedAlsVersion(systemConfig.als_version)) {
+    return [];
+  }
+
+  return [
+    diag(
+      codes.SYSTEM_ALS_VERSION_UNSUPPORTED,
+      "error",
+      "system_config",
+      toRepoRelative(systemConfigPathAbs),
+      `ALS version '${systemConfig.als_version}' is not supported by this compiler`,
+      {
+        field: "als_version",
+        reason: reasons.SYSTEM_ALS_VERSION_UNSUPPORTED,
+        expected: [...SUPPORTED_ALS_VERSIONS],
+        actual: systemConfig.als_version,
+        hint: "Upgrade the compiler or rewrite the system to a supported ALS version before validating.",
+      },
+    ),
+  ];
+}
+
 function buildModuleReport(
   moduleId: string,
   modulePathRel: string,
   moduleVersion: number,
-  shapeSchema: string | null,
   diagnostics: CompilerDiagnostic[],
   filesChecked: number,
   filesIgnored: number,
@@ -1739,7 +1835,6 @@ function buildModuleReport(
     module_id: moduleId,
     module_path: modulePathRel,
     module_version: moduleVersion,
-    shape_schema: shapeSchema,
     diagnostics,
     summary,
   };
@@ -1749,6 +1844,7 @@ function buildSystemOutput(
   systemPathRel: string,
   systemDiagnostics: CompilerDiagnostic[],
   moduleReports: ModuleValidationReport[],
+  alsVersion: number | null,
 ): SystemValidationOutput {
   const diagnostics = systemDiagnostics.concat(moduleReports.flatMap((report) => report.diagnostics));
   const errorCount = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
@@ -1760,6 +1856,13 @@ function buildSystemOutput(
   const filesIgnored = moduleReports.reduce((sum, report) => sum + report.summary.files_ignored, 0);
 
   return {
+    schema: VALIDATION_OUTPUT_SCHEMA_LITERAL,
+    als_version: alsVersion,
+    compiler_contract: {
+      supported_als_versions: [...SUPPORTED_ALS_VERSIONS],
+      upgrade_mode: ALS_UPGRADE_MODE,
+      upgrade_assistance: ALS_UPGRADE_ASSISTANCE,
+    },
     status: computeStatus(diagnostics),
     system_path: systemPathRel,
     generated_at: new Date().toISOString(),
@@ -1788,4 +1891,8 @@ function markErroredFiles(fileErrorMap: Map<string, boolean>, diagnostics: Compi
 
 function toRepoRelative(pathAbs: string): string {
   return relative(process.cwd(), pathAbs).replace(/\\/g, "/") || ".";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,13 +1,13 @@
 # ALS Shape Language Reference
 
-This is the complete format specification for `als-module@1` shape files and `als-system@1` system configuration. Use this reference when producing YAML output.
+This is the complete format specification for ALS v1 shape files and system configuration. Use this reference when producing YAML output.
 
 ## system.yaml
 
 Lives at `.als/system.yaml`. Declares the system identity and module registry.
 
 ```yaml
-schema: als-system@1
+als_version: 1                      # active ALS language version for the whole system
 system_id: my-system                  # unique system identifier used in ref URIs
 
 modules:
@@ -18,6 +18,9 @@ modules:
 ```
 
 Rules:
+- `als_version`: required positive integer. One system validates against one ALS language version at a time.
+- This compiler currently supports `als_version: 1` only.
+- ALS language-version upgrades are whole-system cutovers. Long-lived mixed ALS versions inside one system are not part of the v1 contract.
 - `system_id`: non-empty string, used in ref URIs
 - Module ids must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
 - Module `path` is a normalized relative path from the system root made of one or more slash-separated slug segments
@@ -34,14 +37,14 @@ Rules:
 - The declared `path` must exist as a directory when validating
 - No two modules may have identical or overlapping mount paths
 - Shape files are inferred at `.als/modules/{module_id}/v{version}.yaml`
+- Authored ALS v1 source YAML does not include a top-level `schema` field.
+- Validators reject stale authored `schema` fields so removed syntax does not linger in systems or prompts.
 
 ## Module shape YAML
 
 Lives at `.als/modules/{module_id}/v{version}.yaml`.
 
 ```yaml
-schema: als-module@1
-
 dependencies:                         # other modules this one references
   - module: people                    # just the module id
 
@@ -52,6 +55,8 @@ entities:
 Rules:
 - `dependencies`: list modules whose entities are referenced by this module's ref fields. If a ref targets another module, that module must be listed here.
 - `entities`: keyed by entity name matching `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
+- Authored ALS v1 shape files do not include a top-level `schema` field.
+- Validators reject stale authored `schema` fields so removed syntax does not linger in systems or prompts.
 
 ## Entity definition
 

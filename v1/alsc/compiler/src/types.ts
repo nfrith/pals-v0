@@ -1,3 +1,5 @@
+import type { AlsUpgradeAssistance, AlsUpgradeMode } from "./contracts.ts";
+
 export type DiagnosticSeverity = "error" | "warning";
 
 export type ValidationPhase =
@@ -12,6 +14,7 @@ export type ValidationPhase =
 
 export interface CompilerDiagnostic {
   code: string;
+  reason: string | null;
   severity: DiagnosticSeverity;
   phase: ValidationPhase;
   file: string;
@@ -42,12 +45,18 @@ export interface ModuleValidationReport {
   module_id: string;
   module_path: string;
   module_version: number;
-  shape_schema: string | null;
   diagnostics: CompilerDiagnostic[];
   summary: ModuleValidationSummary;
 }
 
 export interface SystemValidationOutput {
+  schema: string;
+  als_version: number | null;
+  compiler_contract: {
+    supported_als_versions: number[];
+    upgrade_mode: AlsUpgradeMode;
+    upgrade_assistance: AlsUpgradeAssistance;
+  };
   status: "pass" | "warn" | "fail";
   system_path: string;
   generated_at: string;

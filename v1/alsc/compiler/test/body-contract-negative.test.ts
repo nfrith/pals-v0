@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { codes } from "../src/diagnostics.ts";
+import { codes, reasons } from "../src/diagnostics.ts";
 import {
   expectModuleDiagnostic,
   expectModuleDiagnosticContaining,
@@ -46,7 +46,14 @@ test.concurrent("multiple top-level h1 headings are rejected", async () => {
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
-    expectModuleDiagnosticContaining(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "Multiple top-level h1 headings are not allowed", "ITEM-0001.md");
+    const diagnostic = expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_CONSTRAINT_VIOLATION,
+      "Multiple top-level h1 headings are not allowed",
+      "ITEM-0001.md",
+    );
+    expect(diagnostic.reason).toBe(reasons.BODY_TITLE_MULTIPLE_H1);
   });
 });
 
@@ -179,13 +186,14 @@ test.concurrent("top-level definitions are rejected with a dedicated markdown di
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
-    expectModuleDiagnosticContaining(
+    const diagnostic = expectModuleDiagnosticContaining(
       result,
       "backlog",
       codes.BODY_UNSUPPORTED_MARKDOWN,
       "Reference-style links and images are not supported",
       "ITEM-0001.md",
     );
+    expect(diagnostic.reason).toBe(reasons.BODY_MARKDOWN_REFERENCE_STYLE_UNSUPPORTED);
     expect(moduleDiagnostics(result, "backlog").filter((diagnostic) => diagnostic.code === codes.BODY_UNSUPPORTED_MARKDOWN)).toHaveLength(1);
     expectNoModuleDiagnostic(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "ITEM-0001.md");
   });
@@ -396,7 +404,14 @@ test.concurrent("tables are rejected when the region does not declare table supp
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
-    expectModuleDiagnosticContaining(result, "backlog", codes.BODY_CONSTRAINT_VIOLATION, "unsupported markdown block 'table'", "ITEM-0001.md");
+    const diagnostic = expectModuleDiagnosticContaining(
+      result,
+      "backlog",
+      codes.BODY_CONSTRAINT_VIOLATION,
+      "unsupported markdown block 'table'",
+      "ITEM-0001.md",
+    );
+    expect(diagnostic.reason).toBe(reasons.BODY_REGION_BLOCK_UNSUPPORTED);
   });
 });
 

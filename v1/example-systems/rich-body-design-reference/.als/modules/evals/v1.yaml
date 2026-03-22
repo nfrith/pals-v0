@@ -1,5 +1,3 @@
-schema: als-module@1
-
 dependencies:
   - module: people
 

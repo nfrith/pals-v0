@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { codes } from "../src/diagnostics.ts";
+import { codes, reasons } from "../src/diagnostics.ts";
 import {
   expectModuleDiagnostic,
   updateShapeYaml,
@@ -9,21 +9,44 @@ import {
   withFixtureSandbox,
 } from "./helpers/fixture.ts";
 
-test.concurrent("shape files must declare the expected schema literal", async () => {
-  await withFixtureSandbox("shape-schema-literal", async ({ root }) => {
+test.concurrent("stale top-level schema fields in shape files are rejected", async () => {
+  await withFixtureSandbox("shape-stale-schema-field", async ({ root }) => {
     await updateShapeYaml(root, "backlog", 1, (shape) => {
-      delete shape.schema;
+      shape.schema = "als-module@1";
     });
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
-    expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1.yaml");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1.yaml");
+    expect(diagnostic.reason).toBe(reasons.MODULE_SHAPE_SCHEMA_REMOVED);
+  });
+});
+
+test.concurrent("stale schema diagnostics do not suppress other shape parse errors", async () => {
+  await withFixtureSandbox("shape-stale-schema-plus-missing-dependencies", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      shape.schema = "als-module@1";
+      delete shape.dependencies;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const backlogReport = result.modules.find((report) => report.module_id === "backlog");
+    expect(backlogReport).toBeDefined();
+    expect(backlogReport!.diagnostics.some((diagnostic) => diagnostic.reason === reasons.MODULE_SHAPE_SCHEMA_REMOVED)).toBe(true);
+    expect(
+      backlogReport!.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === codes.SHAPE_INVALID
+          && diagnostic.field === "dependencies",
+      ),
+    ).toBe(true);
   });
 });
 
 test.concurrent("malformed shape yaml fails parsing cleanly", async () => {
   await withFixtureSandbox("shape-yaml-parse-error", async ({ root }) => {
-    await updateTextFile(root, ".als/modules/backlog/v1.yaml", () => "schema: [broken\n");
+    await updateTextFile(root, ".als/modules/backlog/v1.yaml", () => "dependencies: [broken\n");
 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");

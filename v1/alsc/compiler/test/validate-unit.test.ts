@@ -61,7 +61,7 @@ test("missing section definitions surface a shape diagnostic instead of crashing
 
 test("system config schema rejects duplicate module mount paths", () => {
   const result = systemConfigSchema.safeParse({
-    schema: "als-system@1",
+    als_version: 1,
     system_id: "test-system",
     modules: {
       backlog: {
@@ -87,7 +87,7 @@ test("system config schema rejects duplicate module mount paths", () => {
 
 test("system config schema rejects overlapping module mount paths", () => {
   const result = systemConfigSchema.safeParse({
-    schema: "als-system@1",
+    als_version: 1,
     system_id: "test-system",
     modules: {
       backlog: {
@@ -114,7 +114,6 @@ test("system config schema rejects overlapping module mount paths", () => {
 test("variant entity shapes can omit body without crashing schema validation", () => {
   expect(() => {
     const result = moduleShapeSchema.safeParse({
-      schema: "als-module@1",
       dependencies: [],
       entities: {
         item: {

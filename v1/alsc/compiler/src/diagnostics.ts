@@ -3,9 +3,11 @@ import type { CompilerDiagnostic, DiagnosticSeverity, ValidationPhase } from "./
 export const codes = {
   SYSTEM_INVALID: "PAL-CV-SYS-001",
   SYSTEM_FILTER_UNKNOWN: "PAL-CV-SYS-002",
-  // PAL-CV-SYS-003 was retired when system roots were removed from als-system@1.
+  // PAL-CV-SYS-003 was retired when system roots were removed from the ALS v1 system config.
   SYSTEM_MODULE_PATH_INVALID: "PAL-CV-SYS-004",
   SYSTEM_MODULE_PATH_CONFLICT: "PAL-CV-SYS-005",
+  SYSTEM_ALS_VERSION_INVALID: "PAL-CV-SYS-006",
+  SYSTEM_ALS_VERSION_UNSUPPORTED: "PAL-CV-SYS-007",
   SHAPE_INVALID: "PAL-CV-SHAPE-001",
   SHAPE_CONTRACT_INVALID: "PAL-CV-SHAPE-003",
   SHAPE_FILE_MISSING: "PAL-CV-SHAPE-004",
@@ -43,6 +45,42 @@ export const codes = {
   REF_PARENT_PREFIX: "PAL-RV-REF-006",
 } as const;
 
+// Stable machine-readable subcodes are being rolled out incrementally.
+// Older diagnostics still emit null for reason until each call site is upgraded.
+export const reasons = {
+  YAML_READ_FAILED: "yaml.read_failed",
+  YAML_PARSE_FAILED: "yaml.parse_failed",
+  SYSTEM_ALS_VERSION_INVALID: "system.als_version.invalid",
+  SYSTEM_ALS_VERSION_UNSUPPORTED: "system.als_version.unsupported",
+  SYSTEM_SCHEMA_REMOVED: "system.schema.removed",
+  MODULE_SHAPE_SCHEMA_REMOVED: "module_shape.schema.removed",
+  SHAPE_LEGACY_REQUIRED_KEY: "shape.legacy_required_key",
+  BODY_TITLE_MULTIPLE_H1: "body.title.multiple_h1",
+  BODY_TITLE_CONTENT_BEFORE_DECLARED: "body.title.content_before_declared",
+  BODY_TITLE_MISSING_DECLARED: "body.title.missing_declared",
+  BODY_TITLE_SOURCE_INVALID: "body.title.source_invalid",
+  BODY_TITLE_MISMATCH: "body.title.mismatch",
+  BODY_TITLE_UNDECLARED: "body.title.undeclared",
+  BODY_PREAMBLE_UNDECLARED: "body.preamble.undeclared",
+  BODY_SECTION_DUPLICATE: "body.section.duplicate_top_level",
+  BODY_REGION_LIST_MIN_ITEMS: "body.region.list.min_items",
+  BODY_REGION_LIST_MAX_ITEMS: "body.region.list.max_items",
+  BODY_REGION_HEADING_STRUCTURAL_DEPTH: "body.region.heading.structural_depth",
+  BODY_REGION_HEADING_MIN_DEPTH: "body.region.heading.min_depth",
+  BODY_REGION_HEADING_MAX_DEPTH: "body.region.heading.max_depth",
+  BODY_REGION_CODE_LANGUAGE_REQUIRED: "body.region.code.language_required",
+  BODY_OUTLINE_NODE_MISSING: "body.outline.node.missing",
+  BODY_OUTLINE_NODE_STRUCTURAL_DEPTH: "body.outline.node.structural_depth",
+  BODY_OUTLINE_PREAMBLE_UNDECLARED: "body.outline.preamble.undeclared",
+  BODY_REGION_BLOCK_COUNT_MIN: "body.region.block.min_count",
+  BODY_REGION_BLOCK_COUNT_MAX: "body.region.block.max_count",
+  BODY_REGION_BLOCK_UNSUPPORTED: "body.region.block.unsupported",
+  BODY_MARKDOWN_REFERENCE_STYLE_UNSUPPORTED: "body.markdown.reference_style_unsupported",
+  BODY_MARKDOWN_FLOW_HTML_UNSUPPORTED: "body.markdown.flow_html_unsupported",
+  BODY_MARKDOWN_INLINE_HTML_UNSUPPORTED: "body.markdown.inline_html_unsupported",
+  BODY_MARKDOWN_THEMATIC_BREAK_UNSUPPORTED: "body.markdown.thematic_break_unsupported",
+} as const;
+
 export function diag(
   code: string,
   severity: DiagnosticSeverity,
@@ -53,6 +91,7 @@ export function diag(
     module_id?: string;
     entity?: string;
     field?: string;
+    reason?: string;
     expected?: unknown;
     actual?: unknown;
     hint?: string;
@@ -62,6 +101,7 @@ export function diag(
 ): CompilerDiagnostic {
   return {
     code,
+    reason: opts.reason ?? null,
     severity,
     phase,
     file,

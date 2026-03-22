@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-- Earlier `als-system@1` modeled module placement with a top-level `roots` list plus per-module `root` and `dir` fields.
+- Earlier ALS v1 system configuration modeled module placement with a top-level `roots` list plus per-module `root` and `dir` fields.
 - That model made filesystem placement a first-class language concept without giving `root` any independent meaning in refs, identity, dependencies, or record semantics.
 - The practical value of `roots` was limited to shared-prefix grouping and phased migration of existing directory trees.
 - The root-based model also created awkward layouts for root-mounted modules, such as `backlog/backlog`, when the intended module directory was simply `backlog/`.
@@ -14,7 +14,7 @@ Accepted
 
 ## Decision
 
-- `als-system@1` defines module placement with `modules.<module_id>.path`.
+- ALS v1 system configuration defines module placement with `modules.<module_id>.path`.
 - `roots`, `modules.<module_id>.root`, and `modules.<module_id>.dir` are removed from the normative system model.
 - `modules.<module_id>.path` is a relative module mount path from the validated system root directory.
 - A module mount path is one or more slash-separated slug segments.
@@ -31,7 +31,7 @@ Accepted
 
 ## Normative Effect
 
-- Required: every module declares exactly one explicit `path` in `als-system@1`.
+- Required: every module declares exactly one explicit `path` in ALS v1 system configuration.
 - Required: module placement is interpreted relative to the validated system root directory.
 - Required: module mount paths use normalized slug segments separated by `/`.
 - Required: every declared module path resolves to an existing directory.
@@ -51,13 +51,13 @@ Accepted
 - Layout validation resolves module directories from `path`, not from `root + dir`.
 - Layout validation emits `PAL-CV-SYS-004` when a declared module path is missing or is not a directory.
 - Layout validation emits `PAL-CV-SYS-005` when two module mount paths duplicate or overlap.
-- `PAL-CV-SYS-003` is retired because system roots are no longer part of `als-system@1`.
+- `PAL-CV-SYS-003` is retired because system roots are no longer part of ALS v1 system configuration.
 - Module discovery walks the entire mounted subtree owned by each module path.
 - Canonical URI generation, module dependencies, and shape lookup remain keyed by module id and are not rewritten around filesystem path text.
 
 ## Docs and Fixture Impact
 
-- Reference docs must describe `als-system@1` in terms of `modules.<module_id>.path`.
+- Reference docs must describe ALS v1 system configuration in terms of `modules.<module_id>.path`.
 - Authoring guidance and skills must ask for a module mount path relative to the system root, not a root name plus child directory.
 - Example systems and fixtures must not describe module placement with `roots`, `root`, or `dir`.
 - Fixtures may include both single-segment and nested module mount paths.

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
-import { codes } from "../src/diagnostics.ts";
+import { codes, reasons } from "../src/diagnostics.ts";
 import {
   expectSystemDiagnostic,
   mkdirPath,
@@ -139,6 +139,88 @@ test.concurrent("unknown module filters fail cleanly", async () => {
     const result = validateFixture(root, "ghost-module");
     expect(result.status).toBe("fail");
     expectSystemDiagnostic(result, codes.SYSTEM_FILTER_UNKNOWN, ".als/system.yaml");
+  });
+});
+
+test.concurrent("stale top-level schema fields in system config are rejected", async () => {
+  await withFixtureSandbox("system-stale-schema-field", async ({ root }) => {
+    await updateSystemYaml(root, (config) => {
+      config.schema = "als-system@1";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_INVALID, ".als/system.yaml");
+    expect(diagnostic.reason).toBe(reasons.SYSTEM_SCHEMA_REMOVED);
+  });
+});
+
+test.concurrent("missing als_version fails with a dedicated system diagnostic", async () => {
+  await withFixtureSandbox("system-als-version-missing", async ({ root }) => {
+    await updateSystemYaml(root, (config) => {
+      delete config.als_version;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_ALS_VERSION_INVALID, ".als/system.yaml");
+    expect(diagnostic.reason).toBe(reasons.SYSTEM_ALS_VERSION_INVALID);
+  });
+});
+
+for (const { label, value } of [
+  { label: "zero", value: 0 },
+  { label: "negative integer", value: -1 },
+  { label: "string", value: "one" },
+]) {
+  test.concurrent(`invalid als_version values are rejected (${label})`, async () => {
+    await withFixtureSandbox(`system-als-version-invalid-${label.replaceAll(" ", "-")}`, async ({ root }) => {
+      await updateSystemYaml(root, (config) => {
+        config.als_version = value;
+      });
+
+      const result = validateFixture(root);
+      expect(result.status).toBe("fail");
+      const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_ALS_VERSION_INVALID, ".als/system.yaml");
+      expect(diagnostic.reason).toBe(reasons.SYSTEM_ALS_VERSION_INVALID);
+      expect(diagnostic.field).toBe("als_version");
+    });
+  });
+}
+
+test.concurrent("unsupported als_version stops validation before module loading", async () => {
+  await withFixtureSandbox("system-als-version-unsupported", async ({ root }) => {
+    await updateSystemYaml(root, (config) => {
+      config.als_version = 2;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_ALS_VERSION_UNSUPPORTED, ".als/system.yaml");
+    expect(diagnostic.reason).toBe(reasons.SYSTEM_ALS_VERSION_UNSUPPORTED);
+    expect(result.modules).toHaveLength(0);
+    expect(result.als_version).toBe(2);
+  });
+});
+
+test.concurrent("stale schema diagnostics do not suppress other system parse errors", async () => {
+  await withFixtureSandbox("system-stale-schema-plus-missing-als-version", async ({ root }) => {
+    await updateSystemYaml(root, (config) => {
+      config.schema = "als-system@1";
+      delete config.als_version;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expect(result.system_diagnostics.some((diagnostic) => diagnostic.reason === reasons.SYSTEM_SCHEMA_REMOVED)).toBe(true);
+    expect(
+      result.system_diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === codes.SYSTEM_ALS_VERSION_INVALID
+          && diagnostic.reason === reasons.SYSTEM_ALS_VERSION_INVALID
+          && diagnostic.field === "als_version",
+      ),
+    ).toBe(true);
   });
 });
 

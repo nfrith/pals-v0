@@ -3,7 +3,7 @@
 # Short-circuits for non-ALS files. Scopes validation to the affected module only.
 set -euo pipefail
 
-COMPILER="/Users/0xnfrith/nfrith/pals-v0/v1/alsc/compiler"
+COMPILER="/Users/0xnfrith/nfrith/pals-v0/alsc/compiler"
 
 input=$(cat)
 file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')

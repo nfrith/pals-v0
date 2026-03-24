@@ -19,15 +19,15 @@ This is an inventory and implementation-planning document, not a spec decision r
 ## What the current v1 system uses
 
 - The reference system shape files only declare `paragraph`, `bullet_list`, and `ordered_list`.
-- There are no `allow_subheadings: true` hits under `v1/example-systems/centralized-metadata-happy-path/.als`.
-- There are no `allow_blockquotes: true` hits under `v1/example-systems/centralized-metadata-happy-path/.als`.
-- There are no `allow_code_blocks: true` hits under `v1/example-systems/centralized-metadata-happy-path/.als`.
+- There are no `allow_subheadings: true` hits under `example-systems/centralized-metadata-happy-path/.als`.
+- There are no `allow_blockquotes: true` hits under `example-systems/centralized-metadata-happy-path/.als`.
+- There are no `allow_code_blocks: true` hits under `example-systems/centralized-metadata-happy-path/.als`.
 - In practice, the current fixture is narrower than the compiler's already-small Markdown model.
 
 Representative shape examples:
 
-- `v1/example-systems/centralized-metadata-happy-path/.als/modules/backlog/v1/shape.yaml`
-- `v1/example-systems/centralized-metadata-happy-path/.als/modules/experiments/v2/shape.yaml`
+- `example-systems/centralized-metadata-happy-path/.als/modules/backlog/v1/shape.yaml`
+- `example-systems/centralized-metadata-happy-path/.als/modules/experiments/v2/shape.yaml`
 
 ## Status legend
 
@@ -214,15 +214,15 @@ That is also a valid outcome, but it should be made explicit.
 ## Source pointers
 
 - Compiler section parsing and validation:
-  - `v1/alsc/compiler/src/markdown.ts`
-  - `v1/alsc/compiler/src/schema.ts`
-  - `v1/alsc/compiler/src/validate.ts`
+  - `alsc/compiler/src/markdown.ts`
+  - `alsc/compiler/src/schema.ts`
+  - `alsc/compiler/src/validate.ts`
 - ALS ref parsing:
-  - `v1/alsc/compiler/src/refs.ts`
+  - `alsc/compiler/src/refs.ts`
 - Installed mdast node definitions:
-  - `v1/alsc/compiler/node_modules/@types/mdast/index.d.ts`
+  - `alsc/compiler/node_modules/@types/mdast/index.d.ts`
 - Current shape-language docs:
-  - `v1/alsc/skills/new/references/shape-language.md`
+  - `alsc/skills/new/references/shape-language.md`
 - Current reference system shapes:
-  - `v1/example-systems/centralized-metadata-happy-path/.als/modules/backlog/v1/shape.yaml`
-  - `v1/example-systems/centralized-metadata-happy-path/.als/modules/experiments/v2/shape.yaml`
+  - `example-systems/centralized-metadata-happy-path/.als/modules/backlog/v1/shape.yaml`
+  - `example-systems/centralized-metadata-happy-path/.als/modules/experiments/v2/shape.yaml`

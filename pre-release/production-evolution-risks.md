@@ -11,8 +11,8 @@ This note is narrower than `spec-upgrade-risks.md`. The focus here is operationa
 The repo explicitly says migrations were removed from the initial v1 scope. At the same time, `system.yaml` exposes exactly one active `version` per module, and the compiler always loads exactly that one shape file:
 
 - `AGENTS.md`
-- `v1/alsc/compiler/src/schema.ts`
-- `v1/alsc/compiler/src/validate.ts`
+- `alsc/compiler/src/schema.ts`
+- `alsc/compiler/src/validate.ts`
 
 That means ALS v1 tells you what the target state is, but not how old data becomes valid under the new state.
 
@@ -27,9 +27,9 @@ What hits you in prod:
 
 SDR 001 makes declaration equal presence. Every declared field must appear. Every declared section must appear. There is no optional-field mechanism:
 
-- `v1/sdr/001-explicit-declaration-semantics.md`
-- `v1/alsc/skills/new/references/shape-language.md`
-- `v1/alsc/compiler/src/validate.ts`
+- `sdr/001-explicit-declaration-semantics.md`
+- `alsc/skills/new/references/shape-language.md`
+- `alsc/compiler/src/validate.ts`
 
 This is clean for strict validation, but it makes evolution expensive.
 
@@ -53,9 +53,9 @@ ALS refs are versionless `als://system/module/...` URIs, and canonical identity 
 
 Relevant implementation surfaces:
 
-- `v1/alsc/compiler/src/refs.ts`
-- `v1/alsc/compiler/src/validate.ts`
-- `v1/alsc/skills/new/references/shape-language.md`
+- `alsc/compiler/src/refs.ts`
+- `alsc/compiler/src/validate.ts`
+- `alsc/skills/new/references/shape-language.md`
 
 What hits you in prod:
 
@@ -70,9 +70,9 @@ There is no aliasing, redirect, compatibility mapping, or versioned ref indirect
 
 The schema only requires that an entity path is non-empty and contains `{id}`. But the path-template parser treats placeholder names as binding keys, and canonical URI construction assumes those bindings align with lineage entity names:
 
-- `v1/alsc/compiler/src/schema.ts`
-- `v1/alsc/compiler/src/parser/path-template.ts`
-- `v1/alsc/compiler/src/validate.ts`
+- `alsc/compiler/src/schema.ts`
+- `alsc/compiler/src/parser/path-template.ts`
+- `alsc/compiler/src/validate.ts`
 
 The docs already tell authors to use ancestor placeholders to encode lineage, so filesystem template design is not just storage layout. It leaks into identity.
 
@@ -89,9 +89,9 @@ This is the kind of issue that becomes painful only after a real ref graph exist
 
 The output model supports `warning`, and summaries count warnings, but the compiler does not currently emit warning diagnostics:
 
-- `v1/alsc/compiler/src/types.ts`
-- `v1/alsc/compiler/src/diagnostics.ts`
-- `v1/alsc/compiler/src/validate.ts`
+- `alsc/compiler/src/types.ts`
+- `alsc/compiler/src/diagnostics.ts`
+- `alsc/compiler/src/validate.ts`
 
 So the lifecycle is effectively:
 
@@ -115,9 +115,9 @@ Many distinct failures collapse into broad diagnostic codes such as:
 
 The tests already compensate by asserting on message fragments for specific cases:
 
-- `v1/alsc/compiler/src/diagnostics.ts`
-- `v1/alsc/compiler/src/markdown.ts`
-- `v1/alsc/compiler/test/body-contract-negative.test.ts`
+- `alsc/compiler/src/diagnostics.ts`
+- `alsc/compiler/src/markdown.ts`
+- `alsc/compiler/test/body-contract-negative.test.ts`
 
 What hits you in prod:
 
@@ -131,15 +131,15 @@ If production users are expected to automate upgrades, the machine-readable diag
 
 The compiler README presents module-filtered validation as normal usage:
 
-- `v1/alsc/compiler/README.md`
+- `alsc/compiler/README.md`
 
 But filtered validation currently builds the record index only from the selected modules, and ref resolution runs against that reduced index:
 
-- `v1/alsc/compiler/src/validate.ts`
+- `alsc/compiler/src/validate.ts`
 
 The current test coverage only checks the unknown-filter error path:
 
-- `v1/alsc/compiler/test/system-negative.test.ts`
+- `alsc/compiler/test/system-negative.test.ts`
 
 What hits you in prod:
 
@@ -154,9 +154,9 @@ This matters because once ALS is live, incremental rollout is the first thing op
 The repo says skill/app management was removed from the initial v1 scope, but `system.yaml` still requires a `skill` field, and the shape-language reference still presents it as placeholder metadata:
 
 - `AGENTS.md`
-- `v1/alsc/compiler/src/schema.ts`
-- `v1/alsc/skills/new/references/shape-language.md`
-- `v1/example-systems/centralized-metadata-happy-path/README.md`
+- `alsc/compiler/src/schema.ts`
+- `alsc/skills/new/references/shape-language.md`
+- `example-systems/centralized-metadata-happy-path/README.md`
 
 What hits you in prod:
 

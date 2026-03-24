@@ -13,7 +13,7 @@ Authored ALS source YAML does not carry a top-level `schema` field.
 ## Usage
 
 ```bash
-cd v1/alsc/compiler
+cd alsc/compiler
 bun run src/index.ts ../../example-systems/centralized-metadata-happy-path
 ```
 

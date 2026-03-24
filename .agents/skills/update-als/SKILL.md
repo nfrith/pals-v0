@@ -14,7 +14,7 @@ Use this skill for development work on this repo's ALS compiler and its normativ
 Read these files before proposing semantics or changing compiler behavior:
 
 - Repository rules: `../../../AGENTS.md`
-- SDR process and format: `../../../v1/sdr/AGENTS.md`
+- SDR process and format: `../../../sdr/AGENTS.md`
 
 Prefer pointing back to those files over re-stating their content. If this skill and an `AGENTS.md` disagree, follow the relevant `AGENTS.md`.
 
@@ -42,7 +42,7 @@ Follow this order. Do not skip ahead to compiler work before the semantic decisi
 9. Implement compiler changes and tests.
 10. Re-align fixtures, examples, and reference docs if implementation surfaced additional required edits.
 
-Per `../../../v1/sdr/AGENTS.md`, the SDR records a settled decision. It is not the brainstorm. Discuss first, then write the `Proposed` SDR.
+Per `../../../sdr/AGENTS.md`, the SDR records a settled decision. It is not the brainstorm. Discuss first, then write the `Proposed` SDR.
 
 ## Discussion Phase
 
@@ -58,7 +58,7 @@ If the operator is proposing new syntax, get concrete examples early. Use those 
 
 ## SDR Phase
 
-Create a new SDR instead of rewriting history when the change materially alters ALS meaning. Follow `../../../v1/sdr/AGENTS.md` for file naming, section order, and status values.
+Create a new SDR instead of rewriting history when the change materially alters ALS meaning. Follow `../../../sdr/AGENTS.md` for file naming, section order, and status values.
 
 Write the SDR so an agent can answer:
 
@@ -89,7 +89,7 @@ Update the ALS canonical shape-language documentation after the fixture-first pa
 Do not hardcode the document's home in your reasoning. The location is expected to move.
 
 Current reference location:
-- `../../../v1/alsc/skills/new/references/shape-language.md`
+- `../../../alsc/skills/new/references/shape-language.md`
 
 If that path no longer holds the canonical shape-language documentation:
 - locate the new canonical file before editing

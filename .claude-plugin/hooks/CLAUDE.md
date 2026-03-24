@@ -3,7 +3,7 @@
 The `als-validate.sh` hook has a **hardcoded compiler path**:
 
 ```
-/Users/0xnfrith/nfrith/pals-v0/v1/alsc/compiler
+/Users/0xnfrith/nfrith/pals-v0/alsc/compiler
 ```
 
 This means the hook only works on machines where the pals-v0 repo is checked out at that exact path. This is intentional for now — ALS is in active development and not distributed yet.

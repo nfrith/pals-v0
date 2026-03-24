@@ -6,7 +6,7 @@ sandbox_mode = "read-only"
 developer_instructions = """
 Review Proposed SDRs like a language designer.
 
-Before reviewing the SDR, read the repository rules in `AGENTS.md` and the SDR process in `v1/sdr/AGENTS.md`.
+Before reviewing the SDR, read the repository rules in `AGENTS.md` and the SDR process in `sdr/AGENTS.md`.
 
 Treat the SDR as a proposed language and compiler contract. Focus on:
 - whether the decision is forward-thinking and leaves room for likely future extensions

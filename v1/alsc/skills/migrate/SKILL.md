@@ -107,7 +107,9 @@ Build a complete picture of the active and staged module before attempting any e
 
 This phase is required when `data_migration_required: true`.
 
-1. Clone the full repo or branch to a disposable path in `/tmp`:
+1. Clone the full repo to a disposable path in `/tmp` using `git clone`.
+   - Use a normal disposable git clone of the current repo root so the dry run has ordinary git state and ordinary filesystem cleanup.
+   - Do not use `cp -R` or `git worktree add`.
 
 ```text
 /tmp/als-migrate-<system_id>-<module_id>-vN-to-vN+1-<timestamp>
@@ -123,7 +125,7 @@ This phase is required when `data_migration_required: true`.
 7. Evaluate the dry run:
    - If the script or validation fails for mechanical reasons, fix the canonical script in the live `vN+1` bundle, discard the failed attempt, create a fresh clone, and rerun Phase 2.
    - If the failure is semantic or ambiguous, stop and escalate. Do not guess.
-8. Delete successful clones.
+8. Delete successful clones with ordinary filesystem removal after the dry run passes.
 9. Keep failed clones for inspection until the operator decides otherwise.
 
 If `data_migration_required: false`, skip this phase and record `clone_result: skipped` in `REPORT.md`.
@@ -139,11 +141,13 @@ Never touch live data or `.als/system.yaml` before a final operator approval.
    - that live repo-tracked files will be modified
 2. Require explicit fresh approval.
 3. Track every live file you mutate so rollback can be precise.
+   - Track modified tracked files separately from newly created untracked files.
 4. If `data_migration_required: true`, run the proven primary migration script against the live system root while `.als/system.yaml` still points at `vN`.
 5. Flip the target module in live `.als/system.yaml` to `version: N+1`.
 6. Run whole-system validation.
 7. If validation fails after live mutation:
-   - rollback the files `migrate` touched inside the target system root
+   - restore tracked files touched by the failed cutover with `git restore --worktree --source=HEAD -- <paths...>`
+   - delete any new untracked files created by the failed cutover attempt inside the target system root
    - keep `MANIFEST.md` at `status: staged`
    - keep the staged bundle's migration assets for inspection
    - stop and report the failure

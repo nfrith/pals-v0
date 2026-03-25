@@ -88,7 +88,17 @@ To determine the right pattern, ask:
 - "Which of these change frequently? Which rarely change once set up?"
 - "When you interact with these, is it always the same activity, or are there distinct modes of work?"
 
-Use the answers along with the entity count and hierarchy depth to select a pattern. Name the skills using the operator's vocabulary. Get confirmation that the skill names match how they describe their work.
+Use the answers along with the entity count and hierarchy depth to select a pattern. Name the skills using the operator's vocabulary. Get confirmation that the base skill names match how they describe their work.
+
+Then derive the default canonical ALS skill ids:
+
+- Start from the approved base skill name.
+- Prefix it once with the module id: `<module-id>-<base-skill-name>`.
+- If the base phrase already repeats the module wording, normalize it to one leading prefix instead of doubling it.
+- Check the resulting ids against:
+  - active ALS skill ids already declared elsewhere in the system
+  - existing `.claude/skills/<skill-id>/` target directories
+- If a collision appears, present the problem and recommended alternative ids. The operator chooses the final names.
 
 If the skill decomposition reveals that two entities have completely unrelated lifecycles and no shared invariants, challenge whether they belong in the same module.
 
@@ -177,10 +187,10 @@ Sections:
   run:        OBSERVATIONS, DECISION, NOTES
 
 Skills (lifecycle pattern):
-  setup-program     →  create and configure programs
-  run-experiment    →  create runs, record outcomes
-  review-results    →  read-only queries across all entities
-  manage-experiment →  update status, modify config, archive
+  experiments-setup-program     →  create and configure programs
+  experiments-run-experiment    →  create runs, record outcomes
+  experiments-review-results    →  read-only queries across all entities
+  experiments-manage-experiment →  update status, modify config, archive
 ```
 
 After presenting, ask: **"Does this capture what you need? What would you change?"**
@@ -202,6 +212,19 @@ Once approved, create everything.
 7. Create a `SKILL.md` for each skill at `.als/modules/{module_id}/v1/skills/{skill_name}/SKILL.md`
 8. Create the module's data directory at `{path}/`
 9. Create the subdirectory tree implied by the path templates (empty directories)
+10. Validate the live system.
+11. Preflight Claude projection with empty-target protection:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
+```
+
+12. If the preflight reports target collisions under `.claude/skills/`, stop and resolve the skill ids with the operator before live deploy.
+13. Project the active skill bundle into `.claude/skills/`:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> [module-id]
+```
 
 ### If adding to an existing system
 
@@ -212,6 +235,19 @@ Once approved, create everything.
 5. Create a `SKILL.md` for each skill at `.als/modules/{module_id}/v1/skills/{skill_name}/SKILL.md`
 6. Create the module's data directory at `{path}/`
 7. Create the subdirectory tree implied by the path templates (empty directories)
+8. Validate the live system.
+9. Preflight Claude projection with empty-target protection:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
+```
+
+10. If the preflight reports target collisions under `.claude/skills/`, stop and resolve the skill ids with the operator before live deploy.
+11. Project the active skill bundle into `.claude/skills/`:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> [module-id]
+```
 
 ### Skill authoring
 

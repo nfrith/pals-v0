@@ -318,6 +318,22 @@ test.concurrent("duplicate skill ids surface a stable machine-readable reason", 
   });
 });
 
+test.concurrent("active skill ids must be globally unique across modules", async () => {
+  await withFixtureSandbox("system-skills-global-duplicate", async ({ root }) => {
+    await updateSystemYaml(root, (config) => {
+      const modules = config.modules as Record<string, Record<string, unknown>>;
+      modules["client-registry"].skills = ["backlog-module"];
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_INVALID, ".als/system.yaml");
+    expect(diagnostic.field).toBe("modules.client-registry.skills.0");
+    expect(diagnostic.reason).toBe(reasons.SYSTEM_SKILLS_GLOBAL_DUPLICATE);
+    expect(diagnostic.message).toContain("backlog-module");
+  });
+});
+
 test.concurrent("gaps in active module version history are rejected", async () => {
   await withFixtureSandbox("system-version-history-gap", async ({ root }) => {
     await renamePath(root, ".als/modules/experiments/v2", ".als/modules/experiments/v3");

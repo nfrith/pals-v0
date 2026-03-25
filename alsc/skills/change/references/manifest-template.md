@@ -13,7 +13,7 @@ It does not imply that live records or `.als/system.yaml` have already been migr
 | `manifest_id` | string | yes | stable unique id for this prepared change |
 | `module_id` | string | yes | must match the ALS module id |
 | `module_path` | string | yes | live module data path from `.als/system.yaml` |
-| `skill_paths` | string[] | yes | active `vN+1` skill bundle paths carried or authored by this change; may be empty |
+| `skill_paths` | string[] | yes | full staged future active `vN+1` skill bundle paths; may be empty |
 | `primary_migration_script` | string | yes | repo-root-relative path to the canonical executable migration artifact under `.als/modules/<module_id>/v<to>/migrations/` |
 | `from_version` | integer | yes | active module version before cutover |
 | `to_version` | integer | yes | must equal `from_version + 1` |
@@ -81,13 +81,15 @@ Author these sections in this exact order:
 - `Behavior Changes`: flat bullet list of concrete skill-bundle or interface differences, or explicit statement that the skill bundle is unchanged.
 - `Data Migration Plan`: flat bullet list of required live-data transformations, or explicit statement that no record rewrite is needed.
 - `Behavior Test Plan`: flat bullet list of checks the later migration/cutover flow should prove.
-- `Cutover Gates`: flat bullet list of conditions that must be true before `.als/system.yaml` can point at `to_version`.
+- `Cutover Gates`: flat bullet list of conditions that must be true before `.als/system.yaml` can point at `to_version` and the matching future `skills:` set.
 - `Risks`: flat bullet list of known migration or semantic risks, or explicit statement that no unusual risk is known.
 - `Sign-off`: operator approval summary with approval date and any important notes.
 
 ## Authoring Rules
 
 - `change` authors this manifest from scratch for `vN+1`; it does not copy the previous manifest.
+- `skill_paths` is the authoritative staged future active skill set for `vN+1`.
+- `migrate` later copies `skill_paths` into the module's live `.als/system.yaml` `skills:` when the cutover lands.
 - `primary_migration_script` must point at a file inside the target bundle's `migrations/` directory.
 - `status: staged` means the next bundle is prepared and committed but the live system has not cut over.
 - `status: migrated` is reserved for later migration tooling once live records and the active version have actually moved.

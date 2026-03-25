@@ -39,10 +39,11 @@ The shapes in this fixture use:
 
 - This fixture also demonstrates the ALS-native module bundle layout under `.als/modules/<module>/v1/`.
 - Each module version is treated as a bundle that can hold both `shape.yaml` and `skills/`.
-- `system.yaml` lists module-local skill ids rather than harness-specific file paths.
+- `system.yaml` lists the live active skill ids rather than harness-specific file paths.
 - Each skill lives in its own directory with `SKILL.md` as the entrypoint.
 - The directory form is intentional: skills may later grow supporting files such as `references/`, `assets/`, `scripts/`, or archived notes without changing the top-level module contract.
 - Harness folders like `.claude/` are treated as downstream projections, not the canonical source of module skills.
+- This fixture now checks in the downstream Claude projection under `.claude/skills/`.
 
 ## Module v2 Paint
 

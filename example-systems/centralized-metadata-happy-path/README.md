@@ -29,9 +29,10 @@ ALS language upgrades are intended to cut over the whole system version, while m
 2. `.als/modules/<module>/vN/shape.yaml`
 3. `.als/modules/<module>/vN/skills/<skill>/SKILL.md`
 4. `.als/modules/<module>/vN/migrations/` for `N > 1`
-5. `<module-path>/...` data records
+5. `.claude/skills/<skill>/SKILL.md` as the checked-in downstream Claude projection
+6. `<module-path>/...` data records
 
-This fixture now treats `.als/` as the canonical source for module skills. Harness projections such as `.claude/` are downstream concerns rather than authored ALS source.
+This fixture now treats `.als/` as the canonical source for module skills and checks in `.claude/skills/` as the downstream Claude projection.
 
 ## Tradeoff This Fixture Is Testing
 

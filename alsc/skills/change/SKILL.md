@@ -10,7 +10,7 @@ Prepare the next version of an ALS v1 module bundle through structured discovery
 `change` is the v1 successor to v0 `als-mutate`.
 
 It prepares a committed `vN+1/` bundle under `.als/modules/<module_id>/` and stops there.
-It does not modify `.als/system.yaml`, does not touch live records, and does not execute the migration.
+It does not modify `.als/system.yaml`, does not touch live records, does not execute the migration, and does not live-deploy `.claude/skills/`.
 
 ## Input
 
@@ -43,7 +43,7 @@ Use `manifest-template.md` as the manifest contract for `vN+1/migrations/MANIFES
 - Validates that the current live system is clean before authoring
 - Creates the next module version bundle at `.als/modules/<module_id>/vN+1/`
 - Updates the next bundle's `shape.yaml`
-- Copies the active skill bundle forward and updates it only when the approved change requires it
+- Authors the staged future active skill bundle under `vN+1/skills/`
 - Authors a fresh `migrations/` directory with:
   - `MANIFEST.md`
   - at least one additional migration artifact
@@ -55,6 +55,7 @@ Use `manifest-template.md` as the manifest contract for `vN+1/migrations/MANIFES
 - Change the module's active `version`
 - Modify any live module records
 - Execute migration scripts
+- Live-deploy or delete `.claude/skills/`
 - Reuse the previous bundle's `migrations/` directory
 - Overwrite an existing future `vN+1/` bundle without explicit operator review
 
@@ -154,7 +155,8 @@ Return to the active module with the confirmed interview summary in mind.
    - sections added, removed, renamed, or reordered
    - enum values added, removed, or renamed
    - path-template, lineage, or identity changes
-   - skill-bundle behavior or scope changes
+  - skill ids added, removed, or renamed
+  - skill-bundle behavior or scope changes
 3. Classify the change as one of:
    - `logic_only`
    - `schema_only`
@@ -180,7 +182,7 @@ Create:
 ```text
 .als/modules/<module_id>/vN+1/
 ├── shape.yaml
-├── skills/                  # omit entirely when the active module declares skills: []
+├── skills/                  # omit entirely only when the staged future active skill set is empty
 │   └── <skill_id>/...
 └── migrations/
     ├── MANIFEST.md
@@ -193,9 +195,12 @@ Create:
    - Start from `.als/modules/<module_id>/vN/shape.yaml`.
    - Write the agreed `vN+1` shape by editing the copy.
 
-2. **Copy the active skill bundle forward.**
-   - Copy every active skill directory listed in `.als/system.yaml` from `vN` into `vN+1`.
-   - If `skills: []`, omit `vN+1/skills/` entirely.
+2. **Author the staged future active skill bundle.**
+   - Start from the active skill bundle as the baseline.
+   - The `vN+1/skills/` directory must reflect the full future active skill set, not merely the current live one.
+   - Carry forward unchanged skills when appropriate.
+   - Add, remove, or rename skill directories when the approved change requires it.
+   - New generated skill ids should default to `<module-id>-<base-skill-name>` with redundant module wording normalized once.
    - Change copied skill files only when the approved mutation changes the module's actual behavior, interface, or constraints.
 
 3. **Create a fresh migrations directory.**
@@ -205,23 +210,28 @@ Create:
 4. **Author the manifest from scratch.**
    - Use `references/manifest-template.md`.
    - Populate every field and section completely.
-   - Record `skill_paths` for the carried-forward active skill directories in `vN+1`.
-   - If the module declares `skills: []`, use `skill_paths: []`.
+   - Record `skill_paths` for the full staged future active skill directories in `vN+1`.
+   - `skill_paths` is the authoritative staged future active skill set that `migrate` will later copy into `.als/system.yaml` `skills:`.
+   - If the staged future active skill set is empty, use `skill_paths: []`.
    - Set `primary_migration_script` to the repo-root-relative path of the primary migration artifact created in `vN+1/migrations/`.
    - Set manifest `status: staged`.
    - Do not leave unresolved questions in the manifest.
 
-5. **Always create one additional migration artifact.**
+5. **Preflight the future skill namespace.**
+   - Confirm the staged future active skill ids would remain globally unique if `vN+1` became live.
+   - Do not live-deploy `.claude/skills/` during `change`.
+
+6. **Always create one additional migration artifact.**
    - `MANIFEST.md` alone is invalid for `vN+1`.
    - The default extra artifact is a placeholder migration script such as `migrate_from_vN.py`.
    - The artifact named by `primary_migration_script` is the canonical handoff target for later `migrate` work.
    - Treat script language as "best tool for the job," with Python as the default for simple placeholder stubs.
 
-6. **Capture migration intent, not execution.**
+7. **Capture migration intent, not execution.**
    - If live data will need transformation, record the plan in the manifest and the placeholder script.
    - `change` prepares the rewrite contract; it does not execute it.
 
-7. **Do not author cosmetic churn.**
+8. **Do not author cosmetic churn.**
    - No unrelated cleanup.
    - No reformat-only edits.
    - The diff between `vN` and `vN+1` must reflect only the confirmed change.

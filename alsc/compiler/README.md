@@ -7,6 +7,7 @@ Each system also declares one active `als_version`. This compiler currently supp
 
 Shape files are inferred by convention as `.als/modules/<module-id>/v<version>/shape.yaml`.
 Each active module version may also carry canonical skill bundles under `skills/`.
+Active skill ids must be globally unique across the live system.
 Every required module version above `v1` must also carry inbound migration assets under `migrations/`.
 Authored ALS source YAML does not carry a top-level `schema` field.
 
@@ -21,6 +22,20 @@ Optional module filter:
 
 ```bash
 bun run src/index.ts ../../example-systems/centralized-metadata-happy-path backlog
+```
+
+Claude projection:
+
+```bash
+cd alsc/compiler
+bun run src/deploy.ts ../../example-systems/centralized-metadata-happy-path
+```
+
+Collision-preflight for `/new`-style empty targets:
+
+```bash
+cd alsc/compiler
+bun run src/deploy.ts --dry-run --require-empty-targets ../../example-systems/centralized-metadata-happy-path backlog
 ```
 
 ## Output Contract

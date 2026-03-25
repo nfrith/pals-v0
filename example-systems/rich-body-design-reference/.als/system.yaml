@@ -6,34 +6,34 @@ modules:
     path: workspace/people
     version: 1
     skills:
-      - people
+      - people-module
 
   incident-response:
     path: workspace/incident-response
     version: 1
     skills:
-      - incident-response
+      - incident-response-module
 
   operations:
     path: workspace/operations
     version: 1
     skills:
-      - operations
+      - operations-module
 
   research:
     path: workspace/research
     version: 1
     skills:
-      - research
+      - research-module
 
   planning:
     path: workspace/planning
     version: 1
     skills:
-      - planning
+      - planning-module
 
   evals:
     path: workspace/evals
     version: 1
     skills:
-      - evals
+      - evals-module

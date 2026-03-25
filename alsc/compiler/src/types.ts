@@ -73,3 +73,35 @@ export interface SystemValidationOutput {
     warning_count: number;
   };
 }
+
+export interface ClaudeSkillProjectionPlan {
+  module_id: string;
+  module_version: number;
+  skill_id: string;
+  source_dir: string;
+  target_dir: string;
+}
+
+export interface ClaudeSkillProjectionCollision {
+  module_id: string;
+  skill_id: string;
+  source_dir: string;
+  target_dir: string;
+  target_kind: "file" | "directory";
+}
+
+export interface ClaudeSkillDeployOutput {
+  schema: string;
+  status: "pass" | "fail";
+  system_path: string;
+  generated_at: string;
+  validation_status: "pass" | "warn" | "fail";
+  module_filter: string | null;
+  dry_run: boolean;
+  require_empty_targets: boolean;
+  planned_skill_count: number;
+  written_skill_count: number;
+  planned_skills: ClaudeSkillProjectionPlan[];
+  existing_targets: ClaudeSkillProjectionCollision[];
+  error: string | null;
+}

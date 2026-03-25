@@ -36,7 +36,7 @@ modules:
     path: infra
     version: 1
     skills:
-      - provision-infra
-      - deploy-release
-      - inspect-infra
-      - maintain-infra
+      - infra-provision
+      - infra-deploy-release
+      - infra-inspect
+      - infra-maintain

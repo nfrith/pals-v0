@@ -537,6 +537,7 @@ export const systemConfigSchema = z.object({
   modules: z.record(entityName, systemModuleConfigSchema),
 }).superRefine((value, ctx) => {
   const seenModulePaths: Array<{ module_id: string; path: string; segments: string[] }> = [];
+  const seenActiveSkills = new Map<string, { module_id: string }>();
 
   for (const [moduleId, moduleConfig] of Object.entries(value.modules)) {
     const modulePathSegments = splitModuleMountPath(moduleConfig.path);
@@ -570,6 +571,20 @@ export const systemConfigSchema = z.object({
         });
       }
       seenSkills.add(skillId);
+
+      const firstOwner = seenActiveSkills.get(skillId);
+      if (firstOwner && firstOwner.module_id !== moduleId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `active skill ${skillId} is already used by module ${firstOwner.module_id}`,
+          path: ["modules", moduleId, "skills", skillIndex],
+        });
+        return;
+      }
+
+      if (!firstOwner) {
+        seenActiveSkills.set(skillId, { module_id: moduleId });
+      }
     });
   }
 });

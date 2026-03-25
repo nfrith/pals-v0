@@ -1,6 +1,6 @@
 # ALS v1 Current State And Next Steps
 
-This note is a refreshed point-in-time snapshot of the ALS v1 repo state as of 2026-03-24.
+This note is a refreshed point-in-time snapshot of the ALS v1 repo state as of 2026-03-25.
 
 It replaces the earlier pre-release framing that only covered the first round of production-evolution follow-up work. Since that snapshot, the repo has landed additional SDRs, compiler behavior, fixtures, and migration workflow material. The goal here is to separate what is now done, what is only partially in place, and what is still genuinely open.
 
@@ -37,6 +37,10 @@ It replaces the earlier pre-release framing that only covered the first round of
   - active version history must be contiguous from `v1` through the declared version
   - active skill entrypoints live under `vN/skills/<skill_id>/SKILL.md`
   - required module versions above `v1` must carry inbound migration assets under `vN/migrations/`
+- Claude Code skill projection now exists as a first downstream bridge:
+  - active skill ids must be globally unique across the live system
+  - the compiler now exposes a deterministic Claude deploy command
+  - example systems now check in `.claude/skills/` as downstream projected output
 - Module migration workflow has returned in v1 form:
   - `change` is the successor to v0 `als-mutate`
   - `migrate` is the successor to v0 `als-migrate`
@@ -91,9 +95,13 @@ It replaces the earlier pre-release framing that only covered the first round of
 - Deprecation is still effectively binary:
   - the compiler does not currently emit warning diagnostics
   - there is still no real deprecation lifecycle support
-- Skill projection and migration lifecycle are still incomplete beyond the current canonical bundle contract.
+- Skill projection now exists for Claude Code, but the richer harness-format design is still incomplete.
 - `test-migration` is still intentionally unimplemented as a separate wrapper; `migrate` currently owns both dry-run and live-cutover flow.
 - The repo still does not have a settled practical boundary for how far automation should go before semantic review is required.
+- The format-gap questions for harness-specific skill metadata are still open:
+  - where harness-specific frontmatter fields are declared
+  - when `alsc/skills/new` decides those fields during authoring
+  - how future harnesses such as Codex should fit the projection model
 
 ## 5. Next Meaningful Steps
 
@@ -105,6 +113,7 @@ It replaces the earlier pre-release framing that only covered the first round of
 - Decide and implement a production-safe answer for filtered validation, so partial runs are either trustworthy or explicitly scoped to something weaker than full validation.
 - Add a real warning and deprecation lifecycle instead of keeping warnings as unused output plumbing.
 - Decide how much more migration meaning should become first-class in ALS itself versus remaining in skill-driven workflow and bundle conventions.
+- Decide where harness-specific frontmatter fields should live and how multi-harness projection should be modeled before broadening beyond Claude Code.
 - Keep tightening machine-readable output compatibility discipline before external tooling starts depending on it heavily.
 
 ## 6. Practical Reading Of The Current State

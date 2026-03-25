@@ -44,7 +44,8 @@ Use `report-template.md` as the contract for `vN+1/migrations/REPORT.md`.
 - Validates the manifest surface before migration begins
 - Completes or replaces the canonical migration script when the staged script is only a placeholder
 - Dry-runs rewrite migrations against a full disposable clone in `/tmp`
-- Executes the live migration and flips the module's active version in `.als/system.yaml`
+- Executes the live migration and flips the module's active version and active `skills:` in `.als/system.yaml`
+- Projects the new active skill set into `.claude/skills/`
 - Updates `MANIFEST.md` to `status: migrated`
 - Authors or updates `REPORT.md`
 - Commits the successful cutover
@@ -81,6 +82,7 @@ bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/index.ts <system-root>
     - `status` is `staged`
     - `from_version` matches live `vN`
     - `to_version` equals `vN+1`
+    - `skill_paths` is present and every path points at a directory under `.als/modules/<module_id>/vN+1/skills/`
     - `primary_migration_script` exists and points at a file under `.als/modules/<module_id>/vN+1/migrations/`
     - required H2 sections exist in the exact declared order
 11. Read `REPORT.md` if it already exists; otherwise plan to create it from `references/report-template.md`.
@@ -90,18 +92,19 @@ bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/index.ts <system-root>
 Build a complete picture of the active and staged module before attempting any execution.
 
 1. Read the active `vN` shape, the staged `vN+1` shape, the live module data path from `.als/system.yaml`, and the manifest end to end.
-2. Read the active skill bundle and the staged skill bundle to understand whether behavior changed or remained intentionally stable.
-3. Read concrete live records from the target module.
-4. Read cross-module reference context needed to understand rewrite safety, but do not plan to mutate external-module records.
-5. Read the file named by `primary_migration_script`.
-6. If `data_migration_required: true` and the script is only a placeholder or is incomplete, finish it now.
+2. Treat manifest `skill_paths` as the staged future active skill set for `vN+1`.
+3. Read the active skill bundle and the staged future skill bundle to understand whether behavior changed or remained intentionally stable.
+4. Read concrete live records from the target module.
+5. Read cross-module reference context needed to understand rewrite safety, but do not plan to mutate external-module records.
+6. Read the file named by `primary_migration_script`.
+7. If `data_migration_required: true` and the script is only a placeholder or is incomplete, finish it now.
    - The canonical script should accept the ALS system root as its first positional argument.
    - It should resolve the target module path from `.als/system.yaml`.
    - It must be deterministic.
    - It must be idempotent.
    - It must log what it changed.
    - It must exit non-zero on failure.
-7. If safe cutover would require rewriting records outside the target module, stop and escalate to the operator. That is out of scope for module-level `migrate`.
+8. If safe cutover would require rewriting records outside the target module, stop and escalate to the operator. That is out of scope for module-level `migrate`.
 
 ### Phase 2 — Dry Run On A Disposable Clone
 
@@ -117,16 +120,22 @@ This phase is required when `data_migration_required: true`.
 
 2. Create or update `REPORT.md` with preflight results and clone execution tracking.
 3. Run the primary migration script against the cloned system root while the clone still points at `vN`.
-4. Flip the cloned target module entry in `.als/system.yaml` to `version: N+1`.
+4. Flip the cloned target module entry in `.als/system.yaml` to `version: N+1` and `skills:` matching manifest `skill_paths`.
 5. Run whole-system validation against the clone.
-6. Execute the manifest's `Behavior Test Plan`.
+6. Project the cloned target module's active skills into `.claude/skills/`.
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <clone-root> <module-id>
+```
+
+7. Execute the manifest's `Behavior Test Plan`.
    - By default this is an operator checklist.
    - If the staged bundle includes concrete test scripts or commands, run them and record the results.
-7. Evaluate the dry run:
+8. Evaluate the dry run:
    - If the script or validation fails for mechanical reasons, fix the canonical script in the live `vN+1` bundle, discard the failed attempt, create a fresh clone, and rerun Phase 2.
    - If the failure is semantic or ambiguous, stop and escalate. Do not guess.
-8. Delete successful clones with ordinary filesystem removal after the dry run passes.
-9. Keep failed clones for inspection until the operator decides otherwise.
+9. Delete successful clones with ordinary filesystem removal after the dry run passes.
+10. Keep failed clones for inspection until the operator decides otherwise.
 
 If `data_migration_required: false`, skip this phase and record `clone_result: skipped` in `REPORT.md`.
 
@@ -142,8 +151,9 @@ Never touch live data or `.als/system.yaml` before a final operator approval.
 2. Require explicit fresh approval.
 3. Track every live file you mutate so rollback can be precise.
    - Track modified tracked files separately from newly created untracked files.
+   - Include `.claude/skills/` changes in that tracking.
 4. If `data_migration_required: true`, run the proven primary migration script against the live system root while `.als/system.yaml` still points at `vN`.
-5. Flip the target module in live `.als/system.yaml` to `version: N+1`.
+5. Flip the target module in live `.als/system.yaml` to `version: N+1` and `skills:` matching manifest `skill_paths`.
 6. Run whole-system validation.
 7. If validation fails after live mutation:
    - restore tracked files touched by the failed cutover with `git restore --worktree --source=HEAD -- <paths...>`
@@ -151,7 +161,21 @@ Never touch live data or `.als/system.yaml` before a final operator approval.
    - keep `MANIFEST.md` at `status: staged`
    - keep the staged bundle's migration assets for inspection
    - stop and report the failure
-8. If validation passes:
+8. If validation passes, project the target module's active skills into `.claude/skills/`.
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> <module-id>
+```
+
+   - Overwrite projected dirs for skills in the new active set.
+   - Delete projected dirs for old active skill ids retired or renamed by this module cutover.
+9. If projection fails after validation:
+   - restore tracked files touched by the failed cutover with `git restore --worktree --source=HEAD -- <paths...>`
+   - delete any new untracked files created by the failed cutover attempt inside the target system root
+   - keep `MANIFEST.md` at `status: staged`
+   - keep the staged bundle's migration assets for inspection
+   - stop and report the failure
+10. If validation and projection both pass:
    - update `MANIFEST.md` to `status: migrated`
    - update `updated_on` in `MANIFEST.md`
    - finalize `REPORT.md` with clone/live outcomes
@@ -168,7 +192,8 @@ migrate: cut over <module_id> vN to vN+1
 The successful cutover commit should include only:
 
 - live target-module record changes
-- the target module's version flip in `.als/system.yaml`
+- the target module's version and `skills:` flip in `.als/system.yaml`
+- `.claude/skills/` changes for the target module's cutover
 - `vN+1/migrations/MANIFEST.md`
 - `vN+1/migrations/REPORT.md`
 - the finalized primary migration script and directly related migration assets in the target bundle

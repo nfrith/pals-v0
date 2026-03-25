@@ -38,6 +38,14 @@ import {
   type SystemConfig,
   type VariantEntityShape,
 } from "./schema.ts";
+import {
+  inferredMigrationsPath,
+  inferredModuleBundlePath,
+  inferredShapePath,
+  inferredSkillEntryPath,
+  inferredSkillsPath,
+  toRepoRelative,
+} from "./system-paths.ts";
 import type { CompilerDiagnostic, ModuleValidationReport, ModuleValidationSummary, SystemValidationOutput } from "./types.ts";
 
 interface LoadedModuleContext {
@@ -117,36 +125,72 @@ export interface EffectiveEntityContractContext {
   shape_file: string;
 }
 
+export interface LoadedSystemValidationContext {
+  system_root_abs: string;
+  system_root_rel: string;
+  system_config_path_abs: string;
+  system_config: SystemConfig | null;
+  als_version: number | null;
+  initial_diagnostics: CompilerDiagnostic[];
+}
+
 export function validateSystem(systemRootInput: string, moduleFilter?: string): SystemValidationOutput {
+  return validateLoadedSystem(loadSystemValidationContext(systemRootInput), moduleFilter);
+}
+
+export function loadSystemValidationContext(systemRootInput: string): LoadedSystemValidationContext {
   const systemRootAbs = resolve(systemRootInput);
   const systemRootRel = toRepoRelative(systemRootAbs);
-  const systemDiagnostics: CompilerDiagnostic[] = [];
-  const moduleReports: ModuleValidationReport[] = [];
-
   const systemConfigPathAbs = resolve(systemRootAbs, ".als/system.yaml");
   const parsedSystem = parseYamlFile<SystemConfig>(systemConfigPathAbs, systemConfigSchema, "system_config", codes.SYSTEM_INVALID, null);
 
   if (!parsedSystem.success) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(parsedSystem.diagnostics), moduleReports, null);
+    return {
+      system_root_abs: systemRootAbs,
+      system_root_rel: systemRootRel,
+      system_config_path_abs: systemConfigPathAbs,
+      system_config: null,
+      als_version: null,
+      initial_diagnostics: parsedSystem.diagnostics,
+    };
   }
 
   const systemConfig = parsedSystem.data;
   const alsVersionDiagnostics = validateAlsVersionSupport(systemConfig, systemConfigPathAbs);
-  if (alsVersionDiagnostics.length > 0) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(alsVersionDiagnostics), moduleReports, systemConfig.als_version);
+  return {
+    system_root_abs: systemRootAbs,
+    system_root_rel: systemRootRel,
+    system_config_path_abs: systemConfigPathAbs,
+    system_config: systemConfig,
+    als_version: systemConfig.als_version,
+    initial_diagnostics: alsVersionDiagnostics,
+  };
+}
+
+export function validateLoadedSystem(
+  context: LoadedSystemValidationContext,
+  moduleFilter?: string,
+): SystemValidationOutput {
+  const systemDiagnostics: CompilerDiagnostic[] = [...context.initial_diagnostics];
+  const moduleReports: ModuleValidationReport[] = [];
+
+  if (!context.system_config || systemDiagnostics.length > 0) {
+    return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, context.als_version);
   }
 
-  const selectedModuleIds = getSelectedModuleIds(systemConfig, moduleFilter, systemConfigPathAbs, systemDiagnostics);
+  const systemConfig = context.system_config;
+
+  const selectedModuleIds = getSelectedModuleIds(systemConfig, moduleFilter, context.system_config_path_abs, systemDiagnostics);
   if (selectedModuleIds.length === 0) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports, systemConfig.als_version);
+    return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, systemConfig.als_version);
   }
 
-  const layoutDiagnostics = validateSystemLayout(systemRootAbs, systemConfig);
+  const layoutDiagnostics = validateSystemLayout(context.system_root_abs, systemConfig);
   if (layoutDiagnostics.length > 0) {
-    return buildSystemOutput(systemRootRel, systemDiagnostics.concat(layoutDiagnostics), moduleReports, systemConfig.als_version);
+    return buildSystemOutput(context.system_root_rel, systemDiagnostics.concat(layoutDiagnostics), moduleReports, systemConfig.als_version);
   }
 
-  const moduleStates = selectedModuleIds.map((moduleId) => loadModuleState(systemRootAbs, systemConfig, moduleId));
+  const moduleStates = selectedModuleIds.map((moduleId) => loadModuleState(context.system_root_abs, systemConfig, moduleId));
   const stateByModuleId = new Map(moduleStates.map((state) => [state.module_id, state]));
 
   const recordsByUri = new Map<string, ParsedRecord[]>();
@@ -206,7 +250,7 @@ export function validateSystem(systemRootInput: string, moduleFilter?: string): 
     );
   }
 
-  return buildSystemOutput(systemRootRel, systemDiagnostics, moduleReports, systemConfig.als_version);
+  return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, systemConfig.als_version);
 }
 
 function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, moduleId: string): ModuleWorkState {
@@ -1392,26 +1436,6 @@ function validateSystemLayout(
   return diagnostics;
 }
 
-function inferredShapePath(moduleId: string, version: number): string {
-  return `${inferredModuleBundlePath(moduleId, version)}/shape.yaml`;
-}
-
-function inferredModuleBundlePath(moduleId: string, version: number): string {
-  return `.als/modules/${moduleId}/v${version}`;
-}
-
-function inferredSkillsPath(moduleId: string, version: number): string {
-  return `${inferredModuleBundlePath(moduleId, version)}/skills`;
-}
-
-function inferredSkillEntryPath(moduleId: string, version: number, skillId: string): string {
-  return `${inferredSkillsPath(moduleId, version)}/${skillId}/SKILL.md`;
-}
-
-function inferredMigrationsPath(moduleId: string, version: number): string {
-  return `${inferredModuleBundlePath(moduleId, version)}/migrations`;
-}
-
 function validateRequiredModuleBundles(systemRootAbs: string, moduleId: string, activeVersion: number): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
 
@@ -2037,6 +2061,9 @@ function resolveParseIssueReason(
     && issue.path[0] === "modules"
     && issue.path[2] === "skills"
   ) {
+    if (typeof issue.message === "string" && issue.message.includes("already used by module")) {
+      return reasons.SYSTEM_SKILLS_GLOBAL_DUPLICATE;
+    }
     return reasons.SYSTEM_SKILLS_DUPLICATE;
   }
 
@@ -2266,10 +2293,6 @@ function findAdditionalMigrationArtifact(
   }
 
   return { found: false, error: null };
-}
-
-function toRepoRelative(pathAbs: string): string {
-  return relative(process.cwd(), pathAbs).replace(/\\/g, "/") || ".";
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

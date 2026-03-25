@@ -28,10 +28,10 @@ remove-{module}   →  removes any entity type
 One skill per domain activity. Skill names come from the domain vocabulary, not generic verbs.
 
 ```
-provision-infra   →  stands up new infrastructure
-deploy-release    →  manages the release lifecycle
-inspect-infra     →  queries state
-maintain-infra    →  day-2 ops, config changes, decommission
+infra-provision        →  stands up new infrastructure
+infra-deploy-release   →  manages the release lifecycle
+infra-inspect          →  queries state
+infra-maintain         →  day-2 ops, config changes, decommission
 ```
 
 **When it fits**: Modules where entities share a hierarchy but have distinct operational phases. The operator thinks in activities ("I need to provision," "I need to deploy"), not in CRUD verbs.
@@ -45,9 +45,9 @@ maintain-infra    →  day-2 ops, config changes, decommission
 One skill per entity cluster. Read access is separated out.
 
 ```
-manage-topology   →  CRUD for regions, clusters, services (structural, low-churn)
-manage-releases   →  CRUD for releases (operational, high-churn)
-inspect-infra     →  read-only across everything
+infra-manage-topology  →  CRUD for regions, clusters, services (structural, low-churn)
+infra-manage-releases  →  CRUD for releases (operational, high-churn)
+infra-inspect          →  read-only across everything
 ```
 
 **When it fits**: Modules where you can identify sub-aggregates — groups of entities that change together at the same cadence and enforce the same invariants.
@@ -78,3 +78,7 @@ breaks first on complex modules         holds longest
 Skill names should come from the operator's vocabulary, not from technical jargon. Ask the operator what they call these activities. A devops person says "provision" and "deploy," not "create" and "update."
 
 For CRUD-pattern modules with a single entity type, simple verb-based names are fine: `create-{module}`, `get-{module}`, `update-{module}`, `remove-{module}`.
+
+Treat those operator phrases as the base skill names. The default canonical ALS skill id should be `<module-id>-<base-skill-name>`.
+
+Normalize redundant module wording once. For an `infra` module, prefer `infra-maintain` over `infra-maintain-infra`.

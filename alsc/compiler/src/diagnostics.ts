@@ -57,6 +57,7 @@ export const reasons = {
   SYSTEM_ALS_VERSION_UNSUPPORTED: "system.als_version.unsupported",
   SYSTEM_SKILL_REMOVED: "system.skill.removed",
   SYSTEM_SKILLS_DUPLICATE: "system.skills.duplicate",
+  SYSTEM_SKILLS_GLOBAL_DUPLICATE: "system.skills.global_duplicate",
   SYSTEM_SCHEMA_REMOVED: "system.schema.removed",
   SYSTEM_MODULE_BUNDLE_MISSING: "system.module_bundle.missing",
   SYSTEM_MODULE_BUNDLE_NOT_DIRECTORY: "system.module_bundle.not_directory",

@@ -23,6 +23,7 @@ It exists alongside `centralized-metadata-happy-path`, not as a replacement for 
 - That means these shape files are design-reference material first. They are not intended to be the current compiler smoke target before the new body model is implemented.
 - The current draft in this fixture uses `body.title.source.kind`, `content.mode: freeform | outline`, exact `outline.nodes`, and `outline.preamble` where prose is allowed before the first required heading.
 - The fixture now also uses the canonical ALS module-bundle layout under `.als/modules/<module>/vN/` with in-bundle skill directories.
+- It also checks in the downstream Claude projection under `.claude/skills/` while keeping `.als/` canonical.
 
 ## Modules
 

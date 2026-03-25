@@ -14,7 +14,7 @@ modules:
   people:                             # module id, kebab-case
     path: workspace/people            # module mount path relative to the system root
     version: 1                        # currently deployed shape version
-    skills:                           # active skill ids for the active module version
+    skills:                           # live active skill ids for the active module version
       - people-module
 ```
 
@@ -26,8 +26,9 @@ Rules:
 - Module ids must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
 - Module `path` is a normalized relative path from the system root made of one or more slash-separated slug segments
 - Each `path` segment must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
-- Module `skills` is a required array of module-local skill ids and may be empty
+- Module `skills` is a required array of live active skill ids and may be empty
 - Each skill id must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
+- Active skill ids must be globally unique across the live system
 - Module paths cannot be absolute, contain empty segments, contain `.` or `..`, or contain hidden segments like `.pals`
 - The module's data lives at `{path}/`
 - The module subtree may contain reserved non-record markdown files named `AGENTS.md` or `CLAUDE.md` at any depth
@@ -65,7 +66,7 @@ entities:
 
 Rules:
 - Every required module version bundle contains `shape.yaml`
-- The active skill interface is declared in `.als/system.yaml`, but the canonical skill bundles live under `skills/{skill_id}/SKILL.md`
+- The live active skill interface is declared in `.als/system.yaml`, but the canonical skill bundles live under `skills/{skill_id}/SKILL.md`
 - Migration assets for `vK > 1` live under `migrations/` in the target bundle `vK`
 - `dependencies`: list modules whose entities are referenced by this module's ref fields. If a ref targets another module, that module must be listed here.
 - `entities`: keyed by entity name matching `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
@@ -566,6 +567,8 @@ Rules:
 - `system_id` can be any non-empty string; `kebab-case` is recommended but not enforced
 - Section names can be any non-empty string; `UPPER_SNAKE_CASE` is recommended
 - Record ids: any non-empty string, but must match filename stem
+- Authoring workflows should default skill ids to `<module-id>-<base-skill-name>`
+- When the base phrase already repeats the module name, normalize it to one leading module prefix rather than doubling it
 
 ## What a record file looks like
 

@@ -27,7 +27,7 @@ The compiler can validate all modules or a single module.
 ## Run the compiler
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/index.ts <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/index.ts <system-root> [module-id]
 ```
 
 The compiler outputs JSON to stdout. Exit code 0 means pass, exit code 1 means fail.

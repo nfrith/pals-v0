@@ -64,8 +64,11 @@ case $exit_code in
     echo "ALS: module '$module_id' validates OK"
     ;;
   1)
-    # Validation failed — feed compiler output back to Claude
-    echo "$output" >&2
+    # Validation failed — structured block decision with compiler diagnostics
+    reason="ALS validation failed for module '$module_id'. STOP: fix all errors before making any more edits."
+    echo "$output" | jq --arg reason "$reason" \
+      '{decision: "block", reason: $reason, hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: .}}' 2>/dev/null \
+    || echo "{\"decision\":\"block\",\"reason\":\"$reason\"}"
     exit 2
     ;;
   *)

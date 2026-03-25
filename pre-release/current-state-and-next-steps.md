@@ -1,80 +1,115 @@
 # ALS v1 Current State And Next Steps
 
-This note is a point-in-time pre-release snapshot captured on 2026-03-24. It should not be maintained as a living status document. As the referenced work lands elsewhere and the open items are resolved, this note should be deleted rather than updated in place.
+This note is a refreshed point-in-time snapshot of the ALS v1 repo state as of 2026-03-24.
 
-This note captures where the ALS v1 pre-release work currently stands after the production-evolution review, the migration-model discussion, and the first round of compiler/spec changes.
+It replaces the earlier pre-release framing that only covered the first round of production-evolution follow-up work. Since that snapshot, the repo has landed additional SDRs, compiler behavior, fixtures, and migration workflow material. The goal here is to separate what is now done, what is only partially in place, and what is still genuinely open.
 
 ---
 
-## 1. Where We Are Now
+## 1. Current State
 
-- The pre-release review surfaced one dominant problem: ALS v1 does not yet have a production evolution model.
-- That problem showed up repeatedly in different forms: no migration path, no coexistence model, additive changes acting like breaking changes, and weak machine-readable support for upgrade tooling.
-- The core distinction is now clear:
-  - Module-schema migration is one problem.
-  - ALS language-version migration is a separate problem.
-- The first foundation work for ALS language-version handling has started:
-  - `als_version` now exists as the authored source version signal.
-  - The compiler rejects unsupported ALS versions before module loading.
-  - Validator output now has an explicit versioned contract.
-  - Diagnostics now support machine-readable `reason` values for tooling.
-  - Source-file `schema` was removed from authored ALS YAML to avoid a permanent second version knob.
-  - Versioned validator output is now in place, but output compatibility still requires explicit discipline if external tooling starts to depend on it.
+- ALS v1 now has a materially stronger versioning and evolution foundation than the original pre-release note captured.
+- The repo no longer only has language-version groundwork. It also now has:
+  - accepted SDRs for ALS versioning, identity stability, validation output, module version bundles, canonical skills, and richer body semantics
+  - compiler enforcement for the current ALS v1 source contract
+  - example systems and smoke fixtures that validate clean under the current compiler
+  - an explicit module-version change and migrate workflow at the skill and fixture level
+- The center of gravity is still ALS v1, and `example-systems/centralized-metadata-happy-path/` remains the working reference implementation.
+- At the same time, the repo now also has compiler-valid rich-body fixtures that exercise the newer body contract rather than leaving it as design-only paint.
 
-## 2. Decisions Already Made
+## 2. Done
 
-- ALS language-version upgrades use a whole-system cutover model.
-- One system targets one ALS version at a time.
-- Long-lived mixed ALS versions inside one system are out of scope.
-- Module-schema migration and ALS language-version migration must be treated as different systems.
-- Module-schema migration remains the more classical problem and should follow the v0 `als-mutate` / `als-migrate` pattern.
-- ALS language-version migration is the harder problem and should be treated like framework or language upgrades:
-  - deterministic rewrite tools for mechanical changes
-  - supervised agent-guided handling for semantic cases
-- `als_version` is the only authored source version signal.
-- Source-file `schema` is intentionally gone from `system.yaml` and module shape YAML.
-- Output `schema` stays because validator JSON is consumed out of context and benefits from being self-describing.
+- ALS language-version contract foundation is in place:
+  - `.als/system.yaml` requires `als_version`
+  - authored ALS source no longer uses a top-level `schema` field
+  - unsupported ALS versions fail before module loading
+  - validation output is versioned as `als-validation-output@1`
+  - validation output includes `als_version`, supported ALS versions, and the compiler upgrade contract
+- The core ALS versioning decisions are now explicit and accepted:
+  - one system targets one ALS version at a time
+  - ALS language-version upgrades are whole-system cutovers
+  - long-lived mixed ALS versions inside one system are out of scope
+  - identity-significant public surfaces are treated as stable API unless upgrade tooling rewrites them explicitly
+  - upgrade work is framed as either deterministic mechanical rewrite or semantic-assisted work
+- Module version bundles and canonical in-ALS skill bundles are implemented:
+  - active module shapes resolve from `.als/modules/<module_id>/vN/shape.yaml`
+  - `.als/system.yaml` now uses `skills`, not singular `skill`
+  - active version history must be contiguous from `v1` through the declared version
+  - active skill entrypoints live under `vN/skills/<skill_id>/SKILL.md`
+  - required module versions above `v1` must carry inbound migration assets under `vN/migrations/`
+- Module migration workflow has returned in v1 form:
+  - `change` is the successor to v0 `als-mutate`
+  - `migrate` is the successor to v0 `als-migrate`
+  - manifest and report contracts now exist
+  - the repo includes a completed `evaluations v1 -> v2` cutover example in `example-systems/rich-body-content/`
+- Rich body semantics are no longer just future discussion:
+  - unified `freeform` and `outline` body contracts landed
+  - explicit title and preamble regions landed
+  - GFM table blocks landed
+  - curated markdown rejection semantics landed for raw HTML, reference-style syntax, and thematic breaks
+  - the compiler test suite covers these rules
+- The fixture state is stronger than the earlier note reflected:
+  - `centralized-metadata-happy-path` validates clean
+  - `rich-body-content` validates clean
+  - `rich-body-design-reference` validates clean
+- Repo cleanup that changes the practical current state has also landed:
+  - the deprecated v0 tree is gone
+  - the repo was flattened by removing the old `v1/` directory nesting
 
-## 3. What Comes Next
+## 3. Partially Done
 
-- Write and settle the remaining migration-governing SDRs before building upgrade tooling:
-  - keep the split between module-schema migration and ALS-version migration explicit
-  - define identity/stability surfaces clearly
-  - define upgrade classification such as mechanical vs semantic-assisted
-- Build the ALS language-version upgrade pipeline:
+- Diagnostic machine-readability is much better than it was, but not complete:
+  - `reason` now exists and covers many important system, shape, and body subcases
+  - the compiler and README still describe `reason` coverage as incremental, so some diagnostics may still emit `null`
+- Module migration now exists as workflow and repository contract, but not yet as first-class language lifecycle:
+  - version bundles, migration assets, manifest/report conventions, and cutover skills exist
+  - the compiler still treats this structurally rather than semantically
+  - it does not parse `SKILL.md` contents or migration manifest/report meaning
+- Rich-body support is implemented enough to validate real fixtures, but the markdown/body surface is still intentionally curated:
+  - ALS v1 now has a coherent supported subset
+  - it is not trying to expose full mdast coverage
+- Warning support exists in the output model, but not yet as a real lifecycle:
+  - status summaries count warnings
+  - there is still no meaningful emitted warning stream that can support deprecation budgeting or rollout policy
+
+## 4. Not Done Yet
+
+- There is still no ALS language-version upgrade toolchain.
+- The compiler still supports `als_version: 1` only.
+- There is still no first-class ALS language migration lifecycle in the language itself.
+- There is still no mixed-version coexistence model for ALS language upgrades.
+- `declaration = presence` still means additive field and section changes act like operationally breaking rewrites unless migration tooling handles them explicitly.
+- Public identity surfaces are still effectively hard API because ALS v1 still has no aliasing, redirect, or compatibility indirection for:
+  - `system_id`
+  - module ids
+  - entity names
+  - section names
+  - lineage placeholder names used by path templates
+- Partial validation is still not a production-safe staged-rollout primitive:
+  - filtered validation still builds its record index only from selected modules
+  - that means cross-module refs can fail spuriously under module-filtered runs
+- Deprecation is still effectively binary:
+  - the compiler does not currently emit warning diagnostics
+  - there is still no real deprecation lifecycle support
+- Skill projection and migration lifecycle are still incomplete beyond the current canonical bundle contract.
+- `test-migration` is still intentionally unimplemented as a separate wrapper; `migrate` currently owns both dry-run and live-cutover flow.
+- The repo still does not have a settled practical boundary for how far automation should go before semantic review is required.
+
+## 5. Next Meaningful Steps
+
+- Build the first real ALS language-version upgrade path:
   - preflight scan
-  - deterministic rewrites
+  - deterministic rewrite support
   - machine-readable failure reporting
   - explicit stop points for semantic review
-- Build module-schema migration as a separate track using the v0 pattern.
-- After the foundation is stable, add operator ergonomics:
-  - deprecation lifecycle support
-  - stronger rollout tooling
-  - safer impact analysis / introspection
+- Decide and implement a production-safe answer for filtered validation, so partial runs are either trustworthy or explicitly scoped to something weaker than full validation.
+- Add a real warning and deprecation lifecycle instead of keeping warnings as unused output plumbing.
+- Decide how much more migration meaning should become first-class in ALS itself versus remaining in skill-driven workflow and bundle conventions.
+- Keep tightening machine-readable output compatibility discipline before external tooling starts depending on it heavily.
 
-## 4. What Is Still Unsolved
+## 6. Practical Reading Of The Current State
 
-- There is still no actual ALS language-version upgrade toolchain.
-- There is still no first-class migration lifecycle in the language itself.
-- `declaration = presence` still means additive field and section changes act like operationally breaking rewrites until module-schema migration is real.
-- Public names are effectively API until ALS grows aliasing or other indirection:
-  - `system_id`
-  - module ids
-  - entity names
-  - section names
-- Identity-sensitive rewrites remain a real risk surface:
-  - `system_id`
-  - module ids
-  - entity names
-  - section names
-  - path-template lineage placeholders
-- Partial validation is still not a trustworthy staged-rollout primitive.
-- Deprecation is still effectively binary because warnings are not yet a real lifecycle tool.
-- Skill bundles are now part of the ALS-authored source contract, but the broader lifecycle around skill projection, migration, and automation is still unfinished.
-- The system still needs a practical answer for how far automation can go before semantic review is required.
-
-## 5. Practical Reading Of The Current State
-
-- ALS v1 is no longer pretending that source-file format versioning is a separate concern from language-version cutover.
-- The project now has a cleaner foundation for upgrade tooling, but not the tooling itself.
-- The next meaningful milestone is not more cleanup. It is designing and implementing the first real ALS-version upgrade path.
+- ALS v1 is no longer only at the "cleaner foundation" stage.
+- The repo now has real structural and workflow support for module-version evolution, canonical skills, and richer record bodies.
+- The main missing piece has narrowed: the largest open gap is now ALS language-version upgrade tooling and lifecycle, not the entire evolution story from scratch.
+- The next meaningful milestone is therefore not another round of baseline cleanup. It is turning the accepted ALS upgrade model into an actual toolchain.

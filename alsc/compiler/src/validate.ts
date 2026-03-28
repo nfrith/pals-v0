@@ -184,24 +184,28 @@ export function validateLoadedSystem(
 ): SystemValidationOutput {
   const systemDiagnostics: CompilerDiagnostic[] = [...context.initial_diagnostics];
   const moduleReports: ModuleValidationReport[] = [];
+  const outputModuleFilter = moduleFilter ?? null;
 
   if (!context.system_config || systemDiagnostics.length > 0) {
-    return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, context.als_version);
+    return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, context.als_version, outputModuleFilter);
   }
 
   const systemConfig = context.system_config;
 
-  const selectedModuleIds = getSelectedModuleIds(systemConfig, moduleFilter, context.system_config_path_abs, systemDiagnostics);
-  if (selectedModuleIds.length === 0) {
-    return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, systemConfig.als_version);
+  const reportingModuleIds = getSelectedModuleIds(systemConfig, moduleFilter, context.system_config_path_abs, systemDiagnostics);
+  if (reportingModuleIds.length === 0) {
+    return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, systemConfig.als_version, outputModuleFilter);
   }
 
   const layoutDiagnostics = validateSystemLayout(context.system_root_abs, systemConfig);
   if (layoutDiagnostics.length > 0) {
-    return buildSystemOutput(context.system_root_rel, systemDiagnostics.concat(layoutDiagnostics), moduleReports, systemConfig.als_version);
+    return buildSystemOutput(context.system_root_rel, systemDiagnostics.concat(layoutDiagnostics), moduleReports, systemConfig.als_version, outputModuleFilter);
   }
 
-  const moduleStates = selectedModuleIds.map((moduleId) => loadModuleState(context.system_root_abs, systemConfig, moduleId));
+  const moduleStates = moduleFilter
+    ? loadModuleDependencyClosure(context.system_root_abs, systemConfig, reportingModuleIds)
+    : reportingModuleIds.map((moduleId) => loadModuleState(context.system_root_abs, systemConfig, moduleId));
+  const reportingModuleIdSet = new Set(reportingModuleIds);
   const stateByModuleId = new Map(moduleStates.map((state) => [state.module_id, state]));
 
   const recordsByUri = new Map<string, ParsedRecord[]>();
@@ -241,7 +245,34 @@ export function validateLoadedSystem(
   for (const state of moduleStates) {
     if (!state.context) continue;
     for (const record of state.parsed_records) {
-      const recordDiagnostics = validateRecord(record, state.context, recordIndex);
+      const recordDiagnostics = validateRecord(record, state.context, recordIndex, { include_resolved_refs: false });
+      state.diagnostics.push(...recordDiagnostics);
+      markErroredFiles(state.file_error_map, recordDiagnostics);
+    }
+  }
+
+  const filteredContextDiagnostics = moduleFilter
+    ? collectFilteredContextDiagnostics(
+      moduleFilter,
+      reportingModuleIds,
+      moduleStates,
+      context.system_config_path_abs,
+    )
+    : [];
+  const hasInvalidFilteredContext = filteredContextDiagnostics.length > 0;
+
+  for (const state of moduleStates) {
+    if (!state.context) continue;
+    if (moduleFilter && hasInvalidFilteredContext && !reportingModuleIdSet.has(state.module_id)) {
+      continue;
+    }
+
+    const resolvedRefTargetScope = moduleFilter && hasInvalidFilteredContext && reportingModuleIdSet.has(state.module_id)
+      ? reportingModuleIdSet
+      : undefined;
+
+    for (const record of state.parsed_records) {
+      const recordDiagnostics = validateResolvedReferencesOnly(record, state.context, recordIndex, resolvedRefTargetScope);
       state.diagnostics.push(...recordDiagnostics);
       markErroredFiles(state.file_error_map, recordDiagnostics);
     }
@@ -261,7 +292,41 @@ export function validateLoadedSystem(
     );
   }
 
-  return buildSystemOutput(context.system_root_rel, systemDiagnostics, moduleReports, systemConfig.als_version);
+  systemDiagnostics.push(...filteredContextDiagnostics);
+
+  const reportedModuleReports = moduleReports.filter((report) => reportingModuleIds.includes(report.module_id));
+  return buildSystemOutput(context.system_root_rel, systemDiagnostics, reportedModuleReports, systemConfig.als_version, outputModuleFilter);
+}
+
+function loadModuleDependencyClosure(
+  systemRootAbs: string,
+  systemConfig: SystemConfig,
+  seedModuleIds: string[],
+): ModuleWorkState[] {
+  const pendingModuleIds = [...seedModuleIds].sort();
+  const seenModuleIds = new Set<string>();
+  const moduleStates = new Map<string, ModuleWorkState>();
+
+  while (pendingModuleIds.length > 0) {
+    const moduleId = pendingModuleIds.shift()!;
+    if (seenModuleIds.has(moduleId)) continue;
+
+    seenModuleIds.add(moduleId);
+    const state = loadModuleState(systemRootAbs, systemConfig, moduleId);
+    moduleStates.set(moduleId, state);
+
+    if (!state.context) continue;
+
+    for (const dependencyModuleId of state.context.shape.dependencies.map((dependency) => dependency.module).sort()) {
+      if (!systemConfig.modules[dependencyModuleId]) continue;
+      if (seenModuleIds.has(dependencyModuleId) || pendingModuleIds.includes(dependencyModuleId)) continue;
+      pendingModuleIds.push(dependencyModuleId);
+    }
+
+    pendingModuleIds.sort();
+  }
+
+  return [...moduleStates.values()].sort((left, right) => left.module_id.localeCompare(right.module_id));
 }
 
 function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, moduleId: string): ModuleWorkState {
@@ -338,6 +403,7 @@ function validateRecord(
   record: ParsedRecord,
   context: LoadedModuleContext,
   recordIndex: Map<string, ParsedRecord>,
+  options: { include_resolved_refs?: boolean } = {},
 ): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
   const effectiveContract = resolveEffectiveEntityContract(record.entity_shape, record.frontmatter, {
@@ -350,8 +416,27 @@ function validateRecord(
   diagnostics.push(...effectiveContract.diagnostics);
   diagnostics.push(...validateBody(record, effectiveContract.body, effectiveContract.body_diagnostics));
   diagnostics.push(...validateIdentity(record));
-  diagnostics.push(...validateReferences(record, context, recordIndex, effectiveContract.fields));
+  diagnostics.push(...validateParentReferencePrefix(record));
+  if (options.include_resolved_refs !== false) {
+    diagnostics.push(...validateResolvedReferences(record, context, recordIndex, effectiveContract.fields));
+  }
   return diagnostics;
+}
+
+function validateResolvedReferencesOnly(
+  record: ParsedRecord,
+  context: LoadedModuleContext,
+  recordIndex: Map<string, ParsedRecord>,
+  allowedTargetModuleIds?: ReadonlySet<string>,
+): CompilerDiagnostic[] {
+  const effectiveContract = resolveEffectiveEntityContract(record.entity_shape, record.frontmatter, {
+    module_id: context.module_id,
+    entity_name: record.entity_name,
+    record_file: record.file_rel,
+    shape_file: context.shape_path_rel,
+  });
+
+  return validateResolvedReferences(record, context, recordIndex, effectiveContract.fields, allowedTargetModuleIds);
 }
 
 function validateFrontmatter(
@@ -1006,11 +1091,12 @@ function validateIdentity(record: ParsedRecord): CompilerDiagnostic[] {
   return diagnostics;
 }
 
-function validateReferences(
+function validateResolvedReferences(
   record: ParsedRecord,
   context: LoadedModuleContext,
   recordIndex: Map<string, ParsedRecord>,
   declaredFields: Record<string, FieldShape>,
+  allowedTargetModuleIds?: ReadonlySet<string>,
 ): CompilerDiagnostic[] {
   const diagnostics: CompilerDiagnostic[] = [];
 
@@ -1019,8 +1105,14 @@ function validateReferences(
     const value = record.frontmatter[fieldName];
 
     if (fieldShape.type === "ref") {
+      if (allowedTargetModuleIds && !allowedTargetModuleIds.has(fieldShape.target.module)) {
+        continue;
+      }
       diagnostics.push(...validateResolvedRef(record, context, fieldName, fieldShape, value, recordIndex));
     } else if (fieldShape.type === "list" && fieldShape.items.type === "ref" && Array.isArray(value)) {
+      if (allowedTargetModuleIds && !allowedTargetModuleIds.has(fieldShape.items.target.module)) {
+        continue;
+      }
       value.forEach((item, index) => {
         diagnostics.push(
           ...validateResolvedRef(record, context, `${fieldName}[${index}]`, { type: "ref", allow_null: false, target: fieldShape.items.target }, item, recordIndex),
@@ -1029,6 +1121,11 @@ function validateReferences(
     }
   }
 
+  return diagnostics;
+}
+
+function validateParentReferencePrefix(record: ParsedRecord): CompilerDiagnostic[] {
+  const diagnostics: CompilerDiagnostic[] = [];
   const parentConfig = record.entity_shape.identity.parent;
   if (parentConfig && record.canonical_uri) {
     const parentFieldValue = record.frontmatter[parentConfig.ref_field];
@@ -2373,6 +2470,45 @@ function getSelectedModuleIds(
   return [moduleFilter];
 }
 
+function collectFilteredContextDiagnostics(
+  moduleFilter: string,
+  reportingModuleIds: string[],
+  moduleStates: ModuleWorkState[],
+  systemConfigPathAbs: string,
+): CompilerDiagnostic[] {
+  const reportingModuleIdSet = new Set(reportingModuleIds);
+  // Warnings do not currently affect record indexing or ref-resolution trust.
+  const invalidContextStates = moduleStates
+    .filter((state) => !reportingModuleIdSet.has(state.module_id) && computeStatus(state.diagnostics) === "fail");
+  const invalidContextModuleIds = invalidContextStates.map((state) => state.module_id).sort();
+
+  if (invalidContextModuleIds.length === 0) {
+    return [];
+  }
+
+  const hasPossiblyTruncatedClosure = invalidContextStates.some((state) => state.context === null);
+  const hint = hasPossiblyTruncatedClosure
+    ? "Run full-system validation or fix the dependency modules before relying on filtered validation. Some dependency module shapes could not be loaded, so transitive dependencies beyond them may not have been loaded."
+    : "Run full-system validation or fix the dependency modules before relying on filtered validation.";
+
+  return [
+    diag(
+      codes.SYSTEM_FILTER_CONTEXT_INVALID,
+      "error",
+      "system_config",
+      toRepoRelative(systemConfigPathAbs),
+      `Filtered validation for module '${moduleFilter}' cannot produce trustworthy results because dependency context is invalid`,
+      {
+        field: "module_filter",
+        reason: reasons.SYSTEM_FILTER_CONTEXT_INVALID,
+        expected: "clean dependency closure",
+        actual: invalidContextModuleIds,
+        hint,
+      },
+    ),
+  ];
+}
+
 function collectRemovedSourceSchemaDiagnostics(
   raw: unknown,
   phase: "system_config" | "module_shape",
@@ -2498,6 +2634,7 @@ function buildSystemOutput(
   systemDiagnostics: CompilerDiagnostic[],
   moduleReports: ModuleValidationReport[],
   alsVersion: number | null,
+  moduleFilter: string | null,
 ): SystemValidationOutput {
   const diagnostics = systemDiagnostics.concat(moduleReports.flatMap((report) => report.diagnostics));
   const errorCount = diagnostics.filter((diagnostic) => diagnostic.severity === "error").length;
@@ -2519,6 +2656,7 @@ function buildSystemOutput(
     status: computeStatus(diagnostics),
     system_path: systemPathRel,
     generated_at: new Date().toISOString(),
+    module_filter: moduleFilter,
     system_diagnostics: systemDiagnostics,
     modules: moduleReports,
     summary: {

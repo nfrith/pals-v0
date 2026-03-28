@@ -60,6 +60,7 @@ export interface SystemValidationOutput {
   status: "pass" | "warn" | "fail";
   system_path: string;
   generated_at: string;
+  module_filter: string | null;
   system_diagnostics: CompilerDiagnostic[];
   modules: ModuleValidationReport[];
   summary: {

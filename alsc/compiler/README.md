@@ -24,6 +24,8 @@ Optional module filter:
 bun run src/index.ts ../../example-systems/centralized-metadata-happy-path backlog
 ```
 
+Filtered runs remain trustworthy for the selected module: the validator resolves refs against the selected module plus its transitive declared dependency closure, and it fails cleanly if hidden dependency context is not reliable enough to trust.
+
 Claude projection:
 
 ```bash
@@ -44,6 +46,7 @@ The validator emits JSON shaped as `als-validation-output@1`.
 
 - `schema` identifies the output contract version.
 - `als_version` is the active ALS language version declared by `.als/system.yaml`.
+- `module_filter` is `null` for full-system validation and the selected module id for filtered runs.
 - `compiler_contract.supported_als_versions` lists the ALS language versions this compiler accepts today.
 - `compiler_contract.upgrade_mode` is currently `whole-system-cutover`: one system targets one ALS version at a time.
 - `compiler_contract.upgrade_assistance` is currently `hybrid-assisted`: official ALS upgrades may combine deterministic rewrites with supervised agent guidance.

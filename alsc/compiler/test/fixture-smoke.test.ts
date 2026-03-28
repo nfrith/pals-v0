@@ -29,6 +29,7 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
       als_version: number | null;
       compiler_contract: { supported_als_versions: number[] };
       status: string;
+      module_filter: string | null;
       summary: { error_count: number; files_ignored: number; modules_checked: number };
     };
     try {
@@ -37,6 +38,7 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
         als_version: number | null;
         compiler_contract: { supported_als_versions: number[] };
         status: string;
+        module_filter: string | null;
         summary: { error_count: number; files_ignored: number; modules_checked: number };
       };
     } catch (error) {
@@ -49,9 +51,80 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
     expect(result.als_version).toBe(1);
     expect(result.compiler_contract.supported_als_versions).toContain(1);
     expect(result.status).toBe("pass");
+    expect(result.module_filter).toBeNull();
     expect(result.summary.error_count).toBe(0);
     expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
     expect(result.summary.modules_checked).toBe(5);
+  });
+});
+
+test.concurrent("filtered backlog validation remains trustworthy while reporting only the selected module", async () => {
+  await withFixtureSandbox("fixture-filtered-backlog", async ({ root }) => {
+    const result = validateFixture(root, "backlog");
+
+    expect(result.status).toBe("pass");
+    expect(result.module_filter).toBe("backlog");
+    expect(result.modules).toHaveLength(1);
+    expect(result.modules[0].module_id).toBe("backlog");
+    expect(result.summary.modules_checked).toBe(1);
+    expect(result.summary.error_count).toBe(0);
+  });
+});
+
+test.concurrent("filtered experiments validation remains trustworthy across dependency refs", async () => {
+  await withFixtureSandbox("fixture-filtered-experiments", async ({ root }) => {
+    const result = validateFixture(root, "experiments");
+
+    expect(result.status).toBe("pass");
+    expect(result.module_filter).toBe("experiments");
+    expect(result.modules).toHaveLength(1);
+    expect(result.modules[0].module_id).toBe("experiments");
+    expect(result.summary.modules_checked).toBe(1);
+    expect(result.summary.error_count).toBe(0);
+  });
+});
+
+test.concurrent("filtered CLI output includes module filter metadata", async () => {
+  await withFixtureSandbox("fixture-filtered-cli", async ({ root }) => {
+    const process = Bun.spawnSync({
+      cmd: ["bun", "src/index.ts", root, "backlog"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = new TextDecoder().decode(process.stdout);
+    const stderr = new TextDecoder().decode(process.stderr);
+
+    if (process.exitCode !== 0) {
+      throw new Error(
+        `Filtered smoke validation subprocess failed with exit ${process.exitCode}\nstdout:\n${stdout || "<empty>"}\nstderr:\n${stderr || "<empty>"}`,
+      );
+    }
+
+    let result: {
+      schema: string;
+      module_filter: string | null;
+      status: string;
+      summary: { modules_checked: number; error_count: number };
+    };
+    try {
+      result = JSON.parse(stdout) as {
+        schema: string;
+        module_filter: string | null;
+        status: string;
+        summary: { modules_checked: number; error_count: number };
+      };
+    } catch (error) {
+      throw new Error(
+        `Filtered smoke validation subprocess returned invalid JSON: ${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout || "<empty>"}\nstderr:\n${stderr || "<empty>"}`,
+      );
+    }
+
+    expect(result.schema).toBe(VALIDATION_OUTPUT_SCHEMA_LITERAL);
+    expect(result.module_filter).toBe("backlog");
+    expect(result.status).toBe("pass");
+    expect(result.summary.modules_checked).toBe(1);
+    expect(result.summary.error_count).toBe(0);
   });
 });
 
@@ -154,6 +227,7 @@ test.concurrent("rich body design reference validates clean", async () => {
       als_version: number | null;
       compiler_contract: { supported_als_versions: number[] };
       status: string;
+      module_filter: string | null;
       summary: { error_count: number; files_ignored: number; modules_checked: number };
     };
     try {
@@ -162,6 +236,7 @@ test.concurrent("rich body design reference validates clean", async () => {
         als_version: number | null;
         compiler_contract: { supported_als_versions: number[] };
         status: string;
+        module_filter: string | null;
         summary: { error_count: number; files_ignored: number; modules_checked: number };
       };
     } catch (error) {
@@ -174,6 +249,7 @@ test.concurrent("rich body design reference validates clean", async () => {
     expect(result.als_version).toBe(1);
     expect(result.compiler_contract.supported_als_versions).toContain(1);
     expect(result.status).toBe("pass");
+    expect(result.module_filter).toBeNull();
     expect(result.summary.error_count).toBe(0);
     expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
     expect(result.summary.modules_checked).toBe(6);
@@ -203,6 +279,7 @@ test.concurrent("rich body content fixture validates clean", async () => {
       als_version: number | null;
       compiler_contract: { supported_als_versions: number[] };
       status: string;
+      module_filter: string | null;
       summary: { error_count: number; files_ignored: number; modules_checked: number };
     };
     try {
@@ -211,6 +288,7 @@ test.concurrent("rich body content fixture validates clean", async () => {
         als_version: number | null;
         compiler_contract: { supported_als_versions: number[] };
         status: string;
+        module_filter: string | null;
         summary: { error_count: number; files_ignored: number; modules_checked: number };
       };
     } catch (error) {
@@ -223,6 +301,7 @@ test.concurrent("rich body content fixture validates clean", async () => {
     expect(result.als_version).toBe(1);
     expect(result.compiler_contract.supported_als_versions).toContain(1);
     expect(result.status).toBe("pass");
+    expect(result.module_filter).toBeNull();
     expect(result.summary.error_count).toBe(0);
     expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
     expect(result.summary.modules_checked).toBe(6);

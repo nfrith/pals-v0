@@ -3,10 +3,13 @@ import { chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { codes, reasons } from "../src/diagnostics.ts";
 import {
+  expectModuleDiagnostic,
   expectSystemDiagnostic,
   mkdirPath,
   removePath,
   renamePath,
+  updateRecord,
+  updateShapeYaml,
   updateSystemYaml,
   validateFixture,
   withFixtureSandbox,
@@ -156,7 +159,63 @@ test.concurrent("unknown module filters fail cleanly", async () => {
   await withFixtureSandbox("system-filter-unknown", async ({ root }) => {
     const result = validateFixture(root, "ghost-module");
     expect(result.status).toBe("fail");
+    expect(result.module_filter).toBe("ghost-module");
     expectSystemDiagnostic(result, codes.SYSTEM_FILTER_UNKNOWN, ".als/system.yaml");
+  });
+});
+
+test.concurrent("filtered validation still reports real unresolved refs from the selected module", async () => {
+  await withFixtureSandbox("system-filter-ref-unresolved", async ({ root }) => {
+    await removePath(root, "workspace/people/persons/PPL-000101.md");
+
+    const result = validateFixture(root, "backlog");
+    expect(result.status).toBe("fail");
+    expect(result.module_filter).toBe("backlog");
+    expect(result.modules).toHaveLength(1);
+    expect(result.modules[0].module_id).toBe("backlog");
+    expect(result.system_diagnostics.find((item) => item.code === codes.SYSTEM_FILTER_CONTEXT_INVALID)).toBeUndefined();
+    expectModuleDiagnostic(result, "backlog", codes.REF_UNRESOLVED, "workspace/backlog/items/ITEM-0001.md");
+  });
+});
+
+test.concurrent("filtered validation fails cleanly when dependency context is invalid", async () => {
+  await withFixtureSandbox("system-filter-context-invalid", async ({ root }) => {
+    await updateRecord(root, "workspace/people/persons/PPL-000101.md", (record) => {
+      delete record.data.display_name;
+    });
+
+    const result = validateFixture(root, "backlog");
+    expect(result.status).toBe("fail");
+    expect(result.module_filter).toBe("backlog");
+    expect(result.modules).toHaveLength(1);
+    expect(result.modules[0].module_id).toBe("backlog");
+
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_FILTER_CONTEXT_INVALID, ".als/system.yaml");
+    expect(diagnostic.reason).toBe(reasons.SYSTEM_FILTER_CONTEXT_INVALID);
+    expect(diagnostic.actual).toEqual(["people"]);
+
+    expect(result.modules[0].diagnostics.some((item) => item.code === codes.REF_UNRESOLVED)).toBe(false);
+  });
+});
+
+test.concurrent("filtered validation suppresses unresolved refs when a dependency shape cannot be loaded", async () => {
+  await withFixtureSandbox("system-filter-context-invalid-shape", async ({ root }) => {
+    await updateShapeYaml(root, "people", 1, (shape) => {
+      delete shape.entities;
+    });
+
+    const result = validateFixture(root, "backlog");
+    expect(result.status).toBe("fail");
+    expect(result.module_filter).toBe("backlog");
+    expect(result.modules).toHaveLength(1);
+    expect(result.modules[0].module_id).toBe("backlog");
+
+    const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_FILTER_CONTEXT_INVALID, ".als/system.yaml");
+    expect(diagnostic.reason).toBe(reasons.SYSTEM_FILTER_CONTEXT_INVALID);
+    expect(diagnostic.actual).toEqual(["people"]);
+    expect(diagnostic.hint).toContain("transitive dependencies beyond them may not have been loaded");
+
+    expect(result.modules[0].diagnostics.some((item) => item.code === codes.REF_UNRESOLVED)).toBe(false);
   });
 });
 

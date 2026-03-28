@@ -178,6 +178,61 @@ test.concurrent("list enum items must also declare unique allowed values", async
   });
 });
 
+test.concurrent("scalar file path fields must declare a base", async () => {
+  await withFixtureSandbox("shape-file-path-missing-base", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.context_file = {
+        type: "file_path",
+        allow_null: true,
+      };
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1/shape.yaml");
+  });
+});
+
+test.concurrent("list file path items must declare a base", async () => {
+  await withFixtureSandbox("shape-list-file-path-missing-base", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.session_files = {
+        type: "list",
+        allow_null: true,
+        items: {
+          type: "file_path",
+        },
+      };
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1/shape.yaml");
+  });
+});
+
+test.concurrent("unsupported file path bases are rejected", async () => {
+  await withFixtureSandbox("shape-file-path-unsupported-base", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.context_file = {
+        type: "file_path",
+        allow_null: true,
+        base: "git_root",
+      };
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "backlog", codes.SHAPE_INVALID, ".als/modules/backlog/v1/shape.yaml");
+  });
+});
+
 test.concurrent("duplicate variant section names are rejected", async () => {
   await withFixtureSandbox("shape-duplicate-variant-sections", async ({ root }) => {
     await updateShapeYaml(root, "backlog", 1, (shape) => {

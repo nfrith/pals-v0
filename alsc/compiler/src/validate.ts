@@ -1,4 +1,4 @@
-import { basename, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { readFileSync, readdirSync, statSync, type Dirent } from "node:fs";
 import matter from "gray-matter";
 import { parse as parseYaml, YAMLParseError } from "yaml";
@@ -30,6 +30,7 @@ import {
   splitModuleMountPath,
   systemConfigSchema,
   type EntityShape,
+  type FilePathBase,
   type FieldShape,
   type ModuleShape,
   type SectionDefinitionShape,
@@ -50,6 +51,7 @@ import type { CompilerDiagnostic, ModuleValidationReport, ModuleValidationSummar
 
 interface LoadedModuleContext {
   system_id: string;
+  system_root_abs: string;
   module_id: string;
   module_path_abs: string;
   module_path_rel: string;
@@ -117,6 +119,15 @@ type RenderedTitleExpectation =
   | { kind: "authored" }
   | { kind: "expected"; value: string }
   | { kind: "invalid_source"; field: string; actual: unknown };
+
+interface FilePathContractShape {
+  base: FilePathBase;
+}
+
+type SafeStatResult =
+  | { kind: "ok"; stat: ReturnType<typeof statSync> }
+  | { kind: "missing" }
+  | { kind: "unreadable"; error: NodeJS.ErrnoException };
 
 export interface EffectiveEntityContractContext {
   module_id: string;
@@ -277,6 +288,7 @@ function loadModuleState(systemRootAbs: string, systemConfig: SystemConfig, modu
 
   const context: LoadedModuleContext = {
     system_id: systemConfig.system_id,
+    system_root_abs: systemRootAbs,
     module_id: moduleId,
     module_path_abs: modulePathAbs,
     module_path_rel: modulePathRel,
@@ -507,6 +519,14 @@ function validateFieldValue(
       diagnostics.push(...validateRefContract(record, context, fieldName, fieldShape, value));
       break;
 
+    case "file_path":
+      if (typeof value !== "string") {
+        diagnostics.push(buildFilePathTypeDiagnostic(record, fieldName, fieldShape.base, codes.FM_TYPE_MISMATCH, value));
+      } else {
+        diagnostics.push(...validateFilePathContract(record, context, fieldName, fieldShape, value));
+      }
+      break;
+
     case "list":
       if (!Array.isArray(value)) {
         diagnostics.push(
@@ -569,6 +589,13 @@ function validateFieldValue(
             } else {
               seenEnumValues!.add(item);
             }
+          } else if (fieldShape.items.type === "file_path") {
+            const itemFieldName = `${fieldName}[${index}]`;
+            if (typeof item !== "string") {
+              diagnostics.push(buildFilePathTypeDiagnostic(record, itemFieldName, fieldShape.items.base, codes.FM_ARRAY_ITEM, item));
+            } else {
+              diagnostics.push(...validateFilePathContract(record, context, itemFieldName, { base: fieldShape.items.base }, item));
+            }
           } else {
             diagnostics.push(...validateRefContract(record, context, `${fieldName}[${index}]`, { type: "ref", allow_null: false, target: fieldShape.items.target }, item));
           }
@@ -578,6 +605,199 @@ function validateFieldValue(
   }
 
   return diagnostics;
+}
+
+function validateFilePathContract(
+  record: ParsedRecord,
+  context: LoadedModuleContext,
+  fieldName: string,
+  fieldShape: FilePathContractShape,
+  value: string,
+): CompilerDiagnostic[] {
+  const diagnostics: CompilerDiagnostic[] = [];
+
+  if (value.length === 0) {
+    diagnostics.push(
+      buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be a non-empty file path string"),
+    );
+    return diagnostics;
+  }
+
+  if (isMarkdownLinkValue(value)) {
+    diagnostics.push(
+      buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be a plain file path, not a markdown link"),
+    );
+    return diagnostics;
+  }
+
+  if (value.includes("://")) {
+    diagnostics.push(
+      buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be a filesystem path, not a URI"),
+    );
+    return diagnostics;
+  }
+
+  let targetAbs: string;
+  if (fieldShape.base === "system_root") {
+    if (value.startsWith("/") || value.startsWith("\\") || value.includes("\\")) {
+      diagnostics.push(
+        buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be a normalized relative path using '/' separators"),
+      );
+      return diagnostics;
+    }
+
+    if (hasWindowsDrivePrefix(value)) {
+      diagnostics.push(
+        buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be relative to the ALS system root, not a drive-prefixed path"),
+      );
+      return diagnostics;
+    }
+
+    const segments = value.split("/");
+    if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+      diagnostics.push(
+        buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must not contain empty, '.', or '..' path segments"),
+      );
+      return diagnostics;
+    }
+
+    targetAbs = resolve(context.system_root_abs, value);
+  } else {
+    if (!isAbsolute(value)) {
+      diagnostics.push(
+        buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be an absolute host file path"),
+      );
+      return diagnostics;
+    }
+
+    if (value.endsWith("/") || value.endsWith("\\")) {
+      diagnostics.push(
+        buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must not end with a directory separator"),
+      );
+      return diagnostics;
+    }
+
+    if (hasNonNormalizedHostAbsoluteSegments(value)) {
+      diagnostics.push(
+        buildInvalidFilePathDiagnostic(record, fieldName, fieldShape.base, value, "must be a normalized absolute host file path without empty, '.', or '..' path segments"),
+      );
+      return diagnostics;
+    }
+
+    targetAbs = value;
+  }
+
+  const targetStat = safeStatResult(targetAbs);
+  if (targetStat.kind === "missing") {
+    diagnostics.push(
+      diag(codes.FM_FILE_PATH_TARGET, "error", "record_frontmatter", record.file_rel, `Field '${fieldName}' points to a missing file`, {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: fieldName,
+        reason: reasons.FRONTMATTER_FILE_PATH_TARGET_MISSING,
+        expected: "existing file",
+        actual: value,
+      }),
+    );
+    return diagnostics;
+  }
+
+  if (targetStat.kind === "unreadable") {
+    diagnostics.push(
+      diag(codes.FM_FILE_PATH_TARGET, "error", "record_frontmatter", record.file_rel, `Field '${fieldName}' points to a file the validator cannot access`, {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: fieldName,
+        reason: reasons.FRONTMATTER_FILE_PATH_TARGET_UNREADABLE,
+        expected: "accessible existing file",
+        actual: value,
+      }),
+    );
+    return diagnostics;
+  }
+
+  if (!targetStat.stat.isFile()) {
+    diagnostics.push(
+      diag(codes.FM_FILE_PATH_TARGET, "error", "record_frontmatter", record.file_rel, `Field '${fieldName}' must point to a file, not a directory`, {
+        module_id: record.module_id,
+        entity: record.entity_name,
+        field: fieldName,
+        reason: reasons.FRONTMATTER_FILE_PATH_TARGET_NOT_FILE,
+        expected: "file",
+        actual: value,
+      }),
+    );
+  }
+
+  return diagnostics;
+}
+
+function buildFilePathTypeDiagnostic(
+  record: ParsedRecord,
+  fieldName: string,
+  base: FilePathBase,
+  code: typeof codes.FM_TYPE_MISMATCH | typeof codes.FM_ARRAY_ITEM,
+  actual: unknown,
+): CompilerDiagnostic {
+  return diag(code, "error", "record_frontmatter", record.file_rel, `Field '${fieldName}' must be a string file path`, {
+    module_id: record.module_id,
+    entity: record.entity_name,
+    field: fieldName,
+    expected: describeFilePathExpectedValue(base),
+    actual: typeof actual,
+  });
+}
+
+function buildInvalidFilePathDiagnostic(
+  record: ParsedRecord,
+  fieldName: string,
+  base: FilePathBase,
+  actual: unknown,
+  detail: string,
+): CompilerDiagnostic {
+  return diag(
+    codes.FM_FILE_PATH_FORMAT,
+    "error",
+    "record_frontmatter",
+    record.file_rel,
+    `Field '${fieldName}' ${detail}`,
+    {
+      module_id: record.module_id,
+      entity: record.entity_name,
+      field: fieldName,
+      reason: reasons.FRONTMATTER_FILE_PATH_INVALID,
+      expected: describeFilePathExpectedValue(base),
+      actual,
+    },
+  );
+}
+
+function describeFilePathExpectedValue(base: FilePathBase): string {
+  switch (base) {
+    case "system_root":
+      return "system-root-relative file path";
+    case "host_absolute":
+      return "absolute host file path";
+    default: {
+      const exhaustiveCheck: never = base;
+      return exhaustiveCheck;
+    }
+  }
+}
+
+function isMarkdownLinkValue(value: string): boolean {
+  return /^\[[^\]]*\]\(([^)]+)\)$/.test(value);
+}
+
+function hasWindowsDrivePrefix(value: string): boolean {
+  return /^[A-Za-z]:/.test(value);
+}
+
+function hasNonNormalizedHostAbsoluteSegments(value: string): boolean {
+  const root = parse(value).root;
+  const remainder = value.slice(root.length);
+  const segments = process.platform === "win32" ? remainder.split(/[\\/]/) : remainder.split("/");
+  return segments.some((segment) => segment.length === 0 || segment === "." || segment === "..");
 }
 
 function validateBody(
@@ -1811,6 +2031,30 @@ function safeStat(pathAbs: string): ReturnType<typeof statSync> | null {
       const errorCode = (error as NodeJS.ErrnoException).code;
       if (errorCode === "ENOENT" || errorCode === "ENOTDIR") {
         return null;
+      }
+    }
+
+    throw error;
+  }
+}
+
+function safeStatResult(pathAbs: string): SafeStatResult {
+  try {
+    return {
+      kind: "ok",
+      stat: statSync(pathAbs),
+    };
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      if (errorCode === "ENOENT" || errorCode === "ENOTDIR") {
+        return { kind: "missing" };
+      }
+      if (errorCode === "EACCES" || errorCode === "EPERM") {
+        return {
+          kind: "unreadable",
+          error: error as NodeJS.ErrnoException,
+        };
       }
     }
 

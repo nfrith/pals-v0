@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { chmodSync, statSync } from "node:fs";
+import { join, sep } from "node:path";
 import { codes, reasons } from "../src/diagnostics.ts";
-import { expectModuleDiagnostic, expectNoModuleDiagnostic, updateRecord, updateShapeYaml, validateFixture, withFixtureSandbox } from "./helpers/fixture.ts";
+import { expectModuleDiagnostic, expectNoModuleDiagnostic, updateRecord, updateShapeYaml, validateFixture, withFixtureSandbox, writePath } from "./helpers/fixture.ts";
 
 async function configurePeopleTagsAsEnumList(root: string, allowedValues = ["product", "orchestration", "research"]): Promise<void> {
   await updateShapeYaml(root, "people", 1, (shape) => {
@@ -321,6 +323,230 @@ test("list items must match the declared item type", async () => {
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
     expectModuleDiagnostic(result, "people", codes.FM_ARRAY_ITEM, "PPL-000101.md");
+  });
+});
+
+test("system-root file paths reject dot segments that escape the ALS root", async () => {
+  await withFixtureSandbox("frontmatter-file-path-dotdot", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "../content/briefs/variant-backlog-design.md";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("scalar file path fields must be strings", async () => {
+  await withFixtureSandbox("frontmatter-file-path-scalar-type", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = 101;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_TYPE_MISMATCH, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBeNull();
+  });
+});
+
+test("system-root file paths reject empty strings", async () => {
+  await withFixtureSandbox("frontmatter-file-path-empty", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("system-root file paths reject markdown link syntax", async () => {
+  await withFixtureSandbox("frontmatter-file-path-markdown-link", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "[brief](content/briefs/variant-backlog-design.md)";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("system-root file paths reject URI values", async () => {
+  await withFixtureSandbox("frontmatter-file-path-uri", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "file:///tmp/variant-backlog-design.md";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("system-root file paths reject leading slashes", async () => {
+  await withFixtureSandbox("frontmatter-file-path-leading-slash", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "/content/briefs/variant-backlog-design.md";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("system-root file paths reject drive-prefixed values", async () => {
+  await withFixtureSandbox("frontmatter-file-path-drive-prefix", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "C:relative/path.md";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("host-absolute file paths reject relative values", async () => {
+  await withFixtureSandbox("frontmatter-file-path-host-absolute-relative", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.context_file.base = "host_absolute";
+    });
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "content/briefs/variant-backlog-design.md";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("host-absolute file paths reject trailing separators", async () => {
+  await withFixtureSandbox("frontmatter-file-path-host-absolute-trailing-separator", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.context_file.base = "host_absolute";
+    });
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = `${join(root, "content", "briefs", "variant-backlog-design.md")}${sep}`;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("host-absolute file paths reject dot segments", async () => {
+  await withFixtureSandbox("frontmatter-file-path-host-absolute-dot-segments", async ({ root }) => {
+    await updateShapeYaml(root, "backlog", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      const itemFields = entities.item.fields as Record<string, Record<string, unknown>>;
+      itemFields.context_file.base = "host_absolute";
+    });
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = `${join(root, "content", "briefs")}${sep}..${sep}briefs${sep}variant-backlog-design.md`;
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_FORMAT, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_INVALID);
+  });
+});
+
+test("file paths must resolve to existing files", async () => {
+  await withFixtureSandbox("frontmatter-file-path-missing-target", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "content/briefs/missing.md";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_TARGET, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_TARGET_MISSING);
+  });
+});
+
+test("file paths reject inaccessible targets", async () => {
+  await withFixtureSandbox("frontmatter-file-path-inaccessible-target", async ({ root }) => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    await writePath(root, "content/locked/secret.md", "locked\n");
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "content/locked/secret.md";
+    });
+
+    const lockedDir = join(root, "content", "locked");
+    const originalMode = statSync(lockedDir).mode;
+    chmodSync(lockedDir, 0o000);
+
+    try {
+      const result = validateFixture(root);
+      expect(result.status).toBe("fail");
+      const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_TARGET, "ITEM-0001.md");
+      expect(diagnostic.field).toBe("context_file");
+      expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_TARGET_UNREADABLE);
+    } finally {
+      chmodSync(lockedDir, originalMode);
+    }
+  });
+});
+
+test("file paths reject directory targets", async () => {
+  await withFixtureSandbox("frontmatter-file-path-directory", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.context_file = "content/sessions";
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_FILE_PATH_TARGET, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("context_file");
+    expect(diagnostic.reason).toBe(reasons.FRONTMATTER_FILE_PATH_TARGET_NOT_FILE);
+  });
+});
+
+test("list file path items reject non-string members", async () => {
+  await withFixtureSandbox("frontmatter-list-file-path-item-type", async ({ root }) => {
+    await updateRecord(root, "workspace/backlog/items/ITEM-0001.md", (record) => {
+      record.data.session_files = ["content/sessions/2026-03-17-variant-backlog-kickoff.md", 101];
+    });
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    const diagnostic = expectModuleDiagnostic(result, "backlog", codes.FM_ARRAY_ITEM, "ITEM-0001.md");
+    expect(diagnostic.field).toBe("session_files[1]");
+    expect(diagnostic.reason).toBeNull();
   });
 });
 

@@ -124,6 +124,8 @@ const targetSchema = z.object({
   entity: entityName,
 });
 
+const filePathBaseSchema = z.enum(["system_root", "host_absolute"]);
+
 const commonFieldShape = {
   allow_null: z.boolean(),
 };
@@ -154,6 +156,10 @@ const listItemSchema = z.discriminatedUnion("type", [
     type: z.literal("ref"),
     target: targetSchema,
   }),
+  z.object({
+    type: z.literal("file_path"),
+    base: filePathBaseSchema,
+  }),
 ]);
 
 const fieldSchema = z.discriminatedUnion("type", [
@@ -182,6 +188,11 @@ const fieldSchema = z.discriminatedUnion("type", [
     type: z.literal("ref"),
     ...commonFieldShape,
     target: targetSchema,
+  }),
+  z.object({
+    type: z.literal("file_path"),
+    ...commonFieldShape,
+    base: filePathBaseSchema,
   }),
   z.object({
     type: z.literal("list"),
@@ -613,6 +624,7 @@ export type EntityShape = z.infer<typeof entitySchema>;
 export type PlainEntityShape = z.infer<typeof plainEntitySchema>;
 export type VariantEntityShape = z.infer<typeof variantEntitySchema>;
 export type EntityVariantShape = z.infer<typeof variantSchema>;
+export type FilePathBase = z.infer<typeof filePathBaseSchema>;
 export type FieldShape = z.infer<typeof fieldSchema>;
 
 interface RawShapeIssue {

@@ -31,6 +31,8 @@ export const codes = {
   FM_REF_FORMAT: "PAL-RV-FM-006",
   FM_ARRAY_ITEM: "PAL-RV-FM-007",
   FM_VARIANT_UNRESOLVED: "PAL-RV-FM-008",
+  FM_FILE_PATH_FORMAT: "PAL-RV-FM-009",
+  FM_FILE_PATH_TARGET: "PAL-RV-FM-010",
 
   BODY_MISSING_SECTION: "PAL-RV-BODY-001",
   BODY_UNKNOWN_SECTION: "PAL-RV-BODY-002",
@@ -102,6 +104,10 @@ export const reasons = {
   BODY_MARKDOWN_INLINE_HTML_UNSUPPORTED: "body.markdown.inline_html_unsupported",
   BODY_MARKDOWN_THEMATIC_BREAK_UNSUPPORTED: "body.markdown.thematic_break_unsupported",
   FRONTMATTER_LIST_ITEM_DUPLICATE: "frontmatter.list_item.duplicate",
+  FRONTMATTER_FILE_PATH_INVALID: "frontmatter.file_path.invalid",
+  FRONTMATTER_FILE_PATH_TARGET_MISSING: "frontmatter.file_path.target_missing",
+  FRONTMATTER_FILE_PATH_TARGET_NOT_FILE: "frontmatter.file_path.target_not_file",
+  FRONTMATTER_FILE_PATH_TARGET_UNREADABLE: "frontmatter.file_path.target_unreadable",
 } as const;
 
 export function diag(

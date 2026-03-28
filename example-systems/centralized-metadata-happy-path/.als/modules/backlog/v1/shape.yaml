@@ -40,6 +40,18 @@ entities:
             module: people
             entity: person
 
+      context_file:
+        type: file_path
+        allow_null: true
+        base: system_root
+
+      session_files:
+        type: list
+        allow_null: true
+        items:
+          type: file_path
+          base: system_root
+
     body:
       title:
         source:

@@ -281,6 +281,47 @@ The URI path encodes the full lineage: `als://system_id/module/entity-type/entit
 
 - `target.module` can be this module or another module (if another, it must be in `dependencies`)
 
+#### file_path
+
+```yaml
+context_file:
+  type: file_path
+  allow_null: true
+  base: system_root
+```
+
+`file_path` values are plain YAML strings. They do not use markdown-link syntax.
+They must be non-empty plain file paths, not URIs such as `https://...` or `file://...`.
+
+Allowed `base` values:
+
+- `system_root`: normalized relative path from the ALS system root directory that contains `.als/system.yaml`
+- `host_absolute`: absolute file path on the validator host platform
+
+`system_root` values:
+
+- use `/` separators
+- must not begin with `/`, `\`, or a drive prefix such as `C:`
+- must not contain `\`, `.`, `..`, or empty path segments
+
+`host_absolute` values:
+
+- must be absolute paths on the validator host platform
+- must be normalized absolute paths
+- must not contain empty, `.`, or `..` path segments after the root
+- must not end with a directory separator
+
+All `file_path` targets:
+
+- must exist at validation time
+- must be accessible enough for validation to confirm they are files
+- must resolve to files, not directories
+- may point outside the declaring module subtree
+- may point to hidden paths and `.als/...`
+- do not participate in `dependencies` or ALS ref resolution
+
+Use `ref` when the intended meaning is ALS entity identity. Use `file_path` when the intended meaning is a filesystem artifact.
+
 #### list
 
 ```yaml
@@ -291,7 +332,7 @@ tags:
     type: string
 ```
 
-Items can be `type: string`, `type: ref` (with a `target`), or `type: enum` (with `allowed_values`):
+Items can be `type: string`, `type: ref` (with a `target`), `type: enum` (with `allowed_values`), or `type: file_path` (with `base`):
 
 ```yaml
 people:
@@ -305,6 +346,15 @@ people:
 ```
 
 ```yaml
+sessions:
+  type: list
+  allow_null: true
+  items:
+    type: file_path
+    base: system_root
+```
+
+```yaml
 folders:
   type: list
   allow_null: false
@@ -315,7 +365,7 @@ folders:
 
 - `list<enum>` validates each item as a string enum member.
 - `list<enum>` rejects duplicate members.
-- `list<string>` and `list<ref>` do not enforce uniqueness.
+- `list<string>`, `list<ref>`, and `list<file_path>` do not enforce uniqueness.
 - Empty lists are allowed. `allow_null` only controls whether the field value may be `null`.
 
 ### Body regions

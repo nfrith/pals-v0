@@ -18,9 +18,7 @@ Before doing anything else, verify the runtime environment.
 1. Run `which bun` to check if Bun is on PATH.
    - If not found, tell the operator: "ALS requires Bun to run the compiler. You can install it by typing `! curl -fsSL https://bun.sh/install | bash` and then restarting your shell." Do not proceed until Bun is available.
 
-2. Check if `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/node_modules` exists.
-   - If it does not, run `bun install` inside `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/`.
-   - This only needs to happen once per plugin installation.
+2. Run `cd ${CLAUDE_PLUGIN_ROOT}/alsc/compiler && bun install` to ensure compiler dependencies are installed. This is idempotent and fast when dependencies already exist.
 
 ## Phase 1: Detection
 

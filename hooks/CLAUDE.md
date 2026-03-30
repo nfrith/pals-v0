@@ -1,17 +1,26 @@
-# ALS Validation Hooks
+# ALS Hooks
 
-The `als-validate.sh` and `als-stop-gate.sh` hooks resolve the compiler path via `${CLAUDE_PLUGIN_ROOT}`:
+All hooks resolve the compiler path via `${CLAUDE_PLUGIN_ROOT}/alsc/compiler`.
 
-```
-${CLAUDE_PLUGIN_ROOT}/alsc/compiler
-```
+## Hook inventory
 
-This requires ALS to be installed as a Claude Code plugin so that `CLAUDE_PLUGIN_ROOT` is set by the runtime.
+### als-validate.sh (PostToolUse — Write|Edit)
 
-## What the hooks do
+After Write/Edit operations, validates the affected module and blocks further edits if validation fails. This is the inline feedback loop — it catches errors immediately.
 
-- **als-validate.sh** (PostToolUse) — after Write/Edit operations, validates the affected module and blocks further edits if validation fails.
-- **als-stop-gate.sh** (Stop) — before Claude finishes, validates all ALS systems under `$PWD` and blocks stop if any system has errors.
+### als-breadcrumb.sh (PostToolUse — Write|Edit)
+
+After Write/Edit operations, records which ALS system and module were touched to a session-scoped breadcrumb file at `/tmp/als-touched-${session_id}`. Does not run the compiler. Does not block.
+
+This hook exists so the stop gate knows what to validate without scanning the whole filesystem.
+
+TODO: Does not capture Bash-based file mutations (e.g. `echo ... > file.md`).
+
+### als-stop-gate.sh (Stop)
+
+Before Claude finishes, reads the breadcrumb file for this session. If ALS systems/modules were touched, validates only those. Blocks stop if any have errors.
+
+If no breadcrumb file exists (session didn't touch ALS files), exits immediately — no validation, no blocking.
 
 ## Requirements
 

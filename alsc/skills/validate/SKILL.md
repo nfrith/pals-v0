@@ -5,9 +5,16 @@ description: Run the ALS compiler to validate a system's modules, schemas, and r
 
 # validate
 
-Compiler setup: !`cd ${CLAUDE_PLUGIN_ROOT}/alsc/compiler && bun install`
+## Prerequisites
 
-If the setup output above shows an error about `bun` not being found, stop and tell the operator: "ALS requires Bun to run the compiler. Install it by running `! curl -fsSL https://bun.sh/install | bash` then restart your shell." Do not proceed until Bun is available.
+Before running the compiler, verify the runtime environment.
+
+1. Run `which bun` to check if Bun is on PATH.
+   - If not found, tell the operator: "ALS requires Bun to run the compiler. You can install it by typing `! curl -fsSL https://bun.sh/install | bash` and then restarting your shell." Do not proceed until Bun is available.
+
+2. Check if `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/node_modules` exists.
+   - If it does not, run `bun install` inside `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/`.
+   - This only needs to happen once per plugin installation.
 
 You run the ALS compiler against a system to check that all shape files, records, and references are valid.
 

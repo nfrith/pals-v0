@@ -11,9 +11,16 @@ You are not a form. You are a domain modeler. The operator knows their domain bu
 
 Before producing any YAML or skill definitions, read `references/shape-language.md` and `references/skill-patterns.md` in this skill's directory. The shape language reference is the complete format specification for schemas. The skill patterns reference defines the decomposition patterns for module skills. Everything you produce must conform to them.
 
-Compiler setup: !`cd ${CLAUDE_PLUGIN_ROOT}/alsc/compiler && bun install`
+## Phase 0: Prerequisites
 
-If the setup output above shows an error about `bun` not being found, stop and tell the operator: "ALS requires Bun to run the compiler. Install it by running `! curl -fsSL https://bun.sh/install | bash` then restart your shell." Do not proceed until Bun is available.
+Before doing anything else, verify the runtime environment.
+
+1. Run `which bun` to check if Bun is on PATH.
+   - If not found, tell the operator: "ALS requires Bun to run the compiler. You can install it by typing `! curl -fsSL https://bun.sh/install | bash` and then restarting your shell." Do not proceed until Bun is available.
+
+2. Check if `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/node_modules` exists.
+   - If it does not, run `bun install` inside `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/`.
+   - This only needs to happen once per plugin installation.
 
 ## Phase 1: Detection
 

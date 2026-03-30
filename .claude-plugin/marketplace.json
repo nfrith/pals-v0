@@ -1,0 +1,22 @@
+{
+  "name": "als-marketplace",
+  "owner": {
+    "name": "Section 9 Technologies LLC"
+  },
+  "metadata": {
+    "description": "ALS — Agent Language Specification tools for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "als",
+      "source": ".",
+      "description": "ALS tools and skills — create modules, validate systems, and deploy Claude skills",
+      "version": "0.1.0-beta.1",
+      "author": {
+        "name": "Nicholas Frith"
+      },
+      "license": "Elastic-2.0",
+      "keywords": ["agents", "als", "validation", "markdown"]
+    }
+  ]
+}

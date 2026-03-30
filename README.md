@@ -53,7 +53,42 @@ Once installed, ALS skills (`/new`, `/validate`, `/change`, `/deploy`) are avail
 
 ## How to Use
 
-*Coming soon.*
+### `/new` — Create a system or module
+
+Describe what you want to track. ALS interviews you to understand the domain — entities, fields, relationships, lifecycle — then produces the shape file, skill definitions, and sample records.
+
+```
+/new I need to track client projects with status, owner, and deliverables
+```
+
+For an existing system, `/new` adds a module to it. For a fresh directory, it bootstraps the whole system.
+
+### `/validate` — Check your system
+
+Runs the compiler against your ALS system and reports errors.
+
+```
+/validate
+/validate backlog
+```
+
+Without a module argument, validates everything. With one, validates just that module.
+
+### `/change` — Prepare a schema change
+
+When you need to add a field, rename a section, or modify the shape, `/change` prepares the next version bundle. It interviews you about the change, authors `vN+1`, and stages the migration assets — without touching live data.
+
+```
+/change backlog add a priority field
+```
+
+### `/migrate` — Execute the migration
+
+After `/change` has prepared a version bundle, `/migrate` validates it, dry-runs on a disposable clone, and performs the live cutover atomically.
+
+```
+/migrate backlog
+```
 
 ## How It Works
 

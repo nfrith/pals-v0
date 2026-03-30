@@ -53,6 +53,8 @@ Once installed, ALS skills (`/new`, `/validate`, `/change`, `/deploy`) are avail
 
 ## How to Use
 
+The ALS plugin adds skills to Claude Code — slash commands that guide Claude through structured workflows. Type the skill name in your Claude Code session to invoke it.
+
 ### `/new` — Create a system or module
 
 Describe what you want to track. ALS interviews you to understand the domain — entities, fields, relationships, lifecycle — then produces the shape file, skill definitions, and sample records.

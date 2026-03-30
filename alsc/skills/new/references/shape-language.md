@@ -57,6 +57,15 @@ Rules:
 Lives at `.als/modules/{module_id}/v{version}/`.
 
 ```yaml
+dependencies: []                      # required even when empty
+
+entities:
+  # ... entity definitions
+```
+
+With cross-module references:
+
+```yaml
 dependencies:                         # other modules this one references
   - module: people                    # just the module id
 
@@ -68,7 +77,8 @@ Rules:
 - Every required module version bundle contains `shape.yaml`
 - The live active skill interface is declared in `.als/system.yaml`, but the canonical skill bundles live under `skills/{skill_id}/SKILL.md`
 - Migration assets for `vK > 1` live under `migrations/` in the target bundle `vK`
-- `dependencies`: list modules whose entities are referenced by this module's ref fields. If a ref targets another module, that module must be listed here.
+- `dependencies` is required. Use an empty list when the module has no cross-module references.
+- If a ref targets another module, that module must be listed in `dependencies`.
 - `entities`: keyed by entity name matching `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
 - Authored ALS v1 shape files do not include a top-level `schema` field.
 - Validators reject stale authored `schema` fields so removed syntax does not linger in systems or prompts.

@@ -221,18 +221,23 @@ Once approved, create everything.
 7. Create a `SKILL.md` for each skill at `.als/modules/{module_id}/v1/skills/{skill_name}/SKILL.md`
 8. Create the module's data directory at `{path}/`
 9. Create the subdirectory tree implied by the path templates (empty directories)
-10. Validate the live system.
+10. Validate the live system:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts validate <system-root>
+```
+
 11. Preflight Claude projection with empty-target protection:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude --dry-run --require-empty-targets <system-root> [module-id]
 ```
 
 12. If the preflight reports target collisions under `.claude/skills/`, stop and resolve the skill ids with the operator before live deploy.
 13. Project the active skill bundle into `.claude/skills/`:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude <system-root> [module-id]
 ```
 
 ### If adding to an existing system
@@ -244,18 +249,23 @@ bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <system-root> [module-id]
 5. Create a `SKILL.md` for each skill at `.als/modules/{module_id}/v1/skills/{skill_name}/SKILL.md`
 6. Create the module's data directory at `{path}/`
 7. Create the subdirectory tree implied by the path templates (empty directories)
-8. Validate the live system.
+8. Validate the live system:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts validate <system-root>
+```
+
 9. Preflight Claude projection with empty-target protection:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude --dry-run --require-empty-targets <system-root> [module-id]
 ```
 
 10. If the preflight reports target collisions under `.claude/skills/`, stop and resolve the skill ids with the operator before live deploy.
 11. Project the active skill bundle into `.claude/skills/`:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude <system-root> [module-id]
 ```
 
 ### Skill authoring

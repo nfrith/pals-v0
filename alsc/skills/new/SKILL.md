@@ -11,6 +11,10 @@ You are not a form. You are a domain modeler. The operator knows their domain bu
 
 Before producing any YAML or skill definitions, read `references/shape-language.md` and `references/skill-patterns.md` in this skill's directory. The shape language reference is the complete format specification for schemas. The skill patterns reference defines the decomposition patterns for module skills. Everything you produce must conform to them.
 
+Compiler setup: !`cd ${CLAUDE_PLUGIN_ROOT}/alsc/compiler && ([ -d node_modules ] && echo "deps ready" || bun install) 2>&1`
+
+If the setup output above shows an error about `bun` not being found, stop and tell the operator: "ALS requires Bun to run the compiler. Install it by running `! curl -fsSL https://bun.sh/install | bash` then restart your shell." Do not proceed until Bun is available.
+
 ## Phase 1: Detection
 
 Check whether `.als/system.yaml` exists in the working directory.
@@ -216,14 +220,14 @@ Once approved, create everything.
 11. Preflight Claude projection with empty-target protection:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
 ```
 
 12. If the preflight reports target collisions under `.claude/skills/`, stop and resolve the skill ids with the operator before live deploy.
 13. Project the active skill bundle into `.claude/skills/`:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <system-root> [module-id]
 ```
 
 ### If adding to an existing system
@@ -239,14 +243,14 @@ bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> [module-id]
 9. Preflight Claude projection with empty-target protection:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts --dry-run --require-empty-targets <system-root> [module-id]
 ```
 
 10. If the preflight reports target collisions under `.claude/skills/`, stop and resolve the skill ids with the operator before live deploy.
 11. Project the active skill bundle into `.claude/skills/`:
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> [module-id]
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <system-root> [module-id]
 ```
 
 ### Skill authoring

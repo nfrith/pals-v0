@@ -125,7 +125,7 @@ This phase is required when `data_migration_required: true`.
 6. Project the cloned target module's active skills into `.claude/skills/`.
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <clone-root> <module-id>
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <clone-root> <module-id>
 ```
 
 7. Execute the manifest's `Behavior Test Plan`.
@@ -164,7 +164,7 @@ Never touch live data or `.als/system.yaml` before a final operator approval.
 8. If validation passes, project the target module's active skills into `.claude/skills/`.
 
 ```bash
-bun ${CLAUDE_PLUGIN_ROOT}/compiler/src/deploy.ts <system-root> <module-id>
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/deploy.ts <system-root> <module-id>
 ```
 
    - Overwrite projected dirs for skills in the new active set.

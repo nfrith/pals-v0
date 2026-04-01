@@ -5,7 +5,6 @@
   "author": {
     "name": "Nicholas Frith"
   },
-  "skills": "./skills",
   "hooks": [
     "./hooks/post-edit-validate.json",
     "./hooks/post-edit-breadcrumb.json",

@@ -20,54 +20,62 @@ breadcrumb_file="/tmp/als-touched-${session_id}"
 command -v bun &>/dev/null || exit 0
 [[ -f "$COMPILER/src/index.ts" ]] || exit 0
 
-# Read breadcrumbs and deduplicate system roots
-# Each line is system_root:module_id
-# For __system__ entries (metadata edits), validate the whole system
-declare -A systems_to_validate
+# Read breadcrumbs and deduplicate into a flat list of "system_root:module_id" pairs.
+# __system__ entries mean full-system validation.
+# Compatible with bash 3.2 (no associative arrays).
+entries=""
 while IFS=: read -r system_root module_id; do
   [[ -n "$system_root" ]] || continue
+  pair="${system_root}:${module_id}"
+  # Skip duplicates
+  case "$entries" in
+    *"|${pair}|"*) continue ;;
+  esac
+  # If __system__, drop any module-specific entries for this root
   if [[ "$module_id" == "__system__" ]]; then
-    # Metadata edit — validate full system
-    systems_to_validate["$system_root"]="__full__"
-  elif [[ "${systems_to_validate[$system_root]:-}" != "__full__" ]]; then
-    # Module edit — add to module list (space-separated)
-    existing="${systems_to_validate[$system_root]:-}"
-    if [[ -z "$existing" ]]; then
-      systems_to_validate["$system_root"]="$module_id"
-    elif [[ " $existing " != *" $module_id "* ]]; then
-      systems_to_validate["$system_root"]="$existing $module_id"
-    fi
+    cleaned=""
+    IFS='|' ; for e in $entries; do
+      [[ -z "$e" ]] && continue
+      e_root="${e%%:*}"
+      [[ "$e_root" == "$system_root" ]] && continue
+      cleaned="${cleaned}|${e}|"
+    done
+    unset IFS
+    entries="${cleaned}|${pair}|"
+  else
+    # Skip if this system already has a __full__ entry
+    case "$entries" in
+      *"|${system_root}:__system__|"*) continue ;;
+    esac
+    entries="${entries}|${pair}|"
   fi
 done < "$breadcrumb_file"
 
 # Nothing to validate? Allow stop.
-[[ ${#systems_to_validate[@]} -gt 0 ]] || exit 0
+[[ -n "$entries" ]] || exit 0
 
 # Validate each touched system/module
-failed=()
-for system_root in "${!systems_to_validate[@]}"; do
-  modules="${systems_to_validate[$system_root]}"
-  if [[ "$modules" == "__full__" ]]; then
-    # Full system validation
+fail_count=0
+IFS='|'
+for pair in $entries; do
+  [[ -z "$pair" ]] && continue
+  system_root="${pair%%:*}"
+  module_id="${pair#*:}"
+  if [[ "$module_id" == "__system__" ]]; then
     bun "$COMPILER/src/index.ts" "$system_root" >/dev/null 2>&1 && rc=0 || rc=$?
-    if [[ $rc -eq 1 ]]; then
-      failed+=("$system_root")
-    fi
   else
-    # Per-module validation
-    for module_id in $modules; do
-      bun "$COMPILER/src/index.ts" "$system_root" "$module_id" >/dev/null 2>&1 && rc=0 || rc=$?
-      if [[ $rc -eq 1 ]]; then
-        failed+=("$system_root:$module_id")
-      fi
-    done
+    bun "$COMPILER/src/index.ts" "$system_root" "$module_id" >/dev/null 2>&1 && rc=0 || rc=$?
+  fi
+  if [[ $rc -eq 1 ]]; then
+    fail_count=$((fail_count + 1))
   fi
 done
+unset IFS
 
 # All clean — allow stop
-[[ ${#failed[@]} -gt 0 ]] || exit 0
+[[ $fail_count -gt 0 ]] || exit 0
 
 # Something broken — block stop
-reason="ALS validation gate: ${#failed[@]} system(s)/module(s) still have errors. Fix all validation errors before finishing."
+reason="ALS validation gate: ${fail_count} system(s)/module(s) still have errors. Fix all validation errors before finishing."
 echo "{\"decision\":\"block\",\"reason\":\"$reason\"}"
 exit 2

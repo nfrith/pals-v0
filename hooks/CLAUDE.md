@@ -8,6 +8,8 @@ All hooks resolve the compiler path via `${CLAUDE_PLUGIN_ROOT}/alsc/compiler`.
 
 After Write/Edit operations, validates the affected module and blocks further edits if validation fails. This is the inline feedback loop — it catches errors immediately.
 
+Silent on success (no stdout). On failure, outputs a structured JSON block decision with compiler diagnostics.
+
 ### als-breadcrumb.sh (PostToolUse — Write|Edit)
 
 After Write/Edit operations, records which ALS system and module were touched to a session-scoped breadcrumb file at `/tmp/als-touched-${session_id}`. Does not run the compiler. Does not block.
@@ -21,6 +23,8 @@ TODO: Does not capture Bash-based file mutations (e.g. `echo ... > file.md`).
 Before Claude finishes, reads the breadcrumb file for this session. If ALS systems/modules were touched, validates only those. Blocks stop if any have errors.
 
 If no breadcrumb file exists (session didn't touch ALS files), exits immediately — no validation, no blocking.
+
+Written for bash 3.2 compatibility (macOS default). No associative arrays.
 
 ## Requirements
 

@@ -61,7 +61,7 @@ output=$(bun "$COMPILER/src/index.ts" "$system_root" "$module_id" 2>&1) && exit_
 
 case $exit_code in
   0)
-    echo "ALS: module '$module_id' validates OK"
+    # Silent success — no stdout, clean exit
     ;;
   1)
     # Validation failed — structured block decision with compiler diagnostics

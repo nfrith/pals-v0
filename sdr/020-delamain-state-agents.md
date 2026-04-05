@@ -15,59 +15,86 @@ Proposed
 
 ## Decision
 
-- ALS adds a first draft `agents` construct scoped inside a Delamain companion file.
+- ALS adds a first draft `agents` construct scoped inside a Delamain bundle.
 - Delamain-local agents are bound to states, not to transitions, in this pass.
-- A Delamain companion file may declare an explicit `agents` registry.
 - A non-terminal state declares `actor: operator | agent`.
-- A state may declare `agent: <name>`.
-- The `agent` reference on a state resolves through the Delamain-local `agents` registry, not through filename convention.
-- Each Delamain-local agent registry entry maps an agent name to a markdown file path in the same module-version bundle.
+- An `actor: agent` state declares `path: <markdown-path>`.
+- The `path` field on a state resolves directly to a markdown file in the same module-version bundle.
+- An `actor: agent` state declares `resumable: true | false`.
+- `resumable` declares whether the host should persist the state agent session and attempt resume when a record re-enters that same state later.
+- If `resumable: true`, the state declares `session-field: <field-id>`.
+- `session-field` identifies the frontmatter field where the host persists the resumable agent session id for that state.
+- Delamain-declared `session-field` values do not need to appear in `shape.yaml` entity fields.
+- Hosts append Delamain-declared session fields after the shape-declared frontmatter fields when materializing entity frontmatter.
+- An `actor: agent` state may also declare `sub-agent: <markdown-path>`.
+- `sub-agent` resolves directly to an auxiliary prompt asset in the same module-version bundle.
 - Agent files are markdown files with YAML frontmatter plus a markdown body.
 - The authored file shape intentionally mirrors Claude sub-agent files in this first draft.
 - Delamain-local state agents are prompt assets. Their body prose is not interpreted semantically by the compiler in this pass.
 - A state-bound agent is invoked because the record is currently in that state.
 - The state-bound agent may choose among the legal outgoing transitions from that state.
+- A declared `sub-agent` is an optional helper prompt the state agent may call while working that state.
 - Transitions remain the legal outcome graph. Agents do not replace transitions.
-- `actor: operator` states do not declare Delamain-local agents in this pass.
+- `actor: operator` states do not declare Delamain-local agent paths in this pass.
 - This first draft keeps Delamain-local agents strongly coupled to one Delamain instead of introducing a standalone global agent catalog.
 
 ## Normative Effect
 
-- Required: a state that declares `agent` references a declared Delamain-local agent registry entry.
-- Required: every declared Delamain-local agent registry entry resolves to a markdown file in the same module-version bundle.
-- Required: every resolved Delamain-local agent file contains YAML frontmatter.
-- Required: every resolved Delamain-local agent file contains a non-empty markdown body after frontmatter.
-- Required: Delamain-local agent files declare frontmatter `name`.
-- Required: Delamain-local agent files declare frontmatter `description`.
-- Required: terminal states do not declare `agent`.
-- Required: if a state declares `agent`, then that state declares `actor: agent`.
-- Required: if a non-terminal state declares `actor: agent`, then that state declares exactly one `agent`.
-- Required: if a non-terminal state declares `actor: operator`, then that state does not declare `agent`.
+- Required: every `path` on an `actor: agent` state resolves to a markdown file in the same module-version bundle.
+- Required: every resolved state-agent markdown file contains YAML frontmatter.
+- Required: every resolved state-agent markdown file contains a non-empty markdown body after frontmatter.
+- Required: state-agent markdown files declare frontmatter `name`.
+- Required: state-agent markdown files declare frontmatter `description`.
+- Required: terminal states do not declare `path`, `resumable`, `session-field`, or `sub-agent`.
+- Required: if a state declares `path`, then that state declares `actor: agent`.
+- Required: if a state declares `resumable`, then that state declares `actor: agent`.
+- Required: `resumable` is boolean only.
+- Required: every non-terminal `actor: agent` state declares `resumable`.
+- Required: if `resumable: true`, the state declares exactly one `session-field`.
+- Required: if `resumable: false`, the state does not declare `session-field`.
+- Required: if a state declares `session-field`, then that state declares `actor: agent`.
+- Required: if a state declares `sub-agent`, then that state declares `actor: agent`.
+- Required: if a non-terminal state declares `actor: agent`, then that state declares exactly one `path`.
+- Required: if a non-terminal state declares `actor: operator`, then that state does not declare `path`, `resumable`, `session-field`, or `sub-agent`.
+- Required: `session-field` names are unique within one Delamain bundle.
+- Required: Delamain-declared `session-field` names are treated as implicit nullable string frontmatter fields on entities bound to that Delamain.
+- Required: if a state declares `sub-agent`, the referenced markdown file resolves in the same module-version bundle.
+- Required: every resolved sub-agent markdown file contains YAML frontmatter.
+- Required: every resolved sub-agent markdown file contains a non-empty markdown body after frontmatter.
+- Required: sub-agent markdown files declare frontmatter `name`.
+- Required: sub-agent markdown files declare frontmatter `description`.
 - Required: Delamain transitions do not declare `actor`.
 - Allowed: Delamain-local agent files may declare additional Claude-style frontmatter such as `tools`, `model`, or `color`.
+- Allowed: resumable agent states may preserve their saved session field while work sits in operator-owned states and resume it on later re-entry to the same state.
+- Allowed: a state agent may invoke its declared `sub-agent` while remaining the owner of the Delamain state transition.
 - Allowed: a state-bound agent may choose any legal outgoing transition from its current state.
 - Allowed: transitions keep their own ids and classes even when agents are bound to states.
 - Rejected: transition-local `agent` bindings as the primary Delamain prompt surface in this pass.
-- Rejected: resolving Delamain-local agent files by naming convention alone.
+- Rejected: a top-level Delamain `agents` registry in this draft surface.
+- Rejected: requiring Delamain-declared `session-field` values to be explicitly duplicated in `shape.yaml`.
 - Rejected: standalone module-level or system-level `agents` declarations in this pass.
 - Rejected: interpreting prompt prose as part of Delamain graph validation in this pass.
 
 ## Compiler Impact
 
-- Extend Delamain parsing so companion files may declare an `agents` registry.
-- Extend state parsing so states may declare `agent`.
-- Add validation for unknown state-level agent references.
-- Add file-resolution and file-shape validation for Delamain-local agent markdown files, including required frontmatter and required `name` plus `description`.
-- Add validation that terminal states do not declare agent.
-- Add validation that `actor: agent` states declare exactly one agent.
-- Add validation that `actor: operator` states do not declare `agent`.
+- Extend state parsing so states may declare `path`, `resumable`, optional `session-field`, and optional `sub-agent`.
+- Add file-resolution and file-shape validation for state-agent markdown files, including required frontmatter and required `name` plus `description`.
+- Add file-resolution and file-shape validation for referenced sub-agent markdown files.
+- Add validation that terminal states do not declare `path`, `resumable`, `session-field`, or `sub-agent`.
+- Add validation that `actor: agent` states declare exactly one `path` and explicit boolean `resumable`.
+- Add validation that `resumable: true` states declare exactly one `session-field`.
+- Add validation that `resumable: false` states do not declare `session-field`.
+- Add validation that `actor: operator` states do not declare `path`, `resumable`, `session-field`, or `sub-agent`.
+- Add validation that Delamain-declared `session-field` names are unique and are surfaced as implicit nullable string frontmatter fields after the shape-declared fields.
 - Do not interpret prompt body semantics, tool lists, model selection, or instruction quality inside the compiler in this pass.
 
 ## Docs and Fixture Impact
 
-- Update the canonical shape-language reference later to document Delamain-local `agents`, state-level `agent`, and the Delamain-local file layout for agent prompt assets.
-- Revise the `software-factory` design-reference example so its `delivery` Delamain declares state-level agent bindings rather than transition-level agent bindings.
+- Update the canonical shape-language reference later to document state-level `path`, required `resumable`, optional `session-field`, path-valued optional `sub-agent`, and the Delamain-bundle file layout for prompt assets.
+- Revise the `software-factory` design-reference example so its `delivery` Delamain declares direct state-level agent paths rather than a separate registry.
+- Remove explicit planner and dev session fields from the fixture `shape.yaml` and let the Delamain declaration supply them implicitly.
 - Add one Delamain-local agent markdown file per agent-owned state in that example.
+- Add Delamain-local helper prompt assets under `sub-agents/` where the fixture needs to sketch a nested-agent pattern.
 - Use the fixture to pressure-test naming, path layout, and how state-local prompt assets read when one state agent may choose among multiple legal transitions.
 - Keep this fixture draft-focused. It does not need to prove runtime execution semantics yet.
 
@@ -75,6 +102,10 @@ Proposed
 
 - Keep transition-local agents from SDR 019.
 - Rejected because dispatch is triggered by current state, while transition choice is an outcome of the work performed in that state.
+- Keep a separate Delamain `agents` registry.
+- Rejected because the current sketch is deliberately pushing authored paths down onto the states that own execution.
+- Require session persistence fields to be explicitly duplicated in `shape.yaml`.
+- Rejected because resumable session storage belongs to Delamain-owned execution semantics and should not force redundant field declarations in the base entity shape.
 - Add a standalone top-level ALS `agents` construct first.
 - Rejected because the current need is Delamain-local prompt assets whose reuse and independence are not yet proven.
 - Resolve state agent files by naming convention from state ids.
@@ -87,6 +118,8 @@ Proposed
 - Should Delamain-local agents later become a standalone ALS construct?
 - Should state-bound agents remain Delamain-local, or should a later pass allow reusable agent templates?
 - Should ALS later validate more of the Claude-style frontmatter contract beyond `name` and `description`?
+- Should path-valued `sub-agent` remain Delamain-local, or grow into an explicit reusable registry later?
+- Should Delamain later define explicit clearing semantics for saved session fields when work exits a resumable state permanently?
 - Should Delamain eventually infer some transition metadata from states, or keep transitions fully explicit even when ownership lives on states?
 
 ## Non-Goals

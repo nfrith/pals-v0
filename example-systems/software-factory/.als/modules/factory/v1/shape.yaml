@@ -2,7 +2,7 @@ dependencies: []
 
 delamains:
   delivery:
-    path: delamains/delivery.yaml
+    path: delamains/delivery/delamain.yaml
 
 entities:
   work-item:
@@ -53,14 +53,6 @@ entities:
         allow_null: true
 
       pr:
-        type: string
-        allow_null: true
-
-      planner_session:
-        type: string
-        allow_null: true
-
-      dev_session:
         type: string
         allow_null: true
 

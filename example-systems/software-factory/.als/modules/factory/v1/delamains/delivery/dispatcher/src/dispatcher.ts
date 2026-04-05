@@ -29,7 +29,6 @@ interface Transition {
   class: string;
   from: string | string[];
   to: string;
-  actor: string;
 }
 
 interface StateDef {
@@ -37,13 +36,13 @@ interface StateDef {
   initial?: boolean;
   terminal?: boolean;
   actor?: string;
-  agent?: string;
+  path?: string;
+  "sub-agent"?: string;
 }
 
 interface DelamainConfig {
   phases: string[];
   states: Record<string, StateDef>;
-  agents?: Record<string, { path: string }>;
   transitions: Transition[];
 }
 
@@ -57,6 +56,7 @@ interface AgentDef {
 export interface DispatchEntry {
   state: string;
   agentName: string;
+  subAgentName?: string;
   transitions: Array<Pick<Transition, "id" | "class" | "to">>;
 }
 
@@ -140,24 +140,25 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
   // system.yaml path (workspace/factory) + entity path dirname (items/)
   const itemsDir = join(systemRoot, mod.path, dirname(entityPath));
 
-  // 3. delivery.yaml → states, transitions, and agents registry
+  // 3. Delamain primary file → states and transitions
   const delamainPath = shape.delamains[delamainName]?.path;
   if (!delamainPath) {
     throw new Error(`Delamain "${delamainName}" not in shape registry`);
   }
+  const delamainDir = dirname(delamainPath);
 
   const delamain = parseYaml(
     await readFile(join(moduleDir, delamainPath), "utf-8"),
   ) as DelamainConfig;
 
-  // 4. Load agent files from the agents registry
   const agents: Record<string, AgentDef> = {};
-  for (const [agentKey, agentRef] of Object.entries(delamain.agents ?? {})) {
+
+  async function loadAgent(agentKey: string, agentPath: string) {
     try {
       const { meta, body } = parseMd(
-        await readFile(join(moduleDir, agentRef.path), "utf-8"),
+        await readFile(join(moduleDir, agentPath), "utf-8"),
       );
-      if (!body) continue;
+      if (!body) return;
 
       const def: AgentDef = {
         description: meta["description"] ?? "",
@@ -172,19 +173,32 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
         def.model = meta["model"] as AgentDef["model"];
       }
 
-      // Use the agent registry key as the SDK agent name
+      // Use the state id or sub-agent name as the SDK agent name.
       agents[agentKey] = def;
     } catch {
       // Skip unreadable agent files
     }
   }
 
+  // 4. Load state agent files and any referenced Delamain-local sub-agents
+  for (const [stateId, state] of Object.entries(delamain.states)) {
+    if (state.actor !== "agent" || !state.path) continue;
+    await loadAgent(stateId, state.path);
+
+    const subAgentName = state["sub-agent"];
+    if (!subAgentName || agents[subAgentName]) continue;
+    await loadAgent(
+      subAgentName,
+      join(delamainDir, "sub-agents", `${subAgentName}.md`),
+    );
+  }
+
   // 5. Build dispatch table from agent-owned states
   const dispatchTable: DispatchEntry[] = [];
   for (const [stateId, state] of Object.entries(delamain.states)) {
     if (state.actor !== "agent") continue;
-    if (!state.agent) continue;
-    if (!agents[state.agent]) continue;
+    if (!state.path) continue;
+    if (!agents[stateId]) continue;
 
     const transitions = delamain.transitions
       .filter((t) => {
@@ -195,7 +209,11 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
 
     dispatchTable.push({
       state: stateId,
-      agentName: state.agent,
+      agentName: stateId,
+      subAgentName:
+        state["sub-agent"] && agents[state["sub-agent"]]
+          ? state["sub-agent"]
+          : undefined,
       transitions,
     });
   }
@@ -223,11 +241,18 @@ export async function dispatch(
   agents: Record<string, AgentDef>,
   systemRoot: string,
 ): Promise<{ success: boolean; sessionId?: string }> {
+  const agent = agents[entry.agentName]!;
+
+  // Compose prompt: agent file body + runtime context
   const transitionLines = entry.transitions.map(
-    (t) => `- ${t.id}: ${t.class} -> ${t.to}`,
+    (t) => `- ${t.id}: ${t.class} → ${t.to}`,
   );
   const prompt = [
-    `Use the ${entry.agentName} agent to handle ${itemId}.`,
+    agent.prompt,
+    ``,
+    `---`,
+    ``,
+    `## Runtime Context`,
     ``,
     `item_id: ${itemId}`,
     `item_file: ${itemFile}`,
@@ -238,7 +263,17 @@ export async function dispatch(
     ...transitionLines,
   ].join("\n");
 
-  console.log(`[dispatcher] ${itemId} @ ${entry.state} → ${entry.agentName}`);
+  // Tools from agent frontmatter; add Agent tool if state has a sub-agent
+  const tools = [...(agent.tools ?? ["Read", "Edit"])];
+  let subAgents: Record<string, AgentDef> | undefined;
+  if (entry.subAgentName && agents[entry.subAgentName]) {
+    if (!tools.includes("Agent")) tools.push("Agent");
+    subAgents = { [entry.subAgentName]: agents[entry.subAgentName]! };
+  }
+
+  console.log(
+    `[dispatcher] ${itemId} @ ${entry.state} → ${entry.agentName}${entry.subAgentName ? ` (+ sub-agent: ${entry.subAgentName})` : ""}`,
+  );
 
   let sessionId: string | undefined;
 
@@ -247,12 +282,12 @@ export async function dispatch(
       prompt,
       options: {
         cwd: systemRoot,
-        agents: { [entry.agentName]: agents[entry.agentName]! },
-        allowedTools: ["Agent"],
-        model: "haiku",
+        model: agent.model ?? "sonnet",
+        allowedTools: tools,
+        ...(subAgents ? { agents: subAgents } : {}),
         permissionMode: "acceptEdits",
-        maxTurns: 5,
-        maxBudgetUsd: 0.25,
+        maxTurns: 50,
+        maxBudgetUsd: 1.0,
       },
     })) {
       if (message.type === "system" && message.subtype === "init") {

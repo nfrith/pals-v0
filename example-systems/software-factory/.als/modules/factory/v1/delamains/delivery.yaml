@@ -1,0 +1,147 @@
+phases: [intake, planning, implementation, deployment, closed]
+
+states:
+  draft:
+    initial: true
+    phase: intake
+  queued:
+    phase: intake
+  planning:
+    phase: planning
+  plan-input:
+    phase: planning
+  plan-ready:
+    phase: planning
+  ready:
+    phase: implementation
+  in-dev:
+    phase: implementation
+  in-review:
+    phase: implementation
+  uat-test:
+    phase: implementation
+  deployment-ready:
+    phase: deployment
+  deploying:
+    phase: deployment
+  deployment-testing:
+    phase: deployment
+  deployment-failure:
+    phase: deployment
+  completed:
+    phase: closed
+    terminal: true
+  deferred:
+    phase: closed
+    terminal: true
+  cancelled:
+    phase: closed
+    terminal: true
+
+transitions:
+  - class: advance
+    from: draft
+    to: queued
+    actor: operator
+  - class: advance
+    from: queued
+    to: planning
+    actor: system
+  - class: advance
+    from: planning
+    to: plan-input
+    actor: agent
+  - class: advance
+    from: planning
+    to: plan-ready
+    actor: agent
+  - class: rework
+    from: plan-input
+    to: queued
+    actor: operator
+  - class: advance
+    from: plan-ready
+    to: ready
+    actor: operator
+  - class: rework
+    from: plan-ready
+    to: queued
+    actor: operator
+  - class: advance
+    from: ready
+    to: in-dev
+    actor: system
+  - class: advance
+    from: in-dev
+    to: in-review
+    actor: agent
+  - class: rework
+    from: in-review
+    to: ready
+    actor: agent
+  - class: advance
+    from: in-review
+    to: uat-test
+    actor: agent
+  - class: advance
+    from: uat-test
+    to: deployment-ready
+    actor: operator
+  - class: rework
+    from: uat-test
+    to: queued
+    actor: operator
+  - class: advance
+    from: deployment-ready
+    to: deploying
+    actor: system
+  - class: advance
+    from: deploying
+    to: deployment-testing
+    actor: agent
+  - class: exit
+    from: deployment-testing
+    to: completed
+    actor: agent
+  - class: rework
+    from: deployment-testing
+    to: deployment-failure
+    actor: agent
+  - class: rework
+    from: deployment-failure
+    to: ready
+    actor: operator
+  - class: rework
+    from: deployment-failure
+    to: queued
+    actor: operator
+  - class: exit
+    from:
+      - draft
+      - queued
+      - planning
+      - plan-input
+      - plan-ready
+      - ready
+      - in-dev
+      - in-review
+      - uat-test
+      - deployment-ready
+      - deployment-failure
+    to: deferred
+    actor: operator
+  - class: exit
+    from:
+      - draft
+      - queued
+      - planning
+      - plan-input
+      - plan-ready
+      - ready
+      - in-dev
+      - in-review
+      - uat-test
+      - deployment-ready
+      - deployment-failure
+    to: cancelled
+    actor: operator

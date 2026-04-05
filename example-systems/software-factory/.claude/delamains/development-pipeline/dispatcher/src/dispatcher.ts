@@ -308,6 +308,10 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
 // Dispatch — agent file body = prompt, frontmatter = query options
 // -------------------------------------------------------------------
 
+// Strip ANTHROPIC_API_KEY so the SDK uses subscription auth (OAuth)
+const sdkEnv: Record<string, string | undefined> = { ...process.env };
+delete sdkEnv["ANTHROPIC_API_KEY"];
+
 const today = () => new Date().toISOString().slice(0, 10);
 
 export async function dispatch(
@@ -319,11 +323,15 @@ export async function dispatch(
 ): Promise<{ success: boolean; sessionId?: string }> {
   const agent = agents[entry.agentName]!;
 
-  // Check for resumable session
+  // Check for resumable session — only resume if stored value is a valid UUID
   let resumeSessionId: string | undefined;
   if (entry.resumable && entry.sessionField) {
-    resumeSessionId =
-      (await readFrontmatterField(itemFile, entry.sessionField)) ?? undefined;
+    const stored = await readFrontmatterField(itemFile, entry.sessionField);
+    if (stored && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stored)) {
+      resumeSessionId = stored;
+    } else if (stored) {
+      console.log(`[dispatcher] ${itemId} ignoring invalid session ID: ${stored}`);
+    }
   }
 
   // Compose prompt: agent file body + runtime context
@@ -372,6 +380,7 @@ export async function dispatch(
         allowedTools: tools,
         ...(subAgents ? { agents: subAgents } : {}),
         ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+        env: sdkEnv,
         permissionMode: "acceptEdits",
         maxTurns: 50,
         maxBudgetUsd: 1.0,

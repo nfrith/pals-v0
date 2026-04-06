@@ -85,6 +85,23 @@ test.concurrent("malformed Delamain prompt frontmatter produces a diagnostic ins
   });
 });
 
+test.concurrent("delegated is rejected on operator-owned states during bundle validation", async () => {
+  await withFixtureSandbox("delamain-delegated-operator-state", async ({ root }) => {
+    await updateYamlTextFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/delamain.yaml",
+      (current) => {
+        const states = current.states as Record<string, Record<string, unknown>>;
+        states["plan-input"].delegated = true;
+      },
+    );
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "factory", codes.DELAMAIN_INVALID, "development-pipeline/delamain.yaml");
+  });
+});
+
 test.concurrent("Delamain session fields cannot collide with explicit fields on the same effective schema", async () => {
   await withFixtureSandbox("delamain-session-field-collision", async ({ root }) => {
     await updateShapeYaml(root, "factory", 1, (shape) => {

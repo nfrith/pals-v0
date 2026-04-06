@@ -537,6 +537,7 @@ states:
     phase: planning
     actor: agent
     resumable: true
+    delegated: true
     session-field: planner_session
     path: agents/planning.md
   in-dev:
@@ -583,10 +584,17 @@ Rules:
 - Delamain-local asset paths such as state `path` and `sub-agent` resolve relative to the directory containing the Delamain primary definition file, not relative to the module bundle root.
 - Resolved Delamain-local asset paths must remain inside the same active module version bundle.
 - `actor: agent` states declare exactly one `path` plus explicit boolean `resumable`.
+- `delegated` is optional and only valid on `actor: agent` states.
+- If `delegated` is omitted, hosts treat it as `false`.
 - If `resumable: true`, the state declares exactly one `session-field`.
 - If `resumable: false`, the state does not declare `session-field`.
 - `session-field` names become implicit nullable string frontmatter fields on entities bound to that Delamain.
 - A Delamain-declared `session-field` name must not collide with any explicit entity field name or any other implicit Delamain session field name materialized on the same effective entity schema.
+- If `delegated: true`, hosts do not pass the saved `session-field` value to the Agent SDK `resume` option.
+- If `delegated: true`, hosts do not auto-persist the dispatcher-owned Agent SDK session id into the state's `session-field`.
+- If `delegated: true`, runtime context still exposes `session_field` and `session_id`.
+- If `delegated: true` and the state has no declared `session-field`, runtime context uses `session_field: null` and `session_id: null`.
+- If `delegated: true` and the state declares `session-field`, runtime context uses the field name plus the saved value or `null`.
 - `sub-agent` is optional and only valid on `actor: agent` states.
 
 ### Delamain agent files

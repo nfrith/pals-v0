@@ -40,8 +40,16 @@ The core logic. Two main functions:
 1. Reads the agent's markdown file (frontmatter + body)
 2. Composes the prompt: agent body + runtime context (item ID, current state, legal transitions)
 3. Calls the Agent SDK `query()` directly with the agent's model, tools, and prompt
-4. Handles resumable sessions: reads/writes session IDs to item frontmatter
+4. Handles direct and delegated session behavior: reads session metadata, resumes direct SDK sessions, and skips SDK resume plus auto-persist for delegated states
 5. Passes sub-agents via the SDK `agents` parameter when the state declares `sub-agent`
+
+### `src/session-runtime.ts`
+
+Pure helper logic for session handling:
+
+- Builds the runtime `resume`, `session_field`, and `session_id` contract from authored Delamain state data plus any stored session value
+- Distinguishes direct SDK-resumable states from delegated externally managed worker sessions
+- Centralizes the rule for whether the dispatcher should persist its own SDK session id
 
 ## How Configuration Is Derived
 
@@ -56,7 +64,7 @@ The dispatcher never reads a config file. Everything comes from the ALS declarat
 | Dispatch rules | States where `actor: agent` and `path` is declared |
 | Agent prompts | Markdown files at delamain-relative `path` |
 | Legal transitions | Delamain primary definition → `transitions` filtered by source state |
-| Session persistence | State `resumable` + `session-field` |
+| Session handling | State `resumable` + `delegated` + `session-field` |
 | Sub-agents | State `sub-agent` path |
 
 ## Path Resolution
@@ -67,14 +75,27 @@ The `findSystemRoot` walk-up in `index.ts` makes the dispatcher work at any nest
 
 ## Session Handling
 
-States that declare `resumable: true` and `session-field: <field>` get automatic session persistence:
+Session fields are implicit — they are declared in `delamain.yaml`, not in `shape.yaml`.
+
+### Direct resumable dispatch
+
+States that declare `resumable: true` and omit `delegated` (or declare `delegated: false`) get automatic Agent SDK session persistence:
 
 1. Before dispatch, the dispatcher reads the session field from item frontmatter.
-2. If a session ID exists, it passes `resume: sessionId` to the SDK.
-3. After a new session completes, the dispatcher writes the session ID back to the item's frontmatter field.
-4. On subsequent dispatches to the same state, the session resumes where it left off.
+2. If the stored value is a valid Agent SDK session id, it passes `resume: sessionId` to the SDK.
+3. After a new SDK session completes, the dispatcher writes that SDK session id back to the item's frontmatter field.
+4. On subsequent dispatches to the same state, the SDK session resumes where it left off.
 
-Session fields are implicit — they are declared in `delamain.yaml`, not in `shape.yaml`.
+### Delegated dispatch
+
+States that declare `delegated: true` are treated as orchestrators for externally managed work:
+
+1. The dispatcher still reads the authored `session-field` value when one exists.
+2. The dispatcher exposes `session_field` and `session_id` in Runtime Context so the state agent can inspect or manage the delegated worker lifecycle.
+3. The dispatcher does not pass `resume` to the Agent SDK for delegated states.
+4. The dispatcher does not auto-persist the dispatcher-owned Agent SDK session id back into the item's `session-field`.
+
+If a delegated state has no declared `session-field`, Runtime Context still includes `session_field: null` and `session_id: null`.
 
 ## Sub-Agent Handling
 

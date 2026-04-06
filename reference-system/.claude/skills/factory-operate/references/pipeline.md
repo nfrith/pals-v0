@@ -5,7 +5,7 @@ Status-driven SDLC for work items in the factory module. Governed by the `develo
 ## Actors
 
 - **Operator**: Human in the loop. Creates items, approves plans, performs UAT, handles failures.
-- **Agent**: Dispatched by the delamain. Executes planning, implementation, review, and deployment.
+- **Agent**: Dispatched by the delamain. Planning may delegate to an external worker, while the other agent-owned states run directly.
 
 ## Phases and Statuses
 
@@ -72,13 +72,13 @@ Operator sends back to `queued` for full re-plan. Failure context captured in UA
 
 `plan-ready` -> `queued` -> `planning` -> ... -> `plan-ready`
 
-Operator rejects plan. Item returns to `queued` with `planner_session` preserved. Dispatcher spawns new planner session with revision context.
+Operator rejects plan. Item returns to `queued` with `planner_session` preserved. When the item re-enters `planning`, the dispatcher re-dispatches the planning orchestrator with the saved planner session in Runtime Context so the delegated planner can continue the same thread.
 
 ### Plan-input loop
 
 `planning` -> `plan-input` -> `queued` -> `planning` -> ... -> `plan-ready`
 
-Planner has questions. Operator answers in `PLAN_QUESTIONS`. Item moves back to `queued`. Dispatcher detects the re-queued item (with `planner_session` set) and resumes planning.
+Planner has questions. Operator answers in `PLAN_QUESTIONS`. Item moves back to `queued`. When it re-enters `planning`, the dispatcher passes the saved `planner_session` back through Runtime Context and the delegated planning agent resumes or inspects that worker session itself.
 
 ## Session Fields
 
@@ -86,8 +86,8 @@ These fields are implicit — managed by the delamain dispatcher, not by the ope
 
 | Field | Purpose |
 |-------|---------|
-| `planner_session` | Session ID for planning agent. Set at `queued` -> `planning`. |
-| `dev_session` | Session ID for dev agent. Set at `ready` -> `in-dev`. |
+| `planner_session` | Durable session ID for the delegated planning worker. Exposed back to the planning agent through Runtime Context on later `planning` re-entry. |
+| `dev_session` | Session ID for the direct Agent SDK dev run. Set at `ready` -> `in-dev` and resumed by the dispatcher on later re-entry. |
 
 ## Section Lifecycle
 

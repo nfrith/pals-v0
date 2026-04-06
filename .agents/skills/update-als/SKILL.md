@@ -96,9 +96,37 @@ If that path no longer holds the canonical shape-language documentation:
 - continue using the new location
 - tell the operator the reference location changed
 
+## Implementation Plan Format
+
+The implementation plan follows this structure. Each section should be filled out based on the current state of the codebase — identify every component that the change touches, not just the ones listed here as examples.
+
+### Summary
+
+What is being implemented. One paragraph.
+
+### Current Baseline
+
+What already exists and what state it is in. Include what prior workflow steps (SDR, fixtures, docs) have been completed.
+
+### Implementation Changes
+
+Identify every component in the codebase that this change touches. For each, describe what changes and reference the specific source files. Scan the repo to discover what is affected — do not rely on a fixed list of categories.
+
+### Public Interface / Behavior Changes
+
+What changes in the authored surface and runtime behavior. Be precise about what is new, what is unchanged, and what is forbidden.
+
+### Test Plan
+
+Identify the test coverage required for this change. Cover every layer that the implementation touches — unit, integration, runtime, end-to-end. Include the exact commands to run for verification.
+
+### Assumptions
+
+Scope boundaries, what is explicitly out of scope, and constraints the implementation must respect.
+
 ## Implementation Phase
 
-After the SDR is accepted and the canonical shape-language documentation is updated, implement the compiler changes. Then update or add tests required by the repo rules in `../../../AGENTS.md`.
+After the SDR is accepted, the canonical shape-language documentation is updated, and the implementation plan is written, implement the compiler changes. Then update or add tests required by the repo rules in `../../../AGENTS.md`.
 
 When the change introduces new compiler behavior, add positive and negative tests that prove valid input is accepted and invalid input is rejected.
 
@@ -113,4 +141,5 @@ When using this skill, produce work in this shape:
 3. Show the fixture and shape-YAML examples that exercise the proposal.
 4. Summarize any friction and ask for operator review when the syntax is still moving.
 5. Identify the canonical shape-language documentation update.
-6. Implement compiler and test changes only after the decision is settled.
+6. Produce the implementation plan following the Implementation Plan Format above.
+7. Implement compiler and test changes only after the decision is settled.

@@ -69,6 +69,111 @@ test("delamain shape schema rejects operator-owned states with agent-only fields
   expect(result.success).toBe(false);
 });
 
+test("delamain shape schema accepts delegated agent-owned states", () => {
+  const result = delamainShapeSchema.safeParse({
+    phases: ["intake", "planning", "closed"],
+    states: {
+      draft: {
+        initial: true,
+        phase: "intake",
+        actor: "operator",
+      },
+      planning: {
+        phase: "planning",
+        actor: "agent",
+        resumable: true,
+        delegated: true,
+        "session-field": "planner_session",
+        path: "agents/planning.md",
+      },
+      review: {
+        phase: "planning",
+        actor: "agent",
+        resumable: false,
+        delegated: true,
+        path: "agents/review.md",
+      },
+      completed: {
+        phase: "closed",
+        terminal: true,
+      },
+    },
+    transitions: [
+      {
+        class: "advance",
+        from: "draft",
+        to: "planning",
+      },
+      {
+        class: "advance",
+        from: "planning",
+        to: "review",
+      },
+      {
+        class: "exit",
+        from: "review",
+        to: "completed",
+      },
+    ],
+  });
+
+  expect(result.success).toBe(true);
+});
+
+test("delamain shape schema rejects delegated on operator-owned states", () => {
+  const result = delamainShapeSchema.safeParse({
+    phases: ["intake", "closed"],
+    states: {
+      draft: {
+        initial: true,
+        phase: "intake",
+        actor: "operator",
+        delegated: true,
+      },
+      completed: {
+        phase: "closed",
+        terminal: true,
+      },
+    },
+    transitions: [
+      {
+        class: "exit",
+        from: "draft",
+        to: "completed",
+      },
+    ],
+  });
+
+  expect(result.success).toBe(false);
+});
+
+test("delamain shape schema rejects delegated on terminal states", () => {
+  const result = delamainShapeSchema.safeParse({
+    phases: ["intake", "closed"],
+    states: {
+      draft: {
+        initial: true,
+        phase: "intake",
+        actor: "operator",
+      },
+      completed: {
+        phase: "closed",
+        terminal: true,
+        delegated: true,
+      },
+    },
+    transitions: [
+      {
+        class: "exit",
+        from: "draft",
+        to: "completed",
+      },
+    ],
+  });
+
+  expect(result.success).toBe(false);
+});
+
 test("graph validation requires at least one terminal state", () => {
   const delamain = makeValidDelamain();
   delete delamain.states.completed.terminal;

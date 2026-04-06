@@ -35,8 +35,9 @@ Phases group states into logical stages. They exist for human readability and re
 States with `actor: agent` declare:
 
 - **path** — the agent markdown file (relative to the delamain bundle root)
-- **resumable** — whether the dispatcher should resume a previous session
-- **session-field** — the frontmatter field that stores the session ID for resume
+- **resumable** — whether the state participates in persisted session handling
+- **delegated** — optional boolean that marks the state agent as an orchestrator for externally managed work
+- **session-field** — the frontmatter field that stores the persisted session identifier for that state
 - **sub-agent** — optional path to a sub-agent markdown file
 
 ### Operator States
@@ -62,6 +63,7 @@ development-pipeline/
     └── src/
         ├── index.ts
         ├── dispatcher.ts
+        ├── session-runtime.ts
         └── watcher.ts
 ```
 

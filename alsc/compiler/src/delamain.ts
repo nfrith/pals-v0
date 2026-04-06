@@ -39,6 +39,7 @@ const delamainStateSchema = z.object({
   actor: z.enum(["operator", "agent"]).optional(),
   path: nonEmptyString.optional(),
   resumable: z.boolean().optional(),
+  delegated: z.boolean().optional(),
   "session-field": fieldNameSchema.optional(),
   "sub-agent": nonEmptyString.optional(),
 }).strict().superRefine((value, ctx) => {
@@ -53,7 +54,7 @@ const delamainStateSchema = z.object({
   }
 
   if (isTerminal) {
-    for (const fieldName of ["actor", "path", "resumable", "session-field", "sub-agent"] as const) {
+    for (const fieldName of ["actor", "path", "resumable", "delegated", "session-field", "sub-agent"] as const) {
       if (value[fieldName] !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -75,7 +76,7 @@ const delamainStateSchema = z.object({
   }
 
   if (value.actor === "operator") {
-    for (const fieldName of ["path", "resumable", "session-field", "sub-agent"] as const) {
+    for (const fieldName of ["path", "resumable", "delegated", "session-field", "sub-agent"] as const) {
       if (value[fieldName] !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

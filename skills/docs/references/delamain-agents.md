@@ -68,7 +68,9 @@ legal_transitions:
 - advance → plan-ready
 ```
 
-The agent uses this to know which item to operate on, what transitions are legal, and whether this is a fresh or resumed session.
+The agent uses this to know which item to operate on, what transitions are legal, and how session handling applies in the current state.
+
+For direct SDK-resumable states, `resume: yes` means the dispatcher will resume its prior Agent SDK session. For delegated states such as the reference `planning` flow, `resume: no` can still appear alongside a non-null `session_id`, meaning the saved session belongs to the delegated worker rather than the dispatcher-owned SDK session.
 
 ## Best Practices
 
@@ -96,10 +98,10 @@ Some agents don't do work directly — they spawn an external process (e.g., a C
 
 Key rules for delegated agents:
 - **Check idempotency first** — verify the delegate isn't already running
-- **The agent writes the session ID** — the dispatcher's auto-persist writes the wrong session (the orchestrator's, not the delegate's). The delegate must write its own session ID to the session field.
-- **Fresh vs resume** — check `resume` and `session_id` from Runtime Context. If resuming, pass the session ID to the delegate (e.g., `codex resume {SESSION_ID}`).
+- **The agent writes the session ID** — the dispatcher disables auto-persist for delegated states, so the delegate must write its own session ID to the session field.
+- **Saved worker session metadata** — use `session_id` from Runtime Context as the delegated worker session identifier when it is present. `resume` stays `no` because the dispatcher is not resuming its own Agent SDK session for delegated states.
 
-The `delegated: true` field in `delamain.yaml` (GHOST-154) will formalize this by telling the dispatcher to skip Agent SDK resume and auto-persist for delegated states.
+The `delegated: true` field in `delamain.yaml` tells the dispatcher to skip Agent SDK resume and auto-persist for delegated states while still exposing runtime session metadata to the agent.
 
 ### 3. One Job Per Agent
 

@@ -2,6 +2,7 @@ import { readFile, writeFile } from "fs/promises";
 import { join, dirname, basename } from "path";
 import { parse as parseYaml } from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { buildSessionRuntimeState, shouldPersistDispatcherSession } from "./session-runtime.js";
 
 // -------------------------------------------------------------------
 // Types
@@ -44,6 +45,7 @@ interface StateDef {
   actor?: string;
   path?: string;
   resumable?: boolean;
+  delegated?: boolean;
   "session-field"?: string;
   "sub-agent"?: string;
 }
@@ -66,6 +68,7 @@ export interface DispatchEntry {
   agentName: string;
   subAgentName?: string;
   resumable: boolean;
+  delegated: boolean;
   sessionField?: string;
   transitions: Array<Pick<Transition, "class" | "to">>;
 }
@@ -139,10 +142,15 @@ async function setFrontmatterField(
   filePath: string,
   field: string,
   value: string,
-): Promise<void> {
+): Promise<boolean> {
   const raw = await readFile(filePath, "utf-8");
   const lines = raw.split("\n");
-  if (lines[0]?.trim() !== "---") return;
+  if (lines[0]?.trim() !== "---") {
+    console.warn(
+      `[dispatcher] could not persist ${field}: ${filePath} is missing YAML frontmatter fence`,
+    );
+    return false;
+  }
 
   let closingFence = -1;
   let existingLine = -1;
@@ -158,7 +166,12 @@ async function setFrontmatterField(
     }
   }
 
-  if (closingFence === -1) return;
+  if (closingFence === -1) {
+    console.warn(
+      `[dispatcher] could not persist ${field}: ${filePath} has malformed YAML frontmatter fence`,
+    );
+    return false;
+  }
 
   if (existingLine !== -1) {
     lines[existingLine] = `${field}: ${value}`;
@@ -167,6 +180,7 @@ async function setFrontmatterField(
   }
 
   await writeFile(filePath, lines.join("\n"), "utf-8");
+  return true;
 }
 
 // -------------------------------------------------------------------
@@ -186,6 +200,7 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
   let discriminatorValue: string | undefined;
   let moduleDir: string | undefined;
   let modPath: string | undefined;
+  const shapeLoadErrors: string[] = [];
 
   for (const [moduleId, mod] of Object.entries(system.modules)) {
     const mDir = join(
@@ -201,7 +216,10 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
       shape = parseYaml(
         await readFile(join(mDir, "shape.yaml"), "utf-8"),
       ) as ShapeConfig;
-    } catch {
+    } catch (error) {
+      shapeLoadErrors.push(
+        `${moduleId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       continue;
     }
 
@@ -246,6 +264,11 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
   }
 
   if (!delamainName || !entityPath || !statusField || !moduleDir || !modPath) {
+    if (shapeLoadErrors.length > 0) {
+      throw new Error(
+        `No delamain field found in any module. Failed to read or parse shape.yaml for: ${shapeLoadErrors.join("; ")}`,
+      );
+    }
     throw new Error("No delamain field found in any module");
   }
 
@@ -295,8 +318,10 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
       }
 
       agents[agentKey] = def;
-    } catch {
-      // Skip unreadable agent files
+    } catch (error) {
+      console.warn(
+        `[dispatcher] skipping agent '${agentKey}' at '${agentPath}': ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -336,6 +361,7 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
       agentName: stateId,
       subAgentName: subAgentPath ? basename(subAgentPath, ".md") : undefined,
       resumable: state.resumable === true,
+      delegated: state.delegated === true,
       sessionField: state.resumable ? state["session-field"] : undefined,
       transitions,
     });
@@ -372,15 +398,24 @@ export async function dispatch(
 ): Promise<{ success: boolean; sessionId?: string }> {
   const agent = agents[entry.agentName]!;
 
-  // Check for resumable session — only resume if stored value is a valid UUID
-  let resumeSessionId: string | undefined;
-  if (entry.resumable && entry.sessionField) {
-    const stored = await readFrontmatterField(itemFile, entry.sessionField);
-    if (stored && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stored)) {
-      resumeSessionId = stored;
-    } else if (stored) {
-      console.log(`[dispatcher] ${itemId} ignoring invalid session ID: ${stored}`);
+  let storedSessionId: string | null = null;
+  if (entry.sessionField) {
+    try {
+      storedSessionId = await readFrontmatterField(itemFile, entry.sessionField);
+    } catch (error) {
+      console.error(
+        `[dispatcher] ${itemId} failed reading session metadata from ${entry.sessionField}:`,
+        error instanceof Error ? error.message : error,
+      );
+      return { success: false };
     }
+  }
+
+  const sessionState = buildSessionRuntimeState(entry, storedSessionId);
+  if (sessionState.ignoredInvalidSessionId) {
+    console.log(
+      `[dispatcher] ${itemId} ignoring invalid session ID: ${sessionState.ignoredInvalidSessionId}`,
+    );
   }
 
   // Compose prompt: agent file body + runtime context
@@ -388,9 +423,9 @@ export async function dispatch(
     (t) => `- ${t.class} → ${t.to}`,
   );
   const sessionContext: string[] = [];
-  if (entry.sessionField) {
-    sessionContext.push(`session_field: ${entry.sessionField}`);
-    sessionContext.push(`session_id: ${resumeSessionId ?? "null"}`);
+  if (sessionState.includeRuntimeKeys) {
+    sessionContext.push(`session_field: ${sessionState.runtimeSessionField ?? "null"}`);
+    sessionContext.push(`session_id: ${sessionState.runtimeSessionId ?? "null"}`);
   }
 
   const prompt = [
@@ -404,7 +439,7 @@ export async function dispatch(
     `item_file: ${itemFile}`,
     `current_state: ${entry.state}`,
     `date: ${today()}`,
-    `resume: ${resumeSessionId ? "yes" : "no"}`,
+    `resume: ${sessionState.resume}`,
     ...sessionContext,
     ``,
     `legal_transitions:`,
@@ -421,7 +456,10 @@ export async function dispatch(
 
   console.log(
     `[dispatcher] ${itemId} @ ${entry.state} → ${entry.agentName}` +
-      (resumeSessionId ? ` (resume: ${resumeSessionId.slice(0, 8)}...)` : "") +
+      (entry.delegated ? " (delegated)" : "") +
+      (sessionState.resumeSessionId
+        ? ` (resume: ${sessionState.resumeSessionId.slice(0, 8)}...)`
+        : "") +
       (entry.subAgentName ? ` (+ sub-agent: ${entry.subAgentName})` : ""),
   );
 
@@ -435,7 +473,7 @@ export async function dispatch(
         model: agent.model ?? "sonnet",
         allowedTools: tools,
         ...(subAgents ? { agents: subAgents } : {}),
-        ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+        ...(sessionState.resumeSessionId ? { resume: sessionState.resumeSessionId } : {}),
         env: sdkEnv,
         permissionMode: "acceptEdits",
         maxTurns: 50,
@@ -454,12 +492,25 @@ export async function dispatch(
       }
     }
 
-    // Persist session ID for resumable states (only on new sessions)
-    if (entry.resumable && entry.sessionField && sessionId && !resumeSessionId) {
-      await setFrontmatterField(itemFile, entry.sessionField, sessionId);
-      console.log(
-        `[dispatcher] ${itemId} session persisted → ${entry.sessionField}`,
+    if (
+      !entry.delegated
+      && entry.resumable
+      && entry.sessionField
+      && sessionState.resume === "no"
+      && !sessionId
+    ) {
+      console.warn(
+        `[dispatcher] ${itemId} completed without SDK session id; skipping persistence for ${entry.sessionField}`,
       );
+    }
+
+    if (shouldPersistDispatcherSession(entry, sessionId, sessionState)) {
+      const persisted = await setFrontmatterField(itemFile, entry.sessionField!, sessionId!);
+      if (persisted) {
+        console.log(
+          `[dispatcher] ${itemId} session persisted → ${entry.sessionField}`,
+        );
+      }
     }
 
     return { success: true, sessionId };

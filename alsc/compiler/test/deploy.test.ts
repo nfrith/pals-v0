@@ -273,9 +273,11 @@ test("deploy CLI projects bound Delamain bundles into .claude/delamains and is i
 
     const firstSnapshot = snapshotTree(join(root, ".claude/delamains"));
     expect(firstSnapshot["development-pipeline/delamain.yaml"]).toContain("phases:");
+    expect(firstSnapshot["development-pipeline/delamain.yaml"]).toContain("delegated: true");
     expect(firstSnapshot["development-pipeline/agents/planning.md"]).toContain("description:");
     expect(firstSnapshot["development-pipeline/sub-agents/developer.md"]).toContain("description:");
     expect(firstSnapshot["development-pipeline/dispatcher/src/dispatcher.ts"]).toContain("resolve(");
+    expect(firstSnapshot["development-pipeline/dispatcher/src/session-runtime.ts"]).toContain("buildSessionRuntimeState");
 
     const second = Bun.spawnSync({
       cmd: ["bun", "src/deploy.ts", root, "factory"],

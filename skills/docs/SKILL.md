@@ -1,6 +1,6 @@
 ---
 name: docs
-description: ALS format reference index. This skill should be used when the user asks about ALS format rules, shape YAML syntax, delamain definitions, field types, agent file format, dispatcher behavior, or skill decomposition patterns.
+description: ALS format reference index. This skill should be used when the user asks about ALS format rules, shape YAML syntax, delamain definitions, delamain agents, delamain dispatchers, delegated dispatch, field types, agent file format, dispatcher behavior, skill decomposition patterns, or module integration.
 ---
 
 # ALS Documentation Index
@@ -33,14 +33,50 @@ Read this when:
 - Refactoring an existing module's skill set
 - Choosing between operation-verb and domain-intent skill names
 
-### Dispatcher
+### Delamain Overview
 
-`references/dispatcher.md`
+`references/delamain-overview.md`
 
-The generic Delamain dispatcher template: a zero-config Bun application that scans entity items and invokes agents via the Claude Agent SDK. Covers the three source files, session handling, sub-agent delegation, and deployment.
+What delamains are — Phase-Constrained Transition Graphs. States, transitions, phases, actor model (operator vs agent), agent bindings, discriminated variants. The conceptual foundation.
+
+Read this when:
+- Understanding what a delamain is and how it works
+- Explaining the delamain model to an operator or developer
+- Designing a new workflow that might need a delamain
+- Understanding the relationship between operator states and agent states
+
+### Delamain Agent Authoring
+
+`references/delamain-agents.md`
+
+How to write state agents and sub-agents. Covers the agent file format, runtime context injection, and best practices: idempotency, delegated dispatch, session field ownership, sub-agent patterns.
+
+Read this when:
+- Writing or modifying a state agent markdown file
+- Implementing delegated dispatch (agent spawns external process)
+- Understanding how the dispatcher injects runtime context
+- Debugging agent behavior or dispatch failures
+
+### Delamain Dispatcher
+
+`references/delamain-dispatcher.md`
+
+The generic dispatcher template: a zero-config Bun application that scans entity items and invokes agents via the Claude Agent SDK. Covers the three source files, multi-module resolution, variant scanning, session handling, sub-agent delegation, and deployment.
 
 Read this when:
 - Scaffolding a new delamain bundle with a dispatcher
 - Understanding how the dispatcher derives configuration from ALS declarations
 - Troubleshooting dispatcher behavior
 - Planning deployment of a delamain bundle
+
+### Module Integration
+
+`references/module-integration.md`
+
+How delamains connect to the rest of the module surface. Skill naming convention (`{module}-{variant}-{delamain}`), the three skill layers (CRUD, pipeline console, agents), deploy pipeline, and the copy-from-template pattern.
+
+Read this when:
+- Wiring a delamain into an existing module
+- Naming a pipeline console skill
+- Understanding how `alsc deploy claude` projects assets
+- Setting up system.yaml and shape.yaml for a delamain

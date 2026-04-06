@@ -2,6 +2,10 @@
 
 The dispatcher is a generic Bun application template that scans entity items and invokes Delamain-bound agents via the Claude Agent SDK. It requires zero configuration — everything is derived from the ALS declaration surface.
 
+## Audience
+
+ALS Developer, ALS Architect, Claude.
+
 ## Overview
 
 The dispatcher template lives at `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/` and is copied into new delamain bundles during module creation. Once copied, it runs without modification for any delamain in any module.
@@ -26,8 +30,8 @@ The core logic. Two main functions:
 
 **`resolve(systemRoot)`** — crawls the ALS declaration surface:
 
-1. Reads `system.yaml` → finds the first module
-2. Reads `shape.yaml` → finds the entity with a `type: delamain` field
+1. Reads `system.yaml` → iterates all modules to find one with a delamain
+2. Reads `shape.yaml` → finds the entity (or variant) with a `type: delamain` field. Supports discriminated variants — when the delamain field is inside a variant, records the discriminator field and value for item filtering.
 3. Reads the delamain primary definition file → loads states, transitions, agent files
 4. Builds a dispatch table from `actor: agent` states
 

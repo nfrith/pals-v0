@@ -13,6 +13,30 @@ modules:
     skills:
       - people-module
 
+  backlog:
+    path: workspace/backlog
+    version: 1
+    skills:
+      - backlog-module
+
+  experiments:
+    path: workspace/experiments
+    version: 2
+    skills:
+      - experiments-module
+
+  client-registry:
+    path: clients/registry
+    version: 1
+    skills:
+      - client-registry-module
+
+  dotfiles:
+    path: dotfiles
+    version: 1
+    skills:
+      - dotfiles-module
+
   incident-response:
     path: workspace/incident-response
     version: 1

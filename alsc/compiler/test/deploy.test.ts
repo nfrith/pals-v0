@@ -16,7 +16,7 @@ import {
 
 const compilerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test.concurrent("deploy CLI projects active skills into .claude/skills and is idempotent", async () => {
+test("deploy CLI projects active skills into .claude/skills and is idempotent", async () => {
   await withFixtureSandbox("deploy-cli-idempotent", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
 
@@ -43,8 +43,8 @@ test.concurrent("deploy CLI projects active skills into .claude/skills and is id
     };
     expect(firstOutput.schema).toBe("als-claude-deploy-output@2");
     expect(firstOutput.status).toBe("pass");
-    expect(firstOutput.planned_skill_count).toBe(5);
-    expect(firstOutput.written_skill_count).toBe(5);
+    expect(firstOutput.planned_skill_count).toBe(19);
+    expect(firstOutput.written_skill_count).toBe(19);
     expect(firstOutput.existing_skill_targets).toEqual([]);
     expect(firstOutput.planned_delamain_count).toBe(0);
     expect(firstOutput.written_delamain_count).toBe(0);
@@ -61,6 +61,7 @@ test.concurrent("deploy CLI projects active skills into .claude/skills and is id
     const firstSnapshot = snapshotTree(join(root, ".claude/skills"));
     expect(firstSnapshot["backlog-module/SKILL.md"]).toContain("name: backlog-module");
     expect(firstSnapshot["people-module/SKILL.md"]).toContain("name: people-module");
+    expect(firstSnapshot["playbooks-module/SKILL.md"]).toContain("name: playbooks-module");
 
     const second = Bun.spawnSync({
       cmd: ["bun", "src/deploy.ts", root],
@@ -75,7 +76,7 @@ test.concurrent("deploy CLI projects active skills into .claude/skills and is id
   });
 });
 
-test.concurrent("deploy CLI dry-run reports planned work without creating .claude/skills", async () => {
+test("deploy CLI dry-run reports planned work without creating .claude/skills", async () => {
   await withFixtureSandbox("deploy-cli-dry-run", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
 
@@ -98,7 +99,7 @@ test.concurrent("deploy CLI dry-run reports planned work without creating .claud
     };
     expect(output.schema).toBe("als-claude-deploy-output@2");
     expect(output.status).toBe("pass");
-    expect(output.planned_skill_count).toBeGreaterThan(0);
+    expect(output.planned_skill_count).toBe(19);
     expect(output.written_skill_count).toBe(0);
     expect(output.planned_delamain_count).toBe(0);
     expect(output.written_delamain_count).toBe(0);
@@ -110,7 +111,7 @@ test.concurrent("deploy CLI dry-run reports planned work without creating .claud
   });
 });
 
-test.concurrent("deploy CLI can target a single module", async () => {
+test("deploy CLI can target a single module", async () => {
   await withFixtureSandbox("deploy-cli-module-filter", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
 
@@ -127,7 +128,7 @@ test.concurrent("deploy CLI can target a single module", async () => {
   });
 });
 
-test.concurrent("deploy CLI fails unknown module filters before planning work", async () => {
+test("deploy CLI fails unknown module filters before planning work", async () => {
   await withFixtureSandbox("deploy-cli-unknown-module", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
 
@@ -154,7 +155,7 @@ test.concurrent("deploy CLI fails unknown module filters before planning work", 
   });
 });
 
-test.concurrent("deploy CLI fails preflight when empty targets are required", async () => {
+test("deploy CLI fails preflight when empty targets are required", async () => {
   await withFixtureSandbox("deploy-cli-collision", async ({ root }) => {
     await mkdir(join(root, ".claude/skills/backlog-module"), { recursive: true });
     await writeFile(join(root, ".claude/skills/backlog-module/SKILL.md"), "---\nname: backlog-module\ndescription: collision\n---\n");
@@ -183,7 +184,7 @@ test.concurrent("deploy CLI fails preflight when empty targets are required", as
   });
 });
 
-test.concurrent("deploy library projects skills when validation status is warn", async () => {
+test("deploy library projects skills when validation status is warn", async () => {
   await withFixtureSandbox("deploy-library-warning", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
 
@@ -204,7 +205,7 @@ test.concurrent("deploy library projects skills when validation status is warn",
   });
 });
 
-test.concurrent("deploy CLI projects bound Delamain bundles into .claude/delamains and is idempotent", async () => {
+test("deploy CLI projects bound Delamain bundles into .claude/delamains and is idempotent", async () => {
   await withExampleSystemSandbox("software-factory", "deploy-delamain-idempotent", async ({ root }) => {
     await rm(join(root, ".claude/delamains"), { recursive: true, force: true });
 
@@ -263,7 +264,7 @@ test.concurrent("deploy CLI projects bound Delamain bundles into .claude/delamai
   });
 });
 
-test.concurrent("deploy CLI dry-run reports Delamain work without creating .claude/delamains", async () => {
+test("deploy CLI dry-run reports Delamain work without creating .claude/delamains", async () => {
   await withExampleSystemSandbox("software-factory", "deploy-delamain-dry-run", async ({ root }) => {
     await rm(join(root, ".claude/delamains"), { recursive: true, force: true });
 
@@ -297,7 +298,7 @@ test.concurrent("deploy CLI dry-run reports Delamain work without creating .clau
   });
 });
 
-test.concurrent("deploy CLI excludes unused Delamains that are only present in the registry", async () => {
+test("deploy CLI excludes unused Delamains that are only present in the registry", async () => {
   await withExampleSystemSandbox("software-factory", "deploy-unused-delamain", async ({ root }) => {
     await cp(
       join(root, ".als/modules/factory/v1/delamains/development-pipeline"),
@@ -331,7 +332,7 @@ test.concurrent("deploy CLI excludes unused Delamains that are only present in t
   });
 });
 
-test.concurrent("deploy CLI fails preflight when empty targets are required for Delamain projection", async () => {
+test("deploy CLI fails preflight when empty targets are required for Delamain projection", async () => {
   await withExampleSystemSandbox("software-factory", "deploy-delamain-collision", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
     await mkdir(join(root, ".claude/delamains/development-pipeline"), { recursive: true });
@@ -361,7 +362,7 @@ test.concurrent("deploy CLI fails preflight when empty targets are required for 
   });
 });
 
-test.concurrent("deploy CLI fails when flat Delamain names collide across modules", async () => {
+test("deploy CLI fails when flat Delamain names collide across modules", async () => {
   await withExampleSystemSandbox("software-factory", "deploy-delamain-name-conflict", async ({ root }) => {
     await cp(join(root, ".als/modules/factory"), join(root, ".als/modules/release"), { recursive: true });
     await rm(join(root, ".als/modules/release/v1/skills"), { recursive: true, force: true });
@@ -399,7 +400,7 @@ test.concurrent("deploy CLI fails when flat Delamain names collide across module
   });
 });
 
-test.concurrent("deploy library preserves prior planned skills when a later module shape file is missing", async () => {
+test("deploy library preserves prior planned skills when a later module shape file is missing", async () => {
   await withFixtureSandbox("deploy-shape-missing", async ({ root }) => {
     await removePath(root, ".als/modules/people/v1/shape.yaml");
 
@@ -426,7 +427,7 @@ test.concurrent("deploy library preserves prior planned skills when a later modu
   });
 });
 
-test.concurrent("deploy library reports YAML parse failures while planning Claude projection", async () => {
+test("deploy library reports YAML parse failures while planning Claude projection", async () => {
   await withFixtureSandbox("deploy-shape-parse-failure", async ({ root }) => {
     await writePath(root, ".als/modules/people/v1/shape.yaml", "dependencies: [\n");
 
@@ -449,7 +450,7 @@ test.concurrent("deploy library reports YAML parse failures while planning Claud
   });
 });
 
-test.concurrent("deploy library reports schema validation details when shape.yaml is structurally invalid", async () => {
+test("deploy library reports schema validation details when shape.yaml is structurally invalid", async () => {
   await withFixtureSandbox("deploy-shape-invalid-schema", async ({ root }) => {
     await writePath(root, ".als/modules/people/v1/shape.yaml", "dependencies: []\nentities: []\n");
 
@@ -472,7 +473,7 @@ test.concurrent("deploy library reports schema validation details when shape.yam
   });
 });
 
-test.concurrent("deploy library fails closed when one entity declares multiple Delamain fields", async () => {
+test("deploy library fails closed when one entity declares multiple Delamain fields", async () => {
   await withExampleSystemSandbox("software-factory", "deploy-delamain-multi-binding", async ({ root }) => {
     await updateShapeYaml(root, "factory", 1, (shape) => {
       const entities = shape.entities as Record<string, { fields: Record<string, unknown> }>;

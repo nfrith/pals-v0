@@ -13,13 +13,20 @@ interface SystemConfig {
   modules: Record<string, { path: string; version: number }>;
 }
 
+interface FieldDef {
+  type: string;
+  delamain?: string;
+}
+
 interface ShapeConfig {
   delamains: Record<string, { path: string }>;
   entities: Record<
     string,
     {
       path: string;
-      fields: Record<string, { type: string; delamain?: string }>;
+      discriminator?: string;
+      fields: Record<string, FieldDef>;
+      variants?: Record<string, { fields: Record<string, FieldDef> }>;
     }
   >;
 }
@@ -69,6 +76,8 @@ export interface ResolvedConfig {
   itemsDir: string;
   statusField: string;
   delamainName: string;
+  discriminatorField?: string;
+  discriminatorValue?: string;
   agents: Record<string, AgentDef>;
   dispatchTable: DispatchEntry[];
 }
@@ -76,10 +85,9 @@ export interface ResolvedConfig {
 // -------------------------------------------------------------------
 // ALS crawl — derive everything from system.yaml
 //
-// Constraint: one delamain field per effective entity schema.
-// When ALS supports variants, it will be one delamain per variant.
-// The dispatcher finds THE entity with a delamain field and uses
-// its delamain binding as the single dispatch target.
+// Supports discriminated variants: when the delamain field lives
+// inside a variant, the dispatcher records the discriminator field
+// and variant name so the watcher can filter items.
 // -------------------------------------------------------------------
 
 function parseMd(raw: string): { meta: Record<string, string>; body: string } {
@@ -167,49 +175,89 @@ async function setFrontmatterField(
 // -------------------------------------------------------------------
 
 export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
-  // 1. system.yaml → module
+  // 1. system.yaml → scan all modules for one with a delamain
   const system = parseYaml(
     await readFile(join(systemRoot, ".als", "system.yaml"), "utf-8"),
   ) as SystemConfig;
 
-  const [moduleId, mod] = Object.entries(system.modules)[0]!;
-  const moduleDir = join(
-    systemRoot,
-    ".als",
-    "modules",
-    moduleId,
-    `v${mod.version}`,
-  );
+  let statusField: string | undefined;
+  let delamainName: string | undefined;
+  let entityPath: string | undefined;
+  let discriminatorField: string | undefined;
+  let discriminatorValue: string | undefined;
+  let moduleDir: string | undefined;
+  let modPath: string | undefined;
 
-  // 2. shape.yaml → entity with delamain_state + delamain registry
+  for (const [moduleId, mod] of Object.entries(system.modules)) {
+    const mDir = join(
+      systemRoot,
+      ".als",
+      "modules",
+      moduleId,
+      `v${mod.version}`,
+    );
+
+    let shape: ShapeConfig;
+    try {
+      shape = parseYaml(
+        await readFile(join(mDir, "shape.yaml"), "utf-8"),
+      ) as ShapeConfig;
+    } catch {
+      continue;
+    }
+
+    if (!shape.delamains || Object.keys(shape.delamains).length === 0) continue;
+
+    for (const [, entity] of Object.entries(shape.entities)) {
+      // Check top-level fields first
+      for (const [fieldId, field] of Object.entries(entity.fields)) {
+        if (field.type === "delamain" && field.delamain) {
+          statusField = fieldId;
+          delamainName = field.delamain;
+          entityPath = entity.path;
+          break;
+        }
+      }
+      if (delamainName) break;
+
+      // Check variant fields
+      if (entity.variants && entity.discriminator) {
+        for (const [variantId, variant] of Object.entries(entity.variants)) {
+          for (const [fieldId, field] of Object.entries(variant.fields)) {
+            if (field.type === "delamain" && field.delamain) {
+              statusField = fieldId;
+              delamainName = field.delamain;
+              entityPath = entity.path;
+              discriminatorField = entity.discriminator;
+              discriminatorValue = variantId;
+              break;
+            }
+          }
+          if (delamainName) break;
+        }
+      }
+      if (delamainName) break;
+    }
+
+    if (delamainName) {
+      moduleDir = mDir;
+      modPath = mod.path;
+      break;
+    }
+  }
+
+  if (!delamainName || !entityPath || !statusField || !moduleDir || !modPath) {
+    throw new Error("No delamain field found in any module");
+  }
+
+  // Items dir: module workspace path + entity path dirname
+  const itemsDir = join(systemRoot, modPath, dirname(entityPath));
+
+  // 2. shape.yaml delamain registry → delamain.yaml path
   const shape = parseYaml(
     await readFile(join(moduleDir, "shape.yaml"), "utf-8"),
   ) as ShapeConfig;
 
-  let statusField: string | undefined;
-  let delamainName: string | undefined;
-  let entityPath: string | undefined;
-
-  for (const [, entity] of Object.entries(shape.entities)) {
-    for (const [fieldId, field] of Object.entries(entity.fields)) {
-      if (field.type === "delamain" && field.delamain) {
-        statusField = fieldId;
-        delamainName = field.delamain;
-        entityPath = entity.path;
-        break;
-      }
-    }
-    if (delamainName) break;
-  }
-
-  if (!delamainName || !entityPath || !statusField) {
-    throw new Error("No delamain field found in any entity");
-  }
-
-  // Items dir: module workspace path + entity path dirname
-  const itemsDir = join(systemRoot, mod.path, dirname(entityPath));
-
-  // 3. Delamain primary file → states and transitions
   const delamainPath = shape.delamains[delamainName]?.path;
   if (!delamainPath) {
     throw new Error(`Delamain "${delamainName}" not in shape registry`);
@@ -299,6 +347,8 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
     itemsDir,
     statusField,
     delamainName,
+    discriminatorField,
+    discriminatorValue,
     agents,
     dispatchTable,
   };
@@ -307,6 +357,10 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
 // -------------------------------------------------------------------
 // Dispatch — agent file body = prompt, frontmatter = query options
 // -------------------------------------------------------------------
+
+// Strip ANTHROPIC_API_KEY so the SDK uses subscription auth (OAuth)
+const sdkEnv: Record<string, string | undefined> = { ...process.env };
+delete sdkEnv["ANTHROPIC_API_KEY"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -319,11 +373,15 @@ export async function dispatch(
 ): Promise<{ success: boolean; sessionId?: string }> {
   const agent = agents[entry.agentName]!;
 
-  // Check for resumable session
+  // Check for resumable session — only resume if stored value is a valid UUID
   let resumeSessionId: string | undefined;
   if (entry.resumable && entry.sessionField) {
-    resumeSessionId =
-      (await readFrontmatterField(itemFile, entry.sessionField)) ?? undefined;
+    const stored = await readFrontmatterField(itemFile, entry.sessionField);
+    if (stored && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stored)) {
+      resumeSessionId = stored;
+    } else if (stored) {
+      console.log(`[dispatcher] ${itemId} ignoring invalid session ID: ${stored}`);
+    }
   }
 
   // Compose prompt: agent file body + runtime context
@@ -372,6 +430,7 @@ export async function dispatch(
         allowedTools: tools,
         ...(subAgents ? { agents: subAgents } : {}),
         ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+        env: sdkEnv,
         permissionMode: "acceptEdits",
         maxTurns: 50,
         maxBudgetUsd: 1.0,

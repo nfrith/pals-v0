@@ -63,7 +63,7 @@ Accepted
 - Docs must state that `h1` is no longer informal when a `title` region is declared.
 - Docs must describe the `title.source` union and the shared `preamble` shape used at top level and inside outline content.
 - Docs must state that pre-section prose is either a declared `preamble` region or invalid.
-- The existing `centralized-metadata-happy-path` fixture remains the current structural smoke fixture and is not rewritten to force this model.
+- At the time of this decision, the existing `centralized-metadata-happy-path` fixture remained the current structural smoke fixture and was not rewritten to force this model.
 - A separate rich-body design-reference fixture must show declared `title`, declared `preamble`, and ordered `h2` sections on realistic records.
 - Tests, when implementation starts, must cover missing title regions, undeclared preamble content, title-field mismatch, multiple `h1` headings, and mdast-based section extraction.
 

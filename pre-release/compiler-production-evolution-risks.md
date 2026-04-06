@@ -1,13 +1,13 @@
 # ALS v1 Compiler Production-Evolution Risks
 
-1. `moduleFilter` is not a production-safe partial-validation mode. `validateSystem()` builds `recordIndex` only from `selectedModuleIds`, then resolves refs against that reduced set, so filtered runs can turn valid cross-module refs into false `REF_UNRESOLVED` failures.
-   Refs: `alsc/compiler/src/validate.ts:121`, `alsc/compiler/src/validate.ts:134`, `alsc/compiler/src/validate.ts:1073`, `alsc/compiler/README.md:16`, `alsc/compiler/test/system-negative.test.ts:131`.
-   This makes staged rollout validation unreliable.
-   Recommendation A: make filtered validation load the full dependency/reference index while only reporting diagnostics for the selected module(s).
-   Recommendation B: if filtered runs are intentionally weaker, split them into an explicitly different mode such as local-only or syntax-only validation.
+1. `moduleFilter` is now a scoped rollout gate, not a whole-system health signal. `validateSystem()` loads the selected module plus its dependency closure, resolves refs against that closure, and emits `SYSTEM_FILTER_CONTEXT_INVALID` when the dependency context cannot be trusted.
+   Refs: `alsc/compiler/src/validate.ts:223`, `alsc/compiler/src/validate.ts:234`, `alsc/compiler/src/validate.ts:3827`, `alsc/compiler/README.md:29`, `alsc/compiler/test/system-negative.test.ts:193`.
+   This makes filtered validation trustworthy for the selected module's declared dependency surface, but it is still not a substitute for full-system validation when operators need guarantees about unrelated modules or overall deploy readiness.
+   Recommendation A: keep the scoped contract explicit in docs and CLI help so operators do not over-read a clean filtered run.
+   Recommendation B: if future rollout workflows need broader guarantees, add an explicit whole-graph preflight mode rather than stretching `moduleFilter` beyond its declared semantics.
 
 2. Module versioning is a big-bang cutover model with no compatibility window. The language exposes one active `version` per module in `system.yaml`, and the compiler always infers exactly one live shape file from it.
-   Refs: `alsc/compiler/src/schema.ts:530`, `alsc/compiler/src/validate.ts:195`, `alsc/compiler/src/validate.ts:1371`, `alsc/compiler/README.md:7`, `example-systems/centralized-metadata-happy-path/README.md:20`.
+   Refs: `alsc/compiler/src/schema.ts:530`, `alsc/compiler/src/validate.ts:195`, `alsc/compiler/src/validate.ts:1371`, `alsc/compiler/README.md:7`, `example-systems/rich-body-content/README.md:60`.
    In production, any breaking shape change becomes an atomic subtree rewrite: old and new record contracts cannot coexist, and the compiler offers no migration-mode semantics.
    Recommendation A: define an explicit compatibility model now, such as current-version-only with required atomic rewrites, or bounded N/N+1 coexistence during rollout.
    Recommendation B: add validator support for migration windows if coexistence is intended, instead of leaving version numbers as storage labels with no operational meaning.

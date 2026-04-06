@@ -38,6 +38,9 @@ console.log(`[dispatcher] system: ${SYSTEM_ROOT}`);
 console.log(`[dispatcher] delamain: ${config.delamainName}`);
 console.log(`[dispatcher] status field: ${config.statusField}`);
 console.log(`[dispatcher] items: ${config.itemsDir}`);
+if (config.discriminatorField) {
+  console.log(`[dispatcher] discriminator: ${config.discriminatorField}=${config.discriminatorValue}`);
+}
 console.log(`[dispatcher] agents loaded: ${Object.keys(config.agents).length}`);
 console.log(
   `[dispatcher] dispatch table: ${config.dispatchTable.map((e) => `${e.state}→${e.agentName}`).join(", ")}`,
@@ -94,7 +97,11 @@ function findRule(status: string): DispatchEntry | undefined {
 }
 
 async function tick() {
-  const items = await scan(config.itemsDir);
+  const items = await scan(
+    config.itemsDir,
+    config.discriminatorField,
+    config.discriminatorValue,
+  );
 
   for (const item of items) {
     const prev = lastSeen.get(item.id);

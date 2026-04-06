@@ -13,7 +13,7 @@ const exampleSystemsRoot = fileURLToPath(
   new URL("../../../../example-systems/", import.meta.url),
 );
 
-const fixtureRoot = join(exampleSystemsRoot, "centralized-metadata-happy-path");
+const fixtureRoot = join(exampleSystemsRoot, "rich-body-content");
 
 export interface FixtureSandbox {
   root: string;

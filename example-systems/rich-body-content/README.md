@@ -1,14 +1,13 @@
 # Rich Body Content
 
-This fixture is the active design sandbox for the forward-looking ALS v1 body contract.
+This fixture is now the working reference implementation for ALS v1. It also remains the active design sandbox for richer body-contract work.
 
 ## Purpose
 
-- The records here already exercise richer Markdown than the original happy-path fixture.
-- The module shapes here intentionally use a draft body schema based on SDR 006 and SDR 007.
-- The fixture now also carries the `observability` module that exercises mixed markdown and JSONL entities inside one ALS system.
-- The fixture also carries document-style `people`, `incident-response`, `operations`, `research`, `planning`, and `evals` modules so rich-body validation now lives in one host system.
-- The goal is to make the YAML surface easy to inspect and revise before compiler work begins.
+- The host now carries the former centralized structural modules, the rich-body document modules, and the `observability` module inside one ALS system.
+- `backlog`, `experiments`, `client-registry`, `dotfiles`, and the centralized `people` contract keep the default compiler fixture surface grounded in realistic structural data.
+- `incident-response`, `operations`, `research`, `planning`, `evals`, and the governance/infra modules continue to exercise the richer body schema direction based on SDR 006 and SDR 007.
+- The goal is to keep one canonical fixture that is still easy to inspect and revise before further compiler work begins.
 
 ## Draft Body Surface
 
@@ -29,11 +28,17 @@ The shapes in this fixture use:
 - The dashboard record links to the JSONL entity through a normal ALS ref, so this fixture now covers the current cross-format ref contract.
 - The rejected mixed-schema JSONL artifact remains checked in at `content/rejected/mixed-schema-stream.jsonl` so it stays outside the validated module tree.
 
+## Structural Coverage
+
+- `backlog`, `experiments`, `client-registry`, and `dotfiles` now live in this host unchanged from the former centralized happy-path fixture.
+- The default compiler sandbox and most negative tests now run against this merged host rather than a separate structural fixture.
+- The `people` module acts as the shared collaborator registry for both the structural modules and the richer operational documents.
+
 ## Rich Document Coverage
 
-- The workspace-scoped modules now cover runbooks, incident reports, research syntheses, planning dossiers, eval specs, and supporting people records in the same merged fixture.
+- The workspace-scoped rich-body modules now cover runbooks, incident reports, research syntheses, planning dossiers, and eval specs in the same merged fixture.
 - Together they pressure-test the current body contract through outline-structured incident reports, mostly freeform operational and research documents, quoted evidence, fenced code, and explicit GFM tables.
-- The `people` module primarily supplies realistic cross-module references while still validating clean inside the merged host.
+- The richer operational records continue to use their original person ids, but those supporting person records now conform to the shared centralized collaborator contract.
 - The canonical source remains `.als/modules/...`; the checked-in `.claude/skills/` projection is a downstream artifact kept in sync with those module bundles.
 
 ## Intentional Choices In This Fixture
@@ -52,7 +57,7 @@ The shapes in this fixture use:
 
 ## Skill Bundle Paint
 
-- This fixture also demonstrates the ALS-native module bundle layout under `.als/modules/<module>/v1/`.
+- This fixture also demonstrates the ALS-native module bundle layout under `.als/modules/<module>/vN/`.
 - Each module version is treated as a bundle that can hold both `shape.yaml` and `skills/`.
 - `system.yaml` lists the live active skill ids rather than harness-specific file paths.
 - Each skill lives in its own directory with `SKILL.md` as the entrypoint.

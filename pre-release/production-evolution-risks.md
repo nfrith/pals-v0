@@ -127,42 +127,39 @@ What hits you in prod:
 
 If production users are expected to automate upgrades, the machine-readable diagnostic contract needs to be stronger than it is now.
 
-## 7. Partial validation is not a safe rollout primitive yet
+## 7. Filtered validation is a scoped rollout gate, not a whole-system health signal
 
-The compiler README presents module-filtered validation as normal usage:
+The compiler now treats module-filtered validation as dependency-aware for its declared scope:
 
+- `pre-release/current-state-and-next-steps.md`
 - `alsc/compiler/README.md`
-
-But filtered validation currently builds the record index only from the selected modules, and ref resolution runs against that reduced index:
-
 - `alsc/compiler/src/validate.ts`
-
-The current test coverage only checks the unknown-filter error path:
-
 - `alsc/compiler/test/system-negative.test.ts`
+
+Filtered runs load the selected module plus its transitive declared dependency closure, resolve refs against that closure, and emit `SYSTEM_FILTER_CONTEXT_INVALID` when the dependency context cannot be trusted.
 
 What hits you in prod:
 
-- A module-only validation run can falsely report unresolved cross-module refs.
-- You cannot safely treat filtered validation as a staging rollout gate.
-- Teams trying to migrate module by module may be told valid data is broken.
+- A clean filtered run is now trustworthy for the selected module's declared dependency surface.
+- It is still not a substitute for full-system validation when you need guarantees about unrelated modules or whole-system deploy readiness.
+- Teams need to treat module-filtered validation as a scoped rollout gate, not as a whole-system health signal.
 
-This matters because once ALS is live, incremental rollout is the first thing operators will try.
+This is a narrower risk than before, but the operational contract still needs to stay explicit.
 
-## 8. `skill` is already future debt in the system contract
+## 8. `skills` is already future debt in the system contract
 
-The repo says skill/app management was removed from the initial v1 scope, but `system.yaml` still requires a `skill` field, and the shape-language reference still presents it as placeholder metadata:
+The repo says skill/app management was removed from the initial v1 scope, but `system.yaml` still requires a `skills` array, and the shape-language reference still presents it as live placeholder metadata:
 
 - `AGENTS.md`
 - `alsc/compiler/src/schema.ts`
 - `skills/docs/references/shape-language.md`
-- `example-systems/centralized-metadata-happy-path/README.md`
+- `example-systems/rich-body-content/README.md`
 
 What hits you in prod:
 
-- Systems will accumulate `skill` values before the field has settled semantics.
-- If you later make `skill` normative, you inherit old placeholder data as compatibility baggage.
-- If you later remove or weaken it, you still have existing production systems authored around it.
+- Systems will accumulate `skills` values before the field has settled semantics.
+- If you later make `skills` more normative, you inherit old placeholder bundles and ids as compatibility baggage.
+- If you later remove or weaken `skills`, you still have existing production systems authored around those declared active skill interfaces.
 
 This is not a compiler break today. It is a contract-surface problem for later.
 
@@ -176,7 +173,8 @@ You should assume:
 
 - public names are API
 - additive changes are often breaking
-- full-system validation is the only trustworthy gate
+- full-system validation remains the broadest gate
+- filtered validation is trustworthy only within the selected module's declared dependency closure
 - module-version bumps are cutovers, not rollouts
 - migration mechanics will have to be invented later unless they are designed now
 

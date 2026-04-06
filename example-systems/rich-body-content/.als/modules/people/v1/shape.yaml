@@ -13,66 +13,56 @@ entities:
         type: id
         allow_null: false
 
-      title:
+      display_name:
         type: string
         allow_null: false
 
-      role:
+      status:
         type: enum
         allow_null: false
-        allowed_values: [incident-commander, operations-scribe]
+        allowed_values: [active, inactive]
 
-      timezone:
-        type: string
-        allow_null: false
-
-      specialty:
-        type: string
-        allow_null: false
+      tags:
+        type: list
+        allow_null: true
+        items:
+          type: string
 
     body:
       title:
         source:
           kind: field
-          field: title
+          field: display_name
 
       sections:
-        - name: BIO
+        - name: PROFILE
           allow_null: false
           content:
             mode: freeform
             blocks:
               paragraph: {}
-              bullet_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
           guidance:
-            include: durable background, scope of expertise, and operating focus
-            exclude: per-incident updates and short-lived coordination notes
+            include: who this person is and the role they play in this workspace
+            exclude: transient task updates
 
-        - name: WORKSTYLE
-          allow_null: false
+        - name: CONTACT
+          allow_null: true
           content:
             mode: freeform
             blocks:
               paragraph: {}
               bullet_list: {}
               ordered_list: {}
-              heading:
-                min_depth: 3
-                max_depth: 4
           guidance:
-            include: communication preferences, decision cadence, and collaboration habits
-            exclude: private administrative detail
+            include: stable contact channels or handles
+            exclude: private credentials or secrets
 
-        - name: ESCALATION_PREFERENCES
-          allow_null: false
+        - name: NOTES
+          allow_null: true
           content:
             mode: freeform
             blocks:
               paragraph: {}
-              bullet_list: {}
           guidance:
-            include: how to page, what context to gather first, and when to interrupt
-            exclude: broad biographical detail already covered elsewhere
+            include: optional context and collaboration notes
+            exclude: authoritative policy statements

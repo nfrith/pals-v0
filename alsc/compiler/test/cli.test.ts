@@ -69,7 +69,7 @@ test.concurrent("alsc deploy claude dry-run exposes the public deploy surface", 
     expect(output.schema).toBe("als-claude-deploy-output@2");
     expect(output.status).toBe("pass");
     expect(output.dry_run).toBe(true);
-    expect(output.planned_skill_count).toBeGreaterThan(0);
+    expect(output.planned_skill_count).toBe(19);
     expect(output.planned_delamain_count).toBe(0);
   });
 });

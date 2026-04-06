@@ -6,7 +6,7 @@ import { updateRecord, updateShapeYaml, validateFixture, withExampleSystemSandbo
 
 const compilerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test.concurrent("centralized metadata fixture validates clean", async () => {
+test.concurrent("merged reference fixture validates clean", async () => {
   await withFixtureSandbox("fixture-smoke", async ({ root }) => {
     const baseline = validateFixture(root);
     const process = Bun.spawnSync({
@@ -54,7 +54,7 @@ test.concurrent("centralized metadata fixture validates clean", async () => {
     expect(result.module_filter).toBeNull();
     expect(result.summary.error_count).toBe(0);
     expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
-    expect(result.summary.modules_checked).toBe(5);
+    expect(result.summary.modules_checked).toBe(17);
   });
 });
 
@@ -204,58 +204,6 @@ test.concurrent("host absolute file path fields validate clean", async () => {
   });
 });
 
-test.concurrent("rich body content fixture validates clean", async () => {
-  await withExampleSystemSandbox("rich-body-content", "rich-body-content-smoke", async ({ root }) => {
-    const baseline = validateFixture(root);
-    const process = Bun.spawnSync({
-      cmd: ["bun", "src/index.ts", root],
-      cwd: compilerRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdout = new TextDecoder().decode(process.stdout);
-    const stderr = new TextDecoder().decode(process.stderr);
-
-    if (process.exitCode !== 0) {
-      throw new Error(
-        `Smoke validation subprocess failed with exit ${process.exitCode}\nstdout:\n${stdout || "<empty>"}\nstderr:\n${stderr || "<empty>"}`,
-      );
-    }
-
-    let result: {
-      schema: string;
-      als_version: number | null;
-      compiler_contract: { supported_als_versions: number[] };
-      status: string;
-      module_filter: string | null;
-      summary: { error_count: number; files_ignored: number; modules_checked: number };
-    };
-    try {
-      result = JSON.parse(stdout) as {
-        schema: string;
-        als_version: number | null;
-        compiler_contract: { supported_als_versions: number[] };
-        status: string;
-        module_filter: string | null;
-        summary: { error_count: number; files_ignored: number; modules_checked: number };
-      };
-    } catch (error) {
-      throw new Error(
-        `Smoke validation subprocess returned invalid JSON: ${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout || "<empty>"}\nstderr:\n${stderr || "<empty>"}`,
-      );
-    }
-
-    expect(result.schema).toBe(VALIDATION_OUTPUT_SCHEMA_LITERAL);
-    expect(result.als_version).toBe(1);
-    expect(result.compiler_contract.supported_als_versions).toContain(1);
-    expect(result.status).toBe("pass");
-    expect(result.module_filter).toBeNull();
-    expect(result.summary.error_count).toBe(0);
-    expect(result.summary.files_ignored).toBe(baseline.summary.files_ignored);
-    expect(result.summary.modules_checked).toBe(13);
-  });
-});
-
 test.concurrent("software factory Delamain fixture validates clean", async () => {
   await withExampleSystemSandbox("software-factory", "software-factory-smoke", async ({ root }) => {
     const result = validateFixture(root);
@@ -269,7 +217,7 @@ test.concurrent("software factory Delamain fixture validates clean", async () =>
 });
 
 test.concurrent("observability module inside rich body content validates clean", async () => {
-  await withExampleSystemSandbox("rich-body-content", "observability-smoke", async ({ root }) => {
+  await withFixtureSandbox("observability-smoke", async ({ root }) => {
     const result = validateFixture(root, "observability");
 
     expect(result.status).toBe("pass");
@@ -282,10 +230,27 @@ test.concurrent("observability module inside rich body content validates clean",
 });
 
 test.concurrent("imported rich body modules inside rich body content validate clean individually", async () => {
-  await withExampleSystemSandbox("rich-body-content", "rich-body-imported-modules-smoke", async ({ root }) => {
-    const importedModules = ["people", "incident-response", "operations", "research", "planning", "evals"];
+  await withFixtureSandbox("rich-body-imported-modules-smoke", async ({ root }) => {
+    const importedModules = ["incident-response", "operations", "research", "planning", "evals"];
 
     for (const moduleId of importedModules) {
+      const result = validateFixture(root, moduleId);
+
+      expect(result.status).toBe("pass");
+      expect(result.module_filter).toBe(moduleId);
+      expect(result.modules).toHaveLength(1);
+      expect(result.modules[0].module_id).toBe(moduleId);
+      expect(result.summary.modules_checked).toBe(1);
+      expect(result.summary.error_count).toBe(0);
+    }
+  });
+});
+
+test.concurrent("centralized-origin modules inside the merged reference fixture validate clean individually", async () => {
+  await withFixtureSandbox("merged-centralized-modules-smoke", async ({ root }) => {
+    const centralizedModules = ["people", "backlog", "experiments", "client-registry", "dotfiles"];
+
+    for (const moduleId of centralizedModules) {
       const result = validateFixture(root, moduleId);
 
       expect(result.status).toBe("pass");

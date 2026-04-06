@@ -4,7 +4,7 @@ import { join } from "path";
 export interface WorkItem {
   id: string;
   status: string;
-  kind: string;
+  type: string;
   filePath: string;
 }
 
@@ -30,11 +30,15 @@ function parseFrontmatter(raw: string): Record<string, string> {
 }
 
 /**
- * Scan an items directory and return all parseable work items.
- * Matches the software-factory shape: entities.work-item with
- * fields id, status (delamain_state), kind (enum).
+ * Scan an items directory and return parseable work items.
+ * When discriminatorField and discriminatorValue are provided,
+ * only items matching the discriminator are returned.
  */
-export async function scan(itemsDir: string): Promise<WorkItem[]> {
+export async function scan(
+  itemsDir: string,
+  discriminatorField?: string,
+  discriminatorValue?: string,
+): Promise<WorkItem[]> {
   const entries = await readdir(itemsDir).catch(() => [] as string[]);
   const items: WorkItem[] = [];
 
@@ -44,10 +48,16 @@ export async function scan(itemsDir: string): Promise<WorkItem[]> {
       const filePath = join(itemsDir, entry);
       const fm = parseFrontmatter(await readFile(filePath, "utf-8"));
       if (!fm["id"] || !fm["status"]) continue;
+
+      // Filter by discriminator if configured
+      if (discriminatorField && discriminatorValue) {
+        if (fm[discriminatorField] !== discriminatorValue) continue;
+      }
+
       items.push({
         id: fm["id"]!,
         status: fm["status"]!,
-        kind: fm["kind"] ?? "unknown",
+        type: fm["type"] ?? "unknown",
         filePath,
       });
     } catch {

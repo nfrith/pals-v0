@@ -9,7 +9,6 @@
     "./hooks/post-edit-validate.json",
     "./hooks/post-edit-breadcrumb.json",
     "./hooks/stop-validate.json",
-    "./hooks/session-start-delamain.json",
     "./hooks/session-end-delamain.json"
   ]
 }

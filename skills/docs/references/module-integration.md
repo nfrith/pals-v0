@@ -67,10 +67,12 @@ The SKILL.md procedure says "Follow the procedure in references/plan-input.md" f
     └── development-pipeline/  →  .claude/delamains/development-pipeline/
 ```
 
-**Important**: deploy overwrites the target directory completely. This means:
-- `node_modules` in the dispatcher is wiped on every deploy
-- Run `bun install` in the deployed dispatcher after each deploy
-- Do not hand-edit files in `.claude/` — they will be overwritten
+**Important**:
+- Skill deploy under `.claude/skills/` still overwrites the target directory completely.
+- Delamain deploy under `.claude/delamains/<name>/` refreshes authored files via merge projection so an existing `dispatcher/node_modules/` survives.
+- Delamain deploy does not run `bun install` or any other package-manager command.
+- If the deployed dispatcher has no installed dependencies yet, deploy warns and continues.
+- Merge projection may leave stale authored files or incidental runtime files in the deployed Delamain target.
 
 ## Dispatcher as Copy-From-Template
 

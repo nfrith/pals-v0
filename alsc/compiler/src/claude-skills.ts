@@ -16,6 +16,7 @@ import type {
   ClaudeDelamainProjectionCollision,
   ClaudeDelamainProjectionPlan,
   ClaudeSkillDeployOutput,
+  ClaudeSkillDeployWarning,
   ClaudeSkillProjectionCollision,
   ClaudeSkillProjectionPlan,
 } from "./types.ts";
@@ -138,6 +139,7 @@ export function deployClaudeSkillsFromConfig(
   const delamainNameConflicts = planning.delamain_name_conflicts;
   const existingSkillTargets = collectExistingSkillTargets(skillPlans);
   const existingDelamainTargets = collectExistingDelamainTargets(delamainPlans);
+  const warnings = collectDelamainProjectionWarnings(delamainPlans);
 
   if (delamainNameConflicts.length > 0) {
     return buildDeployOutput({
@@ -154,6 +156,7 @@ export function deployClaudeSkillsFromConfig(
       writtenDelamainCount: 0,
       existingDelamainTargets,
       delamainNameConflicts,
+      warnings,
       error: "One or more Delamain names would collide under .claude/delamains.",
     });
   }
@@ -173,6 +176,7 @@ export function deployClaudeSkillsFromConfig(
       writtenDelamainCount: 0,
       existingDelamainTargets,
       delamainNameConflicts: [],
+      warnings,
       error: "One or more target paths already exist under .claude/skills or .claude/delamains.",
     });
   }
@@ -199,6 +203,7 @@ export function deployClaudeSkillsFromConfig(
           writtenDelamainCount,
           existingDelamainTargets,
           delamainNameConflicts: [],
+          warnings,
           error: `Could not write Claude skill projection '${plan.skill_id}' to '${plan.target_dir}': ${formatError(error)}`,
         });
       }
@@ -206,7 +211,7 @@ export function deployClaudeSkillsFromConfig(
 
     for (const plan of delamainPlans) {
       try {
-        overwriteProjectionDirectory(plan.source_dir_abs, plan.target_dir_abs);
+        mergeProjectionDirectory(plan.source_dir_abs, plan.target_dir_abs);
         writtenDelamainCount += 1;
       } catch (error) {
         return buildDeployOutput({
@@ -223,6 +228,7 @@ export function deployClaudeSkillsFromConfig(
           writtenDelamainCount,
           existingDelamainTargets,
           delamainNameConflicts: [],
+          warnings,
           error: `Could not write Claude Delamain projection '${plan.delamain_name}' to '${plan.target_dir}': ${formatError(error)}`,
         });
       }
@@ -243,6 +249,7 @@ export function deployClaudeSkillsFromConfig(
     writtenDelamainCount: dryRun ? 0 : writtenDelamainCount,
     existingDelamainTargets,
     delamainNameConflicts: [],
+    warnings,
     error: null,
   });
 }
@@ -524,6 +531,33 @@ function collectExistingDelamainTargets(plans: ClaudeDelamainProjectionWorkPlan[
   return collisions;
 }
 
+function collectDelamainProjectionWarnings(plans: ClaudeDelamainProjectionWorkPlan[]): ClaudeSkillDeployWarning[] {
+  const warnings: ClaudeSkillDeployWarning[] = [];
+
+  for (const plan of plans) {
+    const targetStat = safeStat(plan.target_dir_abs);
+    if (!targetStat || !targetStat.isDirectory()) {
+      continue;
+    }
+
+    const dispatcherNodeModulesAbs = resolve(plan.target_dir_abs, "dispatcher", "node_modules");
+    if (safeStat(dispatcherNodeModulesAbs)) {
+      continue;
+    }
+
+    warnings.push({
+      code: "delamain_dispatcher_node_modules_missing",
+      message: `Delamain deploy target '${plan.target_dir}' has no existing dispatcher/node_modules to preserve. Projection will continue without installing dependencies.`,
+      module_id: plan.module_id,
+      delamain_name: plan.delamain_name,
+      target_dir: plan.target_dir,
+      target_path: `${plan.target_dir}/dispatcher/node_modules`,
+    });
+  }
+
+  return warnings;
+}
+
 function toSkillProjectionPlan(plan: ClaudeSkillProjectionWorkPlan): ClaudeSkillProjectionPlan {
   return {
     module_id: plan.module_id,
@@ -568,6 +602,11 @@ function overwriteProjectionDirectory(sourceDirAbs: string, targetDirAbs: string
   rmSync(targetDirAbs, { recursive: true, force: true });
   mkdirSync(dirname(targetDirAbs), { recursive: true });
   cpSync(sourceDirAbs, targetDirAbs, { recursive: true });
+}
+
+function mergeProjectionDirectory(sourceDirAbs: string, targetDirAbs: string): void {
+  mkdirSync(dirname(targetDirAbs), { recursive: true });
+  cpSync(sourceDirAbs, targetDirAbs, { recursive: true, force: true });
 }
 
 function describeMultipleBindingError(
@@ -639,6 +678,7 @@ function buildDeployOutput(params: {
   writtenDelamainCount: number;
   existingDelamainTargets: ClaudeDelamainProjectionCollision[];
   delamainNameConflicts: ClaudeDelamainNameConflict[];
+  warnings: ClaudeSkillDeployWarning[];
   error: string | null;
 }): ClaudeSkillDeployOutput {
   return {
@@ -659,6 +699,7 @@ function buildDeployOutput(params: {
     planned_delamains: params.delamainPlans.map(toDelamainProjectionPlan),
     existing_delamain_targets: params.existingDelamainTargets,
     delamain_name_conflicts: params.delamainNameConflicts,
+    warnings: params.warnings,
     error: params.error,
   };
 }

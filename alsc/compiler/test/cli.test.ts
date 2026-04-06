@@ -65,12 +65,17 @@ test.concurrent("alsc deploy claude dry-run exposes the public deploy surface", 
       dry_run: boolean;
       planned_skill_count: number;
       planned_delamain_count: number;
+      warnings: Array<{ code: string; delamain_name: string; target_path: string }>;
     };
-    expect(output.schema).toBe("als-claude-deploy-output@2");
+    expect(output.schema).toBe("als-claude-deploy-output@3");
     expect(output.status).toBe("pass");
     expect(output.dry_run).toBe(true);
     expect(output.planned_skill_count).toBe(20);
     expect(output.planned_delamain_count).toBe(1);
+    expect(output.warnings).toHaveLength(1);
+    expect(output.warnings[0]?.code).toBe("delamain_dispatcher_node_modules_missing");
+    expect(output.warnings[0]?.delamain_name).toBe("development-pipeline");
+    expect(output.warnings[0]?.target_path).toBe(".claude/delamains/development-pipeline/dispatcher/node_modules");
   });
 });
 

@@ -115,6 +115,15 @@ export interface ClaudeDelamainNameConflict {
   target_dir: string;
 }
 
+export interface ClaudeSkillDeployWarning {
+  code: "delamain_dispatcher_node_modules_missing";
+  message: string;
+  module_id: string;
+  delamain_name: string;
+  target_dir: string;
+  target_path: string;
+}
+
 export interface ClaudeSkillDeployOutput {
   schema: string;
   status: "pass" | "fail";
@@ -133,5 +142,6 @@ export interface ClaudeSkillDeployOutput {
   planned_delamains: ClaudeDelamainProjectionPlan[];
   existing_delamain_targets: ClaudeDelamainProjectionCollision[];
   delamain_name_conflicts: ClaudeDelamainNameConflict[];
+  warnings: ClaudeSkillDeployWarning[];
   error: string | null;
 }

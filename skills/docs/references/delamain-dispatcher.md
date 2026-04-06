@@ -10,6 +10,8 @@ ALS Developer, ALS Architect, Claude.
 
 The dispatcher template lives at `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/` and is copied into new delamain bundles during module creation. Once copied, it runs without modification for any delamain in any module.
 
+When a Delamain bundle is deployed to `.claude/delamains/<name>/`, later `alsc deploy claude` runs preserve an existing `dispatcher/node_modules/` directory. Deploy itself does not install packages. If dependencies have never been installed in the deployed target, deploy warns and leaves installation as an explicit `bun install` step.
+
 ## Source Files
 
 ### `src/index.ts`
@@ -114,6 +116,8 @@ cd <delamain-bundle>/dispatcher
 bun install
 bun run src/index.ts
 ```
+
+`bun install` is the bootstrap step for a new deployed dispatcher. It is not part of the normal redeploy contract once `dispatcher/node_modules/` already exists.
 
 Environment variables:
 

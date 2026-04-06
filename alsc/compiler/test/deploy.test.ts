@@ -7,6 +7,7 @@ import { deployClaudeSkillsFromConfig } from "../src/claude-skills.ts";
 import { loadSystemValidationContext } from "../src/validate.ts";
 import {
   removePath,
+  updateTextFile,
   updateShapeYaml,
   updateSystemYaml,
   withFixtureSandbox,
@@ -40,8 +41,9 @@ test("deploy CLI projects active skills into .claude/skills and is idempotent", 
       planned_delamains: Array<Record<string, unknown>>;
       existing_delamain_targets: unknown[];
       delamain_name_conflicts: unknown[];
+      warnings: unknown[];
     };
-    expect(firstOutput.schema).toBe("als-claude-deploy-output@2");
+    expect(firstOutput.schema).toBe("als-claude-deploy-output@3");
     expect(firstOutput.status).toBe("pass");
     expect(firstOutput.planned_skill_count).toBe(20);
     expect(firstOutput.written_skill_count).toBe(20);
@@ -50,6 +52,7 @@ test("deploy CLI projects active skills into .claude/skills and is idempotent", 
     expect(firstOutput.written_delamain_count).toBe(1);
     expect(firstOutput.existing_delamain_targets).toEqual([]);
     expect(firstOutput.delamain_name_conflicts).toEqual([]);
+    expect(firstOutput.warnings).toEqual([]);
     expect(firstOutput.planned_delamains).toHaveLength(1);
     expect(firstOutput.planned_delamains[0]?.delamain_name).toBe("development-pipeline");
     expect(firstOutput.planned_delamains[0]?.source_dir).toBe(".als/modules/factory/v1/delamains/development-pipeline");
@@ -115,14 +118,16 @@ test("deploy CLI dry-run reports planned work without creating .claude/skills", 
       planned_delamain_count: number;
       written_delamain_count: number;
       planned_delamains: Array<Record<string, unknown>>;
+      warnings: unknown[];
     };
-    expect(output.schema).toBe("als-claude-deploy-output@2");
+    expect(output.schema).toBe("als-claude-deploy-output@3");
     expect(output.status).toBe("pass");
     expect(output.planned_skill_count).toBe(20);
     expect(output.written_skill_count).toBe(0);
     expect(output.planned_delamain_count).toBe(1);
     expect(output.written_delamain_count).toBe(0);
     expect(output.planned_delamains[0]?.delamain_name).toBe("development-pipeline");
+    expect(output.warnings).toEqual([]);
     expect(existsSync(join(root, ".claude/skills"))).toBe(false);
     expect(existsSync(join(root, ".claude/delamains"))).toBe(false);
     for (const plan of output.planned_skills) {
@@ -253,8 +258,9 @@ test("deploy CLI projects bound Delamain bundles into .claude/delamains and is i
       planned_delamains: Array<Record<string, unknown>>;
       existing_delamain_targets: unknown[];
       delamain_name_conflicts: unknown[];
+      warnings: unknown[];
     };
-    expect(firstOutput.schema).toBe("als-claude-deploy-output@2");
+    expect(firstOutput.schema).toBe("als-claude-deploy-output@3");
     expect(firstOutput.status).toBe("pass");
     expect(firstOutput.planned_skill_count).toBe(1);
     expect(firstOutput.written_skill_count).toBe(1);
@@ -262,6 +268,7 @@ test("deploy CLI projects bound Delamain bundles into .claude/delamains and is i
     expect(firstOutput.written_delamain_count).toBe(1);
     expect(firstOutput.existing_delamain_targets).toEqual([]);
     expect(firstOutput.delamain_name_conflicts).toEqual([]);
+    expect(firstOutput.warnings).toEqual([]);
     expect(firstOutput.planned_delamains).toHaveLength(1);
     expect(firstOutput.planned_delamains[0]?.delamain_name).toBe("development-pipeline");
     expect(firstOutput.planned_delamains[0]?.source_dir).toBe(".als/modules/factory/v1/delamains/development-pipeline");
@@ -312,6 +319,7 @@ test("deploy CLI dry-run reports Delamain work without creating .claude/delamain
       planned_delamain_count: number;
       written_delamain_count: number;
       planned_delamains: Array<Record<string, unknown>>;
+      warnings: unknown[];
     };
     expect(output.status).toBe("pass");
     expect(output.planned_skill_count).toBe(1);
@@ -319,11 +327,126 @@ test("deploy CLI dry-run reports Delamain work without creating .claude/delamain
     expect(output.planned_delamain_count).toBe(1);
     expect(output.written_delamain_count).toBe(0);
     expect(output.planned_delamains[0]?.delamain_name).toBe("development-pipeline");
+    expect(output.warnings).toEqual([]);
     for (const plan of output.planned_delamains) {
       expect(plan).not.toHaveProperty("source_dir_abs");
       expect(plan).not.toHaveProperty("target_dir_abs");
     }
     expect(existsSync(join(root, ".claude/delamains"))).toBe(false);
+  });
+});
+
+test("deploy CLI preserves dispatcher node_modules while refreshing authored Delamain files", async () => {
+  await withFixtureSandbox("deploy-delamain-preserves-node-modules", async ({ root }) => {
+    await rm(join(root, ".claude/delamains"), { recursive: true, force: true });
+
+    const first = Bun.spawnSync({
+      cmd: ["bun", "src/deploy.ts", root, "factory"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(first.exitCode).toBe(0);
+
+    await writePath(
+      root,
+      ".claude/delamains/development-pipeline/dispatcher/node_modules/yaml/package.json",
+      '{ "name": "yaml" }\n',
+    );
+    await writePath(
+      root,
+      ".claude/delamains/development-pipeline/agents/orphaned.md",
+      "# stale authored file\n",
+    );
+    await updateTextFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/agents/planning.md",
+      (current) => `${current}\n<!-- refreshed-marker -->\n`,
+    );
+
+    const second = Bun.spawnSync({
+      cmd: ["bun", "src/deploy.ts", root, "factory"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(second.exitCode).toBe(0);
+
+    expect(
+      existsSync(join(root, ".claude/delamains/development-pipeline/dispatcher/node_modules/yaml/package.json")),
+    ).toBe(true);
+    expect(existsSync(join(root, ".claude/delamains/development-pipeline/agents/orphaned.md"))).toBe(true);
+    expect(readFileSync(join(root, ".claude/delamains/development-pipeline/agents/planning.md"), "utf-8")).toContain(
+      "<!-- refreshed-marker -->",
+    );
+  });
+});
+
+test("deploy CLI warns when an existing Delamain target has no dispatcher dependencies to preserve", async () => {
+  await withFixtureSandbox("deploy-delamain-missing-node-modules-warning", async ({ root }) => {
+    await rm(join(root, ".claude/delamains"), { recursive: true, force: true });
+
+    const first = Bun.spawnSync({
+      cmd: ["bun", "src/deploy.ts", root, "factory"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(first.exitCode).toBe(0);
+
+    const second = Bun.spawnSync({
+      cmd: ["bun", "src/deploy.ts", root, "factory"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(second.exitCode).toBe(0);
+
+    const output = JSON.parse(new TextDecoder().decode(second.stdout)) as {
+      status: string;
+      written_delamain_count: number;
+      warnings: Array<{
+        code: string;
+        delamain_name: string;
+        target_dir: string;
+        target_path: string;
+        message: string;
+      }>;
+    };
+    expect(output.status).toBe("pass");
+    expect(output.written_delamain_count).toBe(1);
+    expect(output.warnings).toHaveLength(1);
+    expect(output.warnings[0]?.code).toBe("delamain_dispatcher_node_modules_missing");
+    expect(output.warnings[0]?.delamain_name).toBe("development-pipeline");
+    expect(output.warnings[0]?.target_dir).toBe(".claude/delamains/development-pipeline");
+    expect(output.warnings[0]?.target_path).toBe(".claude/delamains/development-pipeline/dispatcher/node_modules");
+    expect(output.warnings[0]?.message).toContain("no existing dispatcher/node_modules to preserve");
+  });
+});
+
+test("deploy CLI keeps skill projection overwrite behavior unchanged", async () => {
+  await withFixtureSandbox("deploy-skills-still-overwrite", async ({ root }) => {
+    await rm(join(root, ".claude/skills"), { recursive: true, force: true });
+
+    const first = Bun.spawnSync({
+      cmd: ["bun", "src/deploy.ts", root, "factory"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(first.exitCode).toBe(0);
+
+    await writePath(root, ".claude/skills/factory-operate/stale.txt", "stale\n");
+
+    const second = Bun.spawnSync({
+      cmd: ["bun", "src/deploy.ts", root, "factory"],
+      cwd: compilerRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(second.exitCode).toBe(0);
+
+    expect(existsSync(join(root, ".claude/skills/factory-operate/stale.txt"))).toBe(false);
   });
 });
 

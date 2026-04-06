@@ -69,6 +69,16 @@ development-pipeline/
 
 The delamain bundle is self-contained. It can live in `.als/modules/{module}/v{N}/delamains/` and is deployed to `.claude/delamains/` by the compiler.
 
+## Claude Projection
+
+`alsc deploy claude` projects each active Delamain bundle to `.claude/delamains/<delamain-name>/`.
+
+- Authored Delamain files refresh from the canonical ALS bundle on deploy.
+- If the deployed target already has `dispatcher/node_modules/`, deploy preserves it.
+- Deploy stays filesystem-only. It does not run `bun install` or any other package-manager command.
+- If the target dispatcher has no `node_modules/` yet, deploy warns and continues.
+- Because Delamain projection may use merge semantics, stale authored files or incidental runtime files can remain in the deployed target.
+
 ## How It Runs
 
 1. The operator starts the dispatcher (via `/run-delamains` or manually).

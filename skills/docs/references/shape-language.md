@@ -523,6 +523,8 @@ Delamain bundles live under `.als/modules/{module_id}/v{version}/delamains/{name
 
 The primary definition file is a YAML file, typically `delamain.yaml`, referenced from the module bundle's `delamains` registry.
 
+Claude projection carries each active Delamain bundle into `.claude/delamains/{name}/` as a downstream runtime artifact.
+
 Example:
 
 ```yaml
@@ -583,6 +585,11 @@ Rules:
 - Every non-terminal state must have a path to at least one terminal state.
 - Delamain-local asset paths such as state `path` and `sub-agent` resolve relative to the directory containing the Delamain primary definition file, not relative to the module bundle root.
 - Resolved Delamain-local asset paths must remain inside the same active module version bundle.
+- Claude projection refreshes authored Delamain bundle files into `.claude/delamains/{name}/`.
+- Claude projection preserves an existing `dispatcher/node_modules/` directory when one is already present in the target.
+- Claude projection does not run `bun install` or any other package-manager command.
+- Claude projection may leave stale authored files or incidental runtime files in the target when the host uses merge-based projection to preserve installed dependencies.
+- Missing `dispatcher/node_modules/` at projection time is a warning, not a projection failure.
 - `actor: agent` states declare exactly one `path` plus explicit boolean `resumable`.
 - `delegated` is optional and only valid on `actor: agent` states.
 - If `delegated` is omitted, hosts treat it as `false`.

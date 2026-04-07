@@ -1,5 +1,5 @@
-import { existsSync } from "fs";
-import { readFile, readdir } from "fs/promises";
+import { existsSync, statSync, readdirSync } from "fs";
+import { readFile } from "fs/promises";
 import { join, dirname } from "path";
 import { parse as parseYaml } from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -20,15 +20,60 @@ function findSystemRoot(start: string): string {
 const SYSTEM_ROOT = findSystemRoot(import.meta.dir);
 
 // -------------------------------------------------------------------
+// Find compiler path once at startup
+// -------------------------------------------------------------------
+
+function findCompilerPath(): string {
+  let dir = SYSTEM_ROOT;
+  while (dir !== dirname(dir)) {
+    const candidate = join(dir, "alsc", "compiler", "src", "index.ts");
+    if (existsSync(candidate)) return candidate;
+    dir = dirname(dir);
+  }
+  throw new Error("alsc compiler not found in parent directories");
+}
+
+const COMPILER_PATH = findCompilerPath();
+
+// -------------------------------------------------------------------
 // Delamain discovery — crawl system.yaml → shape.yaml → delamain.yaml
 // -------------------------------------------------------------------
+
+// Recursively resolve a path template like "regions/{region}/clusters/{cluster}/releases"
+// into concrete directories by walking the filesystem
+function findConcreteDirs(base: string, template: string): string[] {
+  const parts = template.split("/");
+  let dirs = [base];
+
+  for (const part of parts) {
+    const next: string[] = [];
+    for (const d of dirs) {
+      if (part.startsWith("{") && part.endsWith("}")) {
+        // Wildcard segment — enumerate all subdirectories
+        try {
+          for (const entry of readdirSync(d)) {
+            const full = join(d, entry);
+            try { if (statSync(full).isDirectory()) next.push(full); } catch {}
+          }
+        } catch {}
+      } else {
+        // Literal segment
+        const full = join(d, part);
+        try { if (statSync(full).isDirectory()) next.push(full); } catch {}
+      }
+    }
+    dirs = next;
+  }
+  return dirs;
+}
 
 interface DelamainTarget {
   moduleId: string;
   delamainName: string;
-  shapeFile: string;
   shapeContent: string;
-  itemsDir: string;
+  entityPathTemplate: string;
+  concreteDirs: string[];
+  moduleMount: string;
   idPrefix: string;
   initialAgentState: string;
 }
@@ -55,7 +100,6 @@ async function discoverDelamains(): Promise<DelamainTarget[]> {
     if (!shape.delamains) continue;
 
     for (const [delamainName, delamainRef] of Object.entries(shape.delamains) as [string, { path: string }][]) {
-      // Find the entity that uses this delamain
       let entityPath: string | undefined;
       for (const [, entity] of Object.entries(shape.entities) as [string, any][]) {
         for (const [, field] of Object.entries(entity.fields) as [string, any][]) {
@@ -68,7 +112,6 @@ async function discoverDelamains(): Promise<DelamainTarget[]> {
       }
       if (!entityPath) continue;
 
-      // Read delamain.yaml to find first agent-owned state
       const delamainPath = join(mDir, delamainRef.path);
       let delamain: any;
       try {
@@ -89,21 +132,30 @@ async function discoverDelamains(): Promise<DelamainTarget[]> {
       }
       if (!initialAgentState) continue;
 
-      // Derive ID prefix from existing items
-      const itemsDir = join(SYSTEM_ROOT, mod.path, dirname(entityPath));
+      // Resolve concrete item directories from the entity path template
+      const dirTemplate = dirname(entityPath);
+      const moduleMount = mod.path;
+
+      // Find concrete item directories by walking the glob pattern
+      const concreteDirs = findConcreteDirs(join(SYSTEM_ROOT, moduleMount), dirTemplate);
+
+      // Derive ID prefix from first concrete directory with items
       let idPrefix = "ITEM";
-      try {
-        const files = await readdir(itemsDir);
-        const match = files.find((f: string) => /^[A-Z]+-\d+\.md$/.test(f));
-        if (match) idPrefix = match.replace(/-\d+\.md$/, "");
-      } catch {}
+      for (const d of concreteDirs) {
+        try {
+          const files = readdirSync(d);
+          const match = files.find((f: string) => /^[A-Z]+-\d+\.md$/.test(f));
+          if (match) { idPrefix = match.replace(/-\d+\.md$/, ""); break; }
+        } catch {}
+      }
 
       results.push({
         moduleId,
         delamainName,
-        shapeFile: join(mDir, "shape.yaml"),
         shapeContent: shapeRaw,
-        itemsDir,
+        entityPathTemplate: entityPath,
+        concreteDirs,
+        moduleMount,
         idPrefix,
         initialAgentState,
       });
@@ -114,7 +166,45 @@ async function discoverDelamains(): Promise<DelamainTarget[]> {
 }
 
 // -------------------------------------------------------------------
-// Demo item variety — random titles and field values for realism
+// Pre-compute next item: resolve concrete directory and next ID
+// -------------------------------------------------------------------
+
+interface ResolvedItem {
+  filePath: string;
+  itemId: string;
+  itemsDir: string;
+}
+
+function resolveNextItem(target: DelamainTarget): ResolvedItem {
+  // Pick a random concrete directory
+  const itemsDir = target.concreteDirs.length > 0
+    ? target.concreteDirs[Math.floor(Math.random() * target.concreteDirs.length)]!
+    : join(SYSTEM_ROOT, target.moduleMount);
+
+  // Scan for highest existing ID across ALL concrete dirs
+  let maxId = 0;
+  for (const d of target.concreteDirs) {
+    try {
+      for (const f of readdirSync(d)) {
+        const m = f.match(/^[A-Z]+-(\d+)\.md$/);
+        if (m) {
+          const num = parseInt(m[1]!, 10);
+          if (num > maxId) maxId = num;
+        }
+      }
+    } catch {}
+  }
+
+  const nextNum = maxId + 1;
+  const paddedNum = String(nextNum).padStart(3, "0");
+  const itemId = `${target.idPrefix}-${paddedNum}`;
+  const filePath = join(itemsDir, `${itemId}.md`);
+
+  return { filePath, itemId, itemsDir };
+}
+
+// -------------------------------------------------------------------
+// Demo item variety — random titles
 // -------------------------------------------------------------------
 
 function pickRandom<T>(arr: T[]): T {
@@ -148,10 +238,12 @@ let seedCount = 0;
 
 const sdkEnv: Record<string, string | undefined> = { ...process.env };
 delete sdkEnv["ANTHROPIC_API_KEY"];
+sdkEnv["ALS_DEMO_MODE"] = "1";
 
 async function seedItem(target: DelamainTarget): Promise<void> {
   seedCount++;
   const title = pickRandom(DEMO_TITLES);
+  const resolved = resolveNextItem(target);
 
   const prompt = `Create a demo work item for the ${target.moduleId} module.
 
@@ -161,34 +253,34 @@ async function seedItem(target: DelamainTarget): Promise<void> {
 ${target.shapeContent}
 \`\`\`
 
-## Instructions
+## Pre-computed values
 
-Items directory: ${target.itemsDir}
-ID prefix: ${target.idPrefix}
+File path: ${resolved.filePath}
+Item ID: ${resolved.itemId}
 Title: "${title}"
 Status: ${target.initialAgentState}
 Date: ${today()}
 
-1. Scan ${target.itemsDir} for existing items, find the highest ID number, increment by 1.
-2. Write a complete valid record to ${target.itemsDir}/${target.idPrefix}-{NNN}.md.
-3. Use realistic demo values for required fields. Set nullable fields to null.
-4. DESCRIPTION: "Demo item seeded by /run-demo: ${title}"
-5. ACTIVITY_LOG: "- ${today()}: Created by run-demo."
-6. After writing the file, run the ALS compiler to validate it: find the compiler at alsc/compiler/src/index.ts (search parent directories of ${SYSTEM_ROOT} for the alsc/ directory), then run \`bun <compiler-path> ${SYSTEM_ROOT} ${target.moduleId}\`. If validation fails, fix the errors and re-validate.
-7. Print the file path when done.`;
+## Instructions
 
-  console.log(`[run-demo] #${seedCount} seeding ${target.moduleId}/${target.delamainName}: "${title}"`);
+1. Write a complete valid record to exactly: ${resolved.filePath}
+2. Use realistic demo values for required fields. Set nullable fields to null.
+3. DESCRIPTION: "Demo item seeded by /run-demo: ${title}"
+4. ACTIVITY_LOG: "- ${today()}: Created by run-demo."
+5. Print the file path when done.`;
+
+  console.log(`[run-demo] #${seedCount} seeding ${target.moduleId}/${target.delamainName}: "${title}" → ${resolved.itemId}`);
 
   try {
     for await (const message of query({
       prompt,
       options: {
         cwd: SYSTEM_ROOT,
-        model: "sonnet",
-        allowedTools: ["Read", "Write", "Glob", "Bash"],
+        model: "haiku",
+        allowedTools: ["Read", "Write", "Bash"],
         env: sdkEnv,
         permissionMode: "acceptEdits",
-        maxTurns: 10,
+        maxTurns: 20,
         maxBudgetUsd: 1.00,
       },
     })) {
@@ -242,6 +334,7 @@ process.on("SIGTERM", stop);
 
 const target = filtered[0]!;
 console.log(`[run-demo] seeding ${target.moduleId}/${target.delamainName} continuously — Ctrl+C to stop`);
+console.log(`[run-demo] compiler: ${COMPILER_PATH}`);
 
 while (running) {
   await seedItem(target);

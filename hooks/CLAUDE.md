@@ -32,6 +32,12 @@ On session end, kills running delamain dispatchers and removes their heartbeat f
 
 Dispatchers live and die with their Claude session. On next session start, `delamain-start.sh` detects them as offline and suggests restarting.
 
+## Environment variables
+
+### `ALS_DEMO_MODE`
+
+When set to `"1"`, `als-validate.sh` and `als-stop-gate.sh` skip all validation. Used by the reference-system [`/run-demo`](../reference-system/.claude/skills/run-demo/SKILL.md) traffic generators so seed agents can write items without triggering the compiler on every write.
+
 ## Requirements
 
 - Bun must be installed and on `$PATH`.

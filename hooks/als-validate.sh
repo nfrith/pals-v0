@@ -3,6 +3,9 @@
 # Short-circuits for non-ALS files. Scopes validation to the affected module only.
 set -euo pipefail
 
+# Skip validation in demo mode (e.g. /run-demo traffic generators)
+[[ "${ALS_DEMO_MODE:-}" == "1" ]] && exit 0
+
 COMPILER="${CLAUDE_PLUGIN_ROOT}/alsc/compiler"
 
 input=$(cat)

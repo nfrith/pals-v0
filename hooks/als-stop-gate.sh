@@ -4,6 +4,9 @@
 # this session, as recorded by the breadcrumb PostToolUse hook.
 set -euo pipefail
 
+# Skip validation in demo mode (e.g. /run-demo traffic generators)
+[[ "${ALS_DEMO_MODE:-}" == "1" ]] && exit 0
+
 COMPILER="${CLAUDE_PLUGIN_ROOT}/alsc/compiler"
 
 input=$(cat)

@@ -3,5 +3,9 @@
     "allow": [
       "Bash(bun run:*)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/scripts/statusline.sh"
   }
 }

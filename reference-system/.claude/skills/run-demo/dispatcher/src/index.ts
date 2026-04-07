@@ -209,13 +209,25 @@ Date: ${today()}
 }
 
 // -------------------------------------------------------------------
-// Main loop — one parallel seeder per delamain, all running concurrently
+// Main loop — seed a single delamain continuously (one process per delamain)
 // -------------------------------------------------------------------
+
+const filterModule = process.argv[2]; // optional: "module/delamain" filter
 
 const targets = await discoverDelamains();
 
 if (targets.length === 0) {
   console.error("[run-demo] no delamains found in system — nothing to seed");
+  process.exit(1);
+}
+
+const filtered = filterModule
+  ? targets.filter(t => `${t.moduleId}/${t.delamainName}` === filterModule)
+  : targets;
+
+if (filtered.length === 0) {
+  console.error(`[run-demo] no delamain matches filter: ${filterModule}`);
+  console.error(`[run-demo] available: ${targets.map(t => `${t.moduleId}/${t.delamainName}`).join(", ")}`);
   process.exit(1);
 }
 
@@ -228,14 +240,9 @@ const stop = () => {
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
 
-console.log(`[run-demo] discovered ${targets.length} delamain(s): ${targets.map(t => `${t.moduleId}/${t.delamainName}`).join(", ")}`);
-console.log(`[run-demo] starting ${targets.length} parallel seeders — Ctrl+C to stop`);
+const target = filtered[0]!;
+console.log(`[run-demo] seeding ${target.moduleId}/${target.delamainName} continuously — Ctrl+C to stop`);
 
-// One seeder per delamain, all running concurrently
-async function seederLoop(target: DelamainTarget) {
-  while (running) {
-    await seedItem(target);
-  }
+while (running) {
+  await seedItem(target);
 }
-
-await Promise.all(targets.map(t => seederLoop(t)));

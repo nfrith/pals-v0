@@ -7,7 +7,7 @@ allowed-tools: Bash(bash *), Skill
 
 # run-demo
 
-Demo runner for the reference-system. Injects demo-mode overrides into delamain agents, starts the traffic generator to build up items, then starts dispatchers — so every delamain has work from the moment it comes online.
+Demo runner for the reference-system. Injects demo-mode overrides into delamain agents, starts one traffic generator per delamain, then starts dispatchers — so every delamain has work from the moment it comes online.
 
 ## Procedure
 
@@ -21,15 +21,27 @@ Bash(command: "{skill-dir}/inject-demo-mode.sh")
 
 Where `{skill-dir}` is the absolute path to this skill's directory (the directory containing this SKILL.md).
 
-### 2. Start the traffic generator
+### 2. Start the traffic generators
 
-Run the traffic generator as a background shell **before** starting dispatchers. It runs one parallel seeder per delamain — all 5 seed concurrently.
+Start one background shell per delamain — true process-level parallelism. The traffic generator accepts a `module/delamain` argument to filter to a single delamain.
+
+First, run `bun install` once:
 
 ```
-Bash(command: "cd {skill-dir}/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
+Bash(command: "cd {skill-dir}/dispatcher && bun install --silent 2>/dev/null")
 ```
 
-Wait ~5 seconds for the generator to start, then proceed.
+Then start all 5 generators in parallel (one `Bash(run_in_background: true)` call per delamain, all in a single message):
+
+```
+Bash(command: "cd {skill-dir}/dispatcher && bun run src/index.ts experiments/run-lifecycle", run_in_background: true)
+Bash(command: "cd {skill-dir}/dispatcher && bun run src/index.ts factory/development-pipeline", run_in_background: true)
+Bash(command: "cd {skill-dir}/dispatcher && bun run src/index.ts incident-response/incident-lifecycle", run_in_background: true)
+Bash(command: "cd {skill-dir}/dispatcher && bun run src/index.ts postmortems/postmortem-lifecycle", run_in_background: true)
+Bash(command: "cd {skill-dir}/dispatcher && bun run src/index.ts infra/release-lifecycle", run_in_background: true)
+```
+
+Wait ~5 seconds for the generators to start, then proceed.
 
 ### 3. Start dispatchers
 
@@ -45,14 +57,14 @@ Every dispatcher will find items waiting on its first scan.
 
 Tell the operator:
 - How many delamains were discovered
-- That the traffic generator is running continuously in the background
+- That 5 traffic generators are running continuously in the background
 - They can watch items flow via module operator consoles (e.g., `/factory-operate`)
-- The generator stops when the Claude session ends
+- The generators stop when the Claude session ends
 
 ## Notes
 
 - Demo items are real ALS records — they flow through the full state machine identically to production items.
 - The traffic generator uses sonnet model with a $1.00 budget cap per seed (assumes subscription usage).
-- The generator runs one parallel seeder per delamain — every delamain is always being fed.
+- Each delamain gets its own dedicated generator process for true parallelism.
 - To watch the demo in action, open the module operator console in another pane.
 - The generator logs each seed to stdout: `[run-demo] #N seeding module/delamain: "title"`

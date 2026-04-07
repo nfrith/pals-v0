@@ -1,7 +1,7 @@
 {
-  "name": "development-pipeline-dispatcher",
+  "name": "delamain-dispatcher",
   "version": "0.1.0",
-  "description": "Watcher + dispatcher for the development-pipeline delamain — filesystem-based agent invocation",
+  "description": "Generic watcher + dispatcher for deployed Delamain bundles",
   "type": "module",
   "scripts": {
     "start": "bun run src/index.ts"

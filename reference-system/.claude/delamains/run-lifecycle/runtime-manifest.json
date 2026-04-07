@@ -1,0 +1,12 @@
+{
+  "schema": "als-delamain-runtime-manifest@1",
+  "delamain_name": "run-lifecycle",
+  "module_id": "experiments",
+  "module_version": 2,
+  "module_mount_path": "workspace/experiments",
+  "entity_name": "run",
+  "entity_path": "programs/{program}/experiments/{experiment}/runs/{id}.md",
+  "status_field": "status",
+  "discriminator_field": null,
+  "discriminator_value": null
+}

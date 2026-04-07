@@ -29,6 +29,7 @@ Rules:
 - Module `skills` is a required array of live active skill ids and may be empty
 - Each skill id must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`
 - Active skill ids must be globally unique across the live system
+- Modules may register operator-facing monitor or override skills even when their bound Delamains have no operator-owned states. Those skills remain ordinary entries in `.als/system.yaml`; they are not encoded inside `delamain.yaml`.
 - Module paths cannot be absolute, contain empty segments, contain `.` or `..`, or contain hidden segments like `.als`
 - The module's data lives at `{path}/`
 - The module subtree may contain reserved non-record markdown files named `AGENTS.md` or `CLAUDE.md` at any depth
@@ -565,6 +566,45 @@ transitions:
     to: completed
 ```
 
+Autonomous lifecycle example:
+
+```yaml
+phases: [execution, closed]
+
+states:
+  queued:
+    initial: true
+    phase: execution
+    actor: agent
+    resumable: false
+    path: agents/queued.md
+  running:
+    phase: execution
+    actor: agent
+    resumable: false
+    path: agents/running.md
+  completed:
+    phase: closed
+    terminal: true
+  failed:
+    phase: closed
+    terminal: true
+
+transitions:
+  - class: advance
+    from: queued
+    to: running
+  - class: rework
+    from: running
+    to: queued
+  - class: exit
+    from: running
+    to: completed
+  - class: exit
+    from: running
+    to: failed
+```
+
 Rules:
 
 - Delamain primary definition files declare ordered `phases`, authoritative `states`, and explicit `transitions`.
@@ -575,6 +615,7 @@ Rules:
 - Terminal states must be in the last declared phase.
 - Non-terminal states declare `actor: operator | agent`.
 - Terminal states do not declare `actor`.
+- Delamain does not require operator-owned non-terminal states. A module may author a fully autonomous lifecycle where every non-terminal state is `actor: agent`.
 - Transitions declare `class: advance | rework | exit`, `from`, and `to`.
 - `advance` and `rework` use a single-state `from`.
 - `exit` uses a single-state `from` or a non-empty list-valued `from`.
@@ -586,10 +627,14 @@ Rules:
 - Delamain-local asset paths such as state `path` and `sub-agent` resolve relative to the directory containing the Delamain primary definition file, not relative to the module bundle root.
 - Resolved Delamain-local asset paths must remain inside the same active module version bundle.
 - Claude projection refreshes authored Delamain bundle files into `.claude/delamains/{name}/`.
+- Claude projection also writes `runtime-manifest.json` into each deployed `.claude/delamains/{name}/` bundle.
+- The deployed runtime manifest records one effective binding: module mount path, entity path template, Delamain-bound status field, and optional discriminator field/value.
+- One Delamain bundle owns exactly one effective binding. Reusing the same Delamain name across multiple effective bindings is rejected during Claude deploy planning.
 - Claude projection preserves an existing `dispatcher/node_modules/` directory when one is already present in the target.
 - Claude projection does not run `bun install` or any other package-manager command.
 - Claude projection may leave stale authored files or incidental runtime files in the target when the host uses merge-based projection to preserve installed dependencies.
 - Missing `dispatcher/node_modules/` at projection time is a warning, not a projection failure.
+- The generic dispatcher runtime is supported from deployed `.claude/delamains/{name}/` bundles, not directly from authored `.als/modules/.../delamains/.../` source bundles.
 - `actor: agent` states declare exactly one `path` plus explicit boolean `resumable`.
 - `delegated` is optional and only valid on `actor: agent` states.
 - If `delegated` is omitted, hosts treat it as `false`.

@@ -1,5 +1,9 @@
 dependencies: []
 
+delamains:
+  postmortem-lifecycle:
+    path: delamains/postmortem-lifecycle/delamain.yaml
+
 entities:
   incident:
     source_format: markdown
@@ -23,9 +27,9 @@ entities:
         allowed_values: [sev1, sev2, sev3]
 
       status:
-        type: enum
+        type: delamain
         allow_null: false
-        allowed_values: [investigating, mitigated, resolved, closed]
+        delamain: postmortem-lifecycle
 
       incident_date:
         type: date

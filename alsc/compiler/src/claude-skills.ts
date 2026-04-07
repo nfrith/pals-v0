@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { DEPLOY_OUTPUT_SCHEMA_LITERAL } from "./contracts.ts";
@@ -36,14 +36,31 @@ interface ClaudeSkillProjectionWorkPlan extends ClaudeSkillProjectionPlan {
 interface ClaudeDelamainProjectionWorkPlan extends ClaudeDelamainProjectionPlan {
   source_dir_abs: string;
   target_dir_abs: string;
+  module_mount_path: string;
+  entity_name: string;
+  entity_path: string;
+  status_field: string;
+  discriminator_field: string | null;
+  discriminator_value: string | null;
 }
 
 type ClaudeSkillDeployProceedStatus = Exclude<ClaudeSkillDeployOutput["validation_status"], "fail">;
 
 type DelamainBindingSelection =
   | { kind: "none" }
-  | { kind: "single"; name: string }
+  | { kind: "single"; name: string; field_id: string }
   | { kind: "multiple"; bindings: Array<{ field_id: string; delamain_name: string }> };
+
+interface DelamainProjectionBinding {
+  delamain_name: string;
+  entity_name: string;
+  entity_path: string;
+  status_field: string;
+  discriminator_field: string | null;
+  discriminator_value: string | null;
+}
+
+const DELAMAIN_RUNTIME_MANIFEST_SCHEMA = "als-delamain-runtime-manifest@1";
 
 export function deployClaudeSkills(systemRootInput: string, options: ClaudeSkillDeployOptions = {}): ClaudeSkillDeployOutput {
   const systemRootAbs = resolve(systemRootInput);
@@ -212,6 +229,7 @@ export function deployClaudeSkillsFromConfig(
     for (const plan of delamainPlans) {
       try {
         mergeProjectionDirectory(plan.source_dir_abs, plan.target_dir_abs);
+        writeDelamainRuntimeManifest(plan);
         writtenDelamainCount += 1;
       } catch (error) {
         return buildDeployOutput({
@@ -298,17 +316,18 @@ function buildProjectionPlans(
     }
 
     const moduleBundleAbs = resolve(systemRootAbs, inferredModuleBundlePath(moduleId, moduleConfig.version));
-    const collectedNames = collectProjectedDelamainNames(loadedShape.shape);
-    if (collectedNames.error) {
+    const collectedBindings = collectProjectedDelamainBindings(loadedShape.shape);
+    if (collectedBindings.error) {
       return {
         skill_plans: skillPlans,
         delamain_plans: delamainPlans,
         delamain_name_conflicts: collectDelamainNameConflicts(delamainPlans),
-        error: collectedNames.error,
+        error: collectedBindings.error,
       };
     }
 
-    for (const delamainName of collectedNames.delamain_names) {
+    for (const binding of collectedBindings.bindings) {
+      const delamainName = binding.delamain_name;
       const registryEntry = loadedShape.shape.delamains?.[delamainName];
       if (!registryEntry) {
         return {
@@ -331,6 +350,12 @@ function buildProjectionPlans(
         source_dir_abs: sourceDirAbs,
         target_dir: toSystemRelative(systemRootAbs, targetDirAbs),
         target_dir_abs: targetDirAbs,
+        module_mount_path: moduleConfig.path,
+        entity_name: binding.entity_name,
+        entity_path: binding.entity_path,
+        status_field: binding.status_field,
+        discriminator_field: binding.discriminator_field,
+        discriminator_value: binding.discriminator_value,
       });
     }
   }
@@ -383,11 +408,28 @@ function loadModuleShapeForProjection(
   };
 }
 
-function collectProjectedDelamainNames(shape: ModuleShape): {
-  delamain_names: string[];
+function collectProjectedDelamainBindings(shape: ModuleShape): {
+  bindings: DelamainProjectionBinding[];
   error: string | null;
 } {
-  const delamainNames = new Set<string>();
+  const bindings: DelamainProjectionBinding[] = [];
+  const bindingsByDelamain = new Map<string, DelamainProjectionBinding>();
+
+  const addBinding = (
+    binding: DelamainProjectionBinding,
+    fieldId: string,
+  ): { error: string | null } => {
+    const existing = bindingsByDelamain.get(binding.delamain_name);
+    if (existing) {
+      return {
+        error: describeRepeatedBindingError(existing, binding, fieldId),
+      };
+    }
+
+    bindingsByDelamain.set(binding.delamain_name, binding);
+    bindings.push(binding);
+    return { error: null };
+  };
 
   for (const [entityName, entityShape] of Object.entries(shape.entities)) {
     if (entityShape.source_format !== "markdown") continue;
@@ -395,46 +437,92 @@ function collectProjectedDelamainNames(shape: ModuleShape): {
     const rootBinding = selectSingleDelamainBinding(entityShape.fields);
     if (rootBinding.kind === "multiple") {
       return {
-        delamain_names: [...delamainNames].sort(),
+        bindings,
         error: describeMultipleBindingError(entityName, null, rootBinding.bindings),
       };
     }
 
     if (!("discriminator" in entityShape)) {
       if (rootBinding.kind === "single") {
-        delamainNames.add(rootBinding.name);
+        const addResult = addBinding(
+          {
+            delamain_name: rootBinding.name,
+            entity_name: entityName,
+            entity_path: entityShape.path,
+            status_field: rootBinding.field_id,
+            discriminator_field: null,
+            discriminator_value: null,
+          },
+          rootBinding.field_id,
+        );
+        if (addResult.error) {
+          return {
+            bindings,
+            error: addResult.error,
+          };
+        }
       }
       continue;
     }
 
     if (rootBinding.kind === "single") {
-      delamainNames.add(rootBinding.name);
+      const addResult = addBinding(
+        {
+          delamain_name: rootBinding.name,
+          entity_name: entityName,
+          entity_path: entityShape.path,
+          status_field: rootBinding.field_id,
+          discriminator_field: null,
+          discriminator_value: null,
+        },
+        rootBinding.field_id,
+      );
+      if (addResult.error) {
+        return {
+          bindings,
+          error: addResult.error,
+        };
+      }
     }
 
     for (const [variantName, variant] of Object.entries(entityShape.variants)) {
       const variantBinding = selectSingleDelamainBinding(variant.fields);
       if (variantBinding.kind === "multiple") {
         return {
-          delamain_names: [...delamainNames].sort(),
+          bindings,
           error: describeMultipleBindingError(entityName, variantName, variantBinding.bindings),
         };
       }
       if (rootBinding.kind === "single" && variantBinding.kind === "single") {
         return {
-          delamain_names: [...delamainNames].sort(),
+          bindings,
           error: `Could not plan Delamain projection because entity '${entityName}' declares base Delamain '${rootBinding.name}' and variant '${variantName}' also declares Delamain '${variantBinding.name}'.`,
         };
       }
       if (variantBinding.kind === "single") {
-        // Multiple variants may intentionally bind the same Delamain. Projection only needs
-        // the distinct bundle names that are active in some effective schema.
-        delamainNames.add(variantBinding.name);
+        const addResult = addBinding(
+          {
+            delamain_name: variantBinding.name,
+            entity_name: entityName,
+            entity_path: entityShape.path,
+            status_field: variantBinding.field_id,
+            discriminator_field: entityShape.discriminator,
+            discriminator_value: variantName,
+          },
+          variantBinding.field_id,
+        );
+        if (addResult.error) {
+          return {
+            bindings,
+            error: addResult.error,
+          };
+        }
       }
     }
   }
 
   return {
-    delamain_names: [...delamainNames].sort(),
+    bindings,
     error: null,
   };
 }
@@ -457,6 +545,7 @@ function selectSingleDelamainBinding(fields: Record<string, FieldShape>): Delama
     return {
       kind: "single",
       name: bindings[0]!.delamain_name,
+      field_id: bindings[0]!.field_id,
     };
   }
   return {
@@ -609,6 +698,28 @@ function mergeProjectionDirectory(sourceDirAbs: string, targetDirAbs: string): v
   cpSync(sourceDirAbs, targetDirAbs, { recursive: true, force: true });
 }
 
+function writeDelamainRuntimeManifest(plan: ClaudeDelamainProjectionWorkPlan): void {
+  writeFileSync(
+    resolve(plan.target_dir_abs, "runtime-manifest.json"),
+    JSON.stringify(
+      {
+        schema: DELAMAIN_RUNTIME_MANIFEST_SCHEMA,
+        delamain_name: plan.delamain_name,
+        module_id: plan.module_id,
+        module_version: plan.module_version,
+        module_mount_path: plan.module_mount_path,
+        entity_name: plan.entity_name,
+        entity_path: plan.entity_path,
+        status_field: plan.status_field,
+        discriminator_field: plan.discriminator_field,
+        discriminator_value: plan.discriminator_value,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+}
+
 function describeMultipleBindingError(
   entityName: string,
   variantName: string | null,
@@ -621,6 +732,25 @@ function describeMultipleBindingError(
     .map((binding) => `'${binding.field_id}' -> '${binding.delamain_name}'`)
     .join(", ");
   return `Could not plan Delamain projection because ${scope} declares multiple Delamain bindings: ${details}.`;
+}
+
+function describeRepeatedBindingError(
+  existing: DelamainProjectionBinding,
+  incoming: DelamainProjectionBinding,
+  incomingFieldId: string,
+): string {
+  const describeScope = (binding: DelamainProjectionBinding, fieldId: string): string => {
+    const variantScope = binding.discriminator_value
+      ? ` variant '${binding.discriminator_value}'`
+      : "";
+    return `entity '${binding.entity_name}'${variantScope} field '${fieldId}'`;
+  };
+
+  return (
+    `Could not plan Delamain projection because Delamain '${incoming.delamain_name}' is bound more than once `
+    + `in effective schemas: ${describeScope(existing, existing.status_field)}; `
+    + `${describeScope(incoming, incomingFieldId)}.`
+  );
 }
 
 function formatZodIssues(

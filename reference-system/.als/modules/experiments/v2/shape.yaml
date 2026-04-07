@@ -2,6 +2,10 @@ dependencies:
   - module: people
   - module: client-registry
 
+delamains:
+  run-lifecycle:
+    path: delamains/run-lifecycle/delamain.yaml
+
 entities:
   program:
     source_format: markdown
@@ -174,9 +178,9 @@ entities:
           entity: experiment
 
       status:
-        type: enum
+        type: delamain
         allow_null: false
-        allowed_values: [queued, running, completed, failed]
+        delamain: run-lifecycle
 
       outcome:
         type: enum

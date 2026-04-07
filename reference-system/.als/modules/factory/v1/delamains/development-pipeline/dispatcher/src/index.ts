@@ -5,8 +5,8 @@ import { scan } from "./watcher.js";
 import { resolve, dispatch, type DispatchEntry } from "./dispatcher.js";
 
 // -------------------------------------------------------------------
-// The only input: system root. Everything else is derived from
-// system.yaml → shape.yaml → delamain.yaml → agents/.
+// The only input: system root. Bundle-local runtime identity comes
+// from runtime-manifest.json beside delamain.yaml.
 //
 // If SYSTEM_ROOT is not set, walk up from the dispatcher's location
 // looking for .als/system.yaml. Works at any nesting depth and after
@@ -25,6 +25,7 @@ function findSystemRoot(start: string): string {
 const SYSTEM_ROOT = process.env["SYSTEM_ROOT"]
   ? resolvePath(process.env["SYSTEM_ROOT"])
   : findSystemRoot(resolvePath(import.meta.dir));
+const BUNDLE_ROOT = dirname(dirname(resolvePath(import.meta.dir)));
 
 const POLL_MS = parseInt(process.env["POLL_MS"] ?? "30000", 10);
 
@@ -32,12 +33,16 @@ const POLL_MS = parseInt(process.env["POLL_MS"] ?? "30000", 10);
 // Startup — crawl the ALS declaration surface once
 // -------------------------------------------------------------------
 
-const config = await resolve(SYSTEM_ROOT);
+const config = await resolve(BUNDLE_ROOT, SYSTEM_ROOT);
 
 console.log(`[dispatcher] system: ${SYSTEM_ROOT}`);
+console.log(`[dispatcher] bundle: ${BUNDLE_ROOT}`);
+console.log(`[dispatcher] module: ${config.moduleId}`);
 console.log(`[dispatcher] delamain: ${config.delamainName}`);
 console.log(`[dispatcher] status field: ${config.statusField}`);
-console.log(`[dispatcher] items: ${config.itemsDir}`);
+console.log(`[dispatcher] entity: ${config.entityName}`);
+console.log(`[dispatcher] entity path: ${config.entityPath}`);
+console.log(`[dispatcher] module root: ${config.moduleRoot}`);
 if (config.discriminatorField) {
   console.log(`[dispatcher] discriminator: ${config.discriminatorField}=${config.discriminatorValue}`);
 }
@@ -98,7 +103,9 @@ function findRule(status: string): DispatchEntry | undefined {
 
 async function tick() {
   const items = await scan(
-    config.itemsDir,
+    config.moduleRoot,
+    config.entityPath,
+    config.statusField,
     config.discriminatorField,
     config.discriminatorValue,
   );

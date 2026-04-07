@@ -1,0 +1,12 @@
+{
+  "schema": "als-delamain-runtime-manifest@1",
+  "delamain_name": "postmortem-lifecycle",
+  "module_id": "postmortems",
+  "module_version": 1,
+  "module_mount_path": "operations/postmortems",
+  "entity_name": "incident",
+  "entity_path": "{id}.md",
+  "status_field": "status",
+  "discriminator_field": null,
+  "discriminator_value": null
+}

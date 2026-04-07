@@ -2,6 +2,10 @@ dependencies:
   - module: people
   - module: operations
 
+delamains:
+  incident-lifecycle:
+    path: delamains/incident-lifecycle/delamain.yaml
+
 entities:
   incident-report:
     source_format: markdown
@@ -25,9 +29,9 @@ entities:
         allowed_values: [sev-1, sev-2, sev-3]
 
       status:
-        type: enum
+        type: delamain
         allow_null: false
-        allowed_values: [active, monitoring, recovered, closed]
+        delamain: incident-lifecycle
 
       opened_on:
         type: date

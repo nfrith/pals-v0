@@ -1,5 +1,9 @@
 dependencies: []
 
+delamains:
+  release-lifecycle:
+    path: delamains/release-lifecycle/delamain.yaml
+
 entities:
   region:
     source_format: markdown
@@ -248,9 +252,9 @@ entities:
         allow_null: false
 
       status:
-        type: enum
+        type: delamain
         allow_null: false
-        allowed_values: [pending, rolling-out, active, rolled-back, superseded]
+        delamain: release-lifecycle
 
       deployed_on:
         type: date

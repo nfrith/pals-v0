@@ -1,0 +1,12 @@
+{
+  "schema": "als-delamain-runtime-manifest@1",
+  "delamain_name": "release-lifecycle",
+  "module_id": "infra",
+  "module_version": 1,
+  "module_mount_path": "infra",
+  "entity_name": "release",
+  "entity_path": "regions/{region}/clusters/{cluster}/services/{service}/releases/{id}.md",
+  "status_field": "status",
+  "discriminator_field": null,
+  "discriminator_value": null
+}

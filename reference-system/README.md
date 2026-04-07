@@ -44,8 +44,8 @@ The shapes in this fixture use:
 
 ## Delamain Coverage
 
-- `factory` adds a Delamain-bound `status` field, state-owned prompt assets, resumable session fields, and Delamain bundles with dispatcher source to the reference system.
-- The checked-in `.claude/delamains/development-pipeline/` tree mirrors the current downstream Claude projection for that bundle, but intentionally omits vendored `dispatcher/node_modules/` while keeping the lightweight checked-in `dispatcher/bun.lock`.
+- `factory`, `incident-response`, `infra`, `experiments`, and `postmortems` now demonstrate Delamain-bound lifecycle surfaces in the reference system.
+- The checked-in `.claude/delamains/` trees mirror the current downstream Claude projection for the active bundles, intentionally omit vendored `dispatcher/node_modules/`, and now include the generated `runtime-manifest.json` contract beside each deployed `delamain.yaml`.
 - The standalone `software-factory` fixture no longer exists. Delamain validation and deploy coverage now run through this merged host.
 
 ## Intentional Choices In This Fixture

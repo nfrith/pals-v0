@@ -1,0 +1,12 @@
+{
+  "schema": "als-delamain-runtime-manifest@1",
+  "delamain_name": "incident-lifecycle",
+  "module_id": "incident-response",
+  "module_version": 1,
+  "module_mount_path": "workspace/incident-response",
+  "entity_name": "incident-report",
+  "entity_path": "reports/{id}.md",
+  "status_field": "status",
+  "discriminator_field": null,
+  "discriminator_value": null
+}

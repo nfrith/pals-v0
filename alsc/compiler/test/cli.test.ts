@@ -70,12 +70,24 @@ test.concurrent("alsc deploy claude dry-run exposes the public deploy surface", 
     expect(output.schema).toBe("als-claude-deploy-output@3");
     expect(output.status).toBe("pass");
     expect(output.dry_run).toBe(true);
-    expect(output.planned_skill_count).toBe(20);
-    expect(output.planned_delamain_count).toBe(1);
-    expect(output.warnings).toHaveLength(1);
-    expect(output.warnings[0]?.code).toBe("delamain_dispatcher_node_modules_missing");
-    expect(output.warnings[0]?.delamain_name).toBe("development-pipeline");
-    expect(output.warnings[0]?.target_path).toBe(".claude/delamains/development-pipeline/dispatcher/node_modules");
+    expect(output.planned_skill_count).toBe(24);
+    expect(output.planned_delamain_count).toBe(5);
+    expect(output.warnings).toHaveLength(5);
+    expect(output.warnings.map((warning) => warning.code)).toEqual([
+      "delamain_dispatcher_node_modules_missing",
+      "delamain_dispatcher_node_modules_missing",
+      "delamain_dispatcher_node_modules_missing",
+      "delamain_dispatcher_node_modules_missing",
+      "delamain_dispatcher_node_modules_missing",
+    ]);
+    expect(output.warnings.map((warning) => warning.delamain_name)).toEqual([
+      "run-lifecycle",
+      "development-pipeline",
+      "incident-lifecycle",
+      "release-lifecycle",
+      "postmortem-lifecycle",
+    ]);
+    expect(output.warnings[0]?.target_path).toBe(".claude/delamains/run-lifecycle/dispatcher/node_modules");
   });
 });
 

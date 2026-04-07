@@ -45,18 +45,22 @@ test("deploy CLI projects active skills into .claude/skills and is idempotent", 
     };
     expect(firstOutput.schema).toBe("als-claude-deploy-output@3");
     expect(firstOutput.status).toBe("pass");
-    expect(firstOutput.planned_skill_count).toBe(20);
-    expect(firstOutput.written_skill_count).toBe(20);
+    expect(firstOutput.planned_skill_count).toBe(24);
+    expect(firstOutput.written_skill_count).toBe(24);
     expect(firstOutput.existing_skill_targets).toEqual([]);
-    expect(firstOutput.planned_delamain_count).toBe(1);
-    expect(firstOutput.written_delamain_count).toBe(1);
+    expect(firstOutput.planned_delamain_count).toBe(5);
+    expect(firstOutput.written_delamain_count).toBe(5);
     expect(firstOutput.existing_delamain_targets).toEqual([]);
     expect(firstOutput.delamain_name_conflicts).toEqual([]);
     expect(firstOutput.warnings).toEqual([]);
-    expect(firstOutput.planned_delamains).toHaveLength(1);
-    expect(firstOutput.planned_delamains[0]?.delamain_name).toBe("development-pipeline");
-    expect(firstOutput.planned_delamains[0]?.source_dir).toBe(".als/modules/factory/v1/delamains/development-pipeline");
-    expect(firstOutput.planned_delamains[0]?.target_dir).toBe(".claude/delamains/development-pipeline");
+    expect(firstOutput.planned_delamains).toHaveLength(5);
+    expect(firstOutput.planned_delamains.map((plan) => plan.delamain_name)).toEqual([
+      "run-lifecycle",
+      "development-pipeline",
+      "incident-lifecycle",
+      "release-lifecycle",
+      "postmortem-lifecycle",
+    ]);
     for (const plan of firstOutput.planned_skills) {
       expect(plan).not.toHaveProperty("source_dir_abs");
       expect(plan).not.toHaveProperty("target_dir_abs");
@@ -75,9 +79,14 @@ test("deploy CLI projects active skills into .claude/skills and is idempotent", 
     expect(firstSkillSnapshot["factory-operate/SKILL.md"]).toContain("name: factory-operate");
     const firstDelamainSnapshot = snapshotTree(join(root, ".claude/delamains"));
     expect(firstDelamainSnapshot["development-pipeline/delamain.yaml"]).toContain("phases:");
+    expect(firstDelamainSnapshot["development-pipeline/runtime-manifest.json"]).toContain("\"schema\": \"als-delamain-runtime-manifest@1\"");
     expect(firstDelamainSnapshot["development-pipeline/agents/planning.md"]).toContain("description:");
     expect(firstDelamainSnapshot["development-pipeline/sub-agents/developer.md"]).toContain("description:");
-    expect(firstDelamainSnapshot["development-pipeline/dispatcher/src/dispatcher.ts"]).toContain("resolve(");
+    expect(firstDelamainSnapshot["run-lifecycle/runtime-manifest.json"]).toContain("\"delamain_name\": \"run-lifecycle\"");
+    expect(firstDelamainSnapshot["incident-lifecycle/runtime-manifest.json"]).toContain("\"module_id\": \"incident-response\"");
+    expect(firstDelamainSnapshot["release-lifecycle/runtime-manifest.json"]).toContain("\"module_id\": \"infra\"");
+    expect(firstDelamainSnapshot["postmortem-lifecycle/runtime-manifest.json"]).toContain("\"module_id\": \"postmortems\"");
+    expect(firstDelamainSnapshot["development-pipeline/dispatcher/src/dispatcher.ts"]).toContain("runtime-manifest.json");
     // The merged fixture keeps authored projection files but intentionally drops vendored dispatcher dependencies.
     expect(Object.keys(firstDelamainSnapshot).some((path) => path.includes("node_modules"))).toBe(false);
 
@@ -122,11 +131,17 @@ test("deploy CLI dry-run reports planned work without creating .claude/skills", 
     };
     expect(output.schema).toBe("als-claude-deploy-output@3");
     expect(output.status).toBe("pass");
-    expect(output.planned_skill_count).toBe(20);
+    expect(output.planned_skill_count).toBe(24);
     expect(output.written_skill_count).toBe(0);
-    expect(output.planned_delamain_count).toBe(1);
+    expect(output.planned_delamain_count).toBe(5);
     expect(output.written_delamain_count).toBe(0);
-    expect(output.planned_delamains[0]?.delamain_name).toBe("development-pipeline");
+    expect(output.planned_delamains.map((plan) => plan.delamain_name)).toEqual([
+      "run-lifecycle",
+      "development-pipeline",
+      "incident-lifecycle",
+      "release-lifecycle",
+      "postmortem-lifecycle",
+    ]);
     expect(output.warnings).toEqual([]);
     expect(existsSync(join(root, ".claude/skills"))).toBe(false);
     expect(existsSync(join(root, ".claude/delamains"))).toBe(false);
@@ -280,10 +295,11 @@ test("deploy CLI projects bound Delamain bundles into .claude/delamains and is i
 
     const firstSnapshot = snapshotTree(join(root, ".claude/delamains"));
     expect(firstSnapshot["development-pipeline/delamain.yaml"]).toContain("phases:");
+    expect(firstSnapshot["development-pipeline/runtime-manifest.json"]).toContain("\"entity_name\": \"work-item\"");
     expect(firstSnapshot["development-pipeline/delamain.yaml"]).toContain("delegated: true");
     expect(firstSnapshot["development-pipeline/agents/planning.md"]).toContain("description:");
     expect(firstSnapshot["development-pipeline/sub-agents/developer.md"]).toContain("description:");
-    expect(firstSnapshot["development-pipeline/dispatcher/src/dispatcher.ts"]).toContain("resolve(");
+    expect(firstSnapshot["development-pipeline/dispatcher/src/dispatcher.ts"]).toContain("runtime-manifest.json");
     expect(firstSnapshot["development-pipeline/dispatcher/src/session-runtime.ts"]).toContain("buildSessionRuntimeState");
 
     const second = Bun.spawnSync({
@@ -484,6 +500,70 @@ test("deploy CLI excludes unused Delamains that are only present in the registry
   });
 });
 
+test("deploy library fails when one Delamain name is reused across multiple effective bindings in a module", async () => {
+  await withFixtureSandbox("deploy-delamain-reused-binding", async ({ root }) => {
+    await updateShapeYaml(root, "factory", 1, (shape) => {
+      const entities = shape.entities as Record<string, Record<string, unknown>>;
+      entities.release = {
+        source_format: "markdown",
+        path: "releases/{id}.md",
+        identity: {
+          id_field: "id",
+        },
+        fields: {
+          id: {
+            type: "id",
+            allow_null: false,
+          },
+          title: {
+            type: "string",
+            allow_null: false,
+          },
+          status: {
+            type: "delamain",
+            allow_null: false,
+            delamain: "development-pipeline",
+          },
+        },
+        body: {
+          title: {
+            source: {
+              kind: "field",
+              field: "title",
+            },
+          },
+          sections: [
+            {
+              name: "NOTES",
+              allow_null: false,
+              content: {
+                mode: "freeform",
+                blocks: {
+                  paragraph: {},
+                },
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const validationContext = loadSystemValidationContext(root);
+    expect(validationContext.system_config).not.toBeNull();
+
+    const output = deployClaudeSkillsFromConfig(root, validationContext.system_config!, "pass", {
+      dry_run: true,
+      module_filter: "factory",
+    });
+
+    expect(output.status).toBe("fail");
+    expect(output.planned_delamain_count).toBe(0);
+    expect(output.error).toContain("bound more than once");
+    expect(output.error).toContain("entity 'work-item' field 'status'");
+    expect(output.error).toContain("entity 'release' field 'status'");
+  });
+});
+
 test("deploy CLI fails preflight when empty targets are required for Delamain projection", async () => {
   await withFixtureSandbox("deploy-delamain-collision", async ({ root }) => {
     await rm(join(root, ".claude/skills"), { recursive: true, force: true });
@@ -545,7 +625,7 @@ test("deploy CLI fails when flat Delamain names collide across modules", async (
       error: string | null;
     };
     expect(output.status).toBe("fail");
-    expect(output.planned_delamain_count).toBe(2);
+    expect(output.planned_delamain_count).toBe(6);
     expect(output.error).toContain("Delamain names would collide");
     expect(output.delamain_name_conflicts).toHaveLength(1);
     expect(output.delamain_name_conflicts[0]?.delamain_name).toBe("development-pipeline");
@@ -646,7 +726,7 @@ test("deploy library fails closed when one entity declares multiple Delamain fie
     });
 
     expect(output.status).toBe("fail");
-    expect(output.planned_delamain_count).toBe(0);
+    expect(output.planned_delamain_count).toBe(1);
     expect(output.error).toContain("multiple Delamain bindings");
     expect(output.error).toContain("secondary_status");
   });

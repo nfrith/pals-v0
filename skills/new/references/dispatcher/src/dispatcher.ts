@@ -1,36 +1,9 @@
 import { readFile, writeFile } from "fs/promises";
-import { join, dirname, basename } from "path";
+import { basename, join } from "path";
 import { parse as parseYaml } from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { buildSessionRuntimeState, shouldPersistDispatcherSession } from "./session-runtime.js";
-
-// -------------------------------------------------------------------
-// Types
-// -------------------------------------------------------------------
-
-interface SystemConfig {
-  als_version: number;
-  system_id: string;
-  modules: Record<string, { path: string; version: number }>;
-}
-
-interface FieldDef {
-  type: string;
-  delamain?: string;
-}
-
-interface ShapeConfig {
-  delamains: Record<string, { path: string }>;
-  entities: Record<
-    string,
-    {
-      path: string;
-      discriminator?: string;
-      fields: Record<string, FieldDef>;
-      variants?: Record<string, { fields: Record<string, FieldDef> }>;
-    }
-  >;
-}
+import { loadRuntimeManifest } from "./runtime-manifest.js";
 
 interface Transition {
   class: string;
@@ -75,7 +48,10 @@ export interface DispatchEntry {
 
 export interface ResolvedConfig {
   systemRoot: string;
-  itemsDir: string;
+  moduleId: string;
+  moduleRoot: string;
+  entityName: string;
+  entityPath: string;
   statusField: string;
   delamainName: string;
   discriminatorField?: string;
@@ -83,14 +59,6 @@ export interface ResolvedConfig {
   agents: Record<string, AgentDef>;
   dispatchTable: DispatchEntry[];
 }
-
-// -------------------------------------------------------------------
-// ALS crawl — derive everything from system.yaml
-//
-// Supports discriminated variants: when the delamain field lives
-// inside a variant, the dispatcher records the discriminator field
-// and variant name so the watcher can filter items.
-// -------------------------------------------------------------------
 
 function parseMd(raw: string): { meta: Record<string, string>; body: string } {
   const lines = raw.split("\n");
@@ -110,10 +78,6 @@ function parseMd(raw: string): { meta: Record<string, string>; body: string } {
   return { meta, body: lines.slice(end).join("\n").trim() };
 }
 
-// -------------------------------------------------------------------
-// Frontmatter field read/write — for session persistence
-// -------------------------------------------------------------------
-
 async function readFrontmatterField(
   filePath: string,
   field: string,
@@ -131,8 +95,9 @@ async function readFrontmatterField(
     if (
       (val.startsWith('"') && val.endsWith('"')) ||
       (val.startsWith("'") && val.endsWith("'"))
-    )
+    ) {
       val = val.slice(1, -1);
+    }
     return val;
   }
   return null;
@@ -183,124 +148,22 @@ async function setFrontmatterField(
   return true;
 }
 
-// -------------------------------------------------------------------
-// Resolve — crawl system.yaml → shape.yaml → delamain.yaml
-// -------------------------------------------------------------------
-
-export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
-  // 1. system.yaml → scan all modules for one with a delamain
-  const system = parseYaml(
-    await readFile(join(systemRoot, ".als", "system.yaml"), "utf-8"),
-  ) as SystemConfig;
-
-  let statusField: string | undefined;
-  let delamainName: string | undefined;
-  let entityPath: string | undefined;
-  let discriminatorField: string | undefined;
-  let discriminatorValue: string | undefined;
-  let moduleDir: string | undefined;
-  let modPath: string | undefined;
-  const shapeLoadErrors: string[] = [];
-
-  for (const [moduleId, mod] of Object.entries(system.modules)) {
-    const mDir = join(
-      systemRoot,
-      ".als",
-      "modules",
-      moduleId,
-      `v${mod.version}`,
-    );
-
-    let shape: ShapeConfig;
-    try {
-      shape = parseYaml(
-        await readFile(join(mDir, "shape.yaml"), "utf-8"),
-      ) as ShapeConfig;
-    } catch (error) {
-      shapeLoadErrors.push(
-        `${moduleId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      continue;
-    }
-
-    if (!shape.delamains || Object.keys(shape.delamains).length === 0) continue;
-
-    for (const [, entity] of Object.entries(shape.entities)) {
-      // Check top-level fields first
-      for (const [fieldId, field] of Object.entries(entity.fields)) {
-        if (field.type === "delamain" && field.delamain) {
-          statusField = fieldId;
-          delamainName = field.delamain;
-          entityPath = entity.path;
-          break;
-        }
-      }
-      if (delamainName) break;
-
-      // Check variant fields
-      if (entity.variants && entity.discriminator) {
-        for (const [variantId, variant] of Object.entries(entity.variants)) {
-          for (const [fieldId, field] of Object.entries(variant.fields)) {
-            if (field.type === "delamain" && field.delamain) {
-              statusField = fieldId;
-              delamainName = field.delamain;
-              entityPath = entity.path;
-              discriminatorField = entity.discriminator;
-              discriminatorValue = variantId;
-              break;
-            }
-          }
-          if (delamainName) break;
-        }
-      }
-      if (delamainName) break;
-    }
-
-    if (delamainName) {
-      moduleDir = mDir;
-      modPath = mod.path;
-      break;
-    }
-  }
-
-  if (!delamainName || !entityPath || !statusField || !moduleDir || !modPath) {
-    if (shapeLoadErrors.length > 0) {
-      throw new Error(
-        `No delamain field found in any module. Failed to read or parse shape.yaml for: ${shapeLoadErrors.join("; ")}`,
-      );
-    }
-    throw new Error("No delamain field found in any module");
-  }
-
-  // Items dir: module workspace path + entity path dirname
-  const itemsDir = join(systemRoot, modPath, dirname(entityPath));
-
-  // 2. shape.yaml delamain registry → delamain.yaml path
-  const shape = parseYaml(
-    await readFile(join(moduleDir, "shape.yaml"), "utf-8"),
-  ) as ShapeConfig;
-
-  const delamainPath = shape.delamains[delamainName]?.path;
-  if (!delamainPath) {
-    throw new Error(`Delamain "${delamainName}" not in shape registry`);
-  }
-
-  const delamainFullPath = join(moduleDir, delamainPath);
-  const delamainDir = dirname(delamainFullPath);
-
+export async function resolve(
+  bundleRoot: string,
+  systemRoot: string,
+): Promise<ResolvedConfig> {
+  const manifest = await loadRuntimeManifest(bundleRoot);
+  const moduleRoot = join(systemRoot, manifest.module_mount_path);
   const delamain = parseYaml(
-    await readFile(delamainFullPath, "utf-8"),
+    await readFile(join(bundleRoot, "delamain.yaml"), "utf-8"),
   ) as DelamainConfig;
 
   const agents: Record<string, AgentDef> = {};
 
-  // Agent paths resolve relative to the delamain bundle root
-  // (the directory containing delamain.yaml), not the module root.
-  // This enables deployment to .claude/delamains/ without path rewriting.
   async function loadAgent(agentKey: string, agentPath: string) {
     try {
       const { meta, body } = parseMd(
-        await readFile(join(delamainDir, agentPath), "utf-8"),
+        await readFile(join(bundleRoot, agentPath), "utf-8"),
       );
       if (!body) return;
 
@@ -308,11 +171,12 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
         description: meta["description"] ?? "",
         prompt: body,
       };
-      if (meta["tools"])
-        def.tools = meta["tools"].split(",").map((t) => t.trim());
+      if (meta["tools"]) {
+        def.tools = meta["tools"].split(",").map((tool) => tool.trim());
+      }
       if (
-        meta["model"] &&
-        ["sonnet", "opus", "haiku"].includes(meta["model"])
+        meta["model"]
+        && ["sonnet", "opus", "haiku"].includes(meta["model"])
       ) {
         def.model = meta["model"] as AgentDef["model"];
       }
@@ -325,12 +189,10 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
     }
   }
 
-  // 4. Load state agents and sub-agents
   for (const [stateId, state] of Object.entries(delamain.states)) {
     if (state.actor !== "agent" || !state.path) continue;
     await loadAgent(stateId, state.path);
 
-    // Sub-agent path is delamain-relative
     const subAgentPath = state["sub-agent"];
     if (subAgentPath) {
       const subAgentName = basename(subAgentPath, ".md");
@@ -340,19 +202,16 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
     }
   }
 
-  // 5. Build dispatch table from agent-owned states
   const dispatchTable: DispatchEntry[] = [];
   for (const [stateId, state] of Object.entries(delamain.states)) {
-    if (state.actor !== "agent") continue;
-    if (!state.path) continue;
-    if (!agents[stateId]) continue;
+    if (state.actor !== "agent" || !state.path || !agents[stateId]) continue;
 
     const transitions = delamain.transitions
-      .filter((t) => {
-        const sources = Array.isArray(t.from) ? t.from : [t.from];
+      .filter((transition) => {
+        const sources = Array.isArray(transition.from) ? transition.from : [transition.from];
         return sources.includes(stateId);
       })
-      .map((t) => ({ class: t.class, to: t.to }));
+      .map((transition) => ({ class: transition.class, to: transition.to }));
 
     const subAgentPath = state["sub-agent"];
 
@@ -369,21 +228,19 @@ export async function resolve(systemRoot: string): Promise<ResolvedConfig> {
 
   return {
     systemRoot,
-    itemsDir,
-    statusField,
-    delamainName,
-    discriminatorField,
-    discriminatorValue,
+    moduleId: manifest.module_id,
+    moduleRoot,
+    entityName: manifest.entity_name,
+    entityPath: manifest.entity_path,
+    statusField: manifest.status_field,
+    delamainName: manifest.delamain_name,
+    discriminatorField: manifest.discriminator_field ?? undefined,
+    discriminatorValue: manifest.discriminator_value ?? undefined,
     agents,
     dispatchTable,
   };
 }
 
-// -------------------------------------------------------------------
-// Dispatch — agent file body = prompt, frontmatter = query options
-// -------------------------------------------------------------------
-
-// Strip ANTHROPIC_API_KEY so the SDK uses subscription auth (OAuth)
 const sdkEnv: Record<string, string | undefined> = { ...process.env };
 delete sdkEnv["ANTHROPIC_API_KEY"];
 
@@ -418,9 +275,8 @@ export async function dispatch(
     );
   }
 
-  // Compose prompt: agent file body + runtime context
   const transitionLines = entry.transitions.map(
-    (t) => `- ${t.class} → ${t.to}`,
+    (transition) => `- ${transition.class} → ${transition.to}`,
   );
   const sessionContext: string[] = [];
   if (sessionState.includeRuntimeKeys) {
@@ -430,23 +286,22 @@ export async function dispatch(
 
   const prompt = [
     agent.prompt,
-    ``,
-    `---`,
-    ``,
-    `## Runtime Context`,
-    ``,
+    "",
+    "---",
+    "",
+    "## Runtime Context",
+    "",
     `item_id: ${itemId}`,
     `item_file: ${itemFile}`,
     `current_state: ${entry.state}`,
     `date: ${today()}`,
     `resume: ${sessionState.resume}`,
     ...sessionContext,
-    ``,
-    `legal_transitions:`,
+    "",
+    "legal_transitions:",
     ...transitionLines,
   ].join("\n");
 
-  // Tools from agent frontmatter; add Agent tool if state has a sub-agent
   const tools = [...(agent.tools ?? ["Read", "Edit"])];
   let subAgents: Record<string, AgentDef> | undefined;
   if (entry.subAgentName && agents[entry.subAgentName]) {
@@ -455,12 +310,12 @@ export async function dispatch(
   }
 
   console.log(
-    `[dispatcher] ${itemId} @ ${entry.state} → ${entry.agentName}` +
-      (entry.delegated ? " (delegated)" : "") +
-      (sessionState.resumeSessionId
+    `[dispatcher] ${itemId} @ ${entry.state} → ${entry.agentName}`
+      + (entry.delegated ? " (delegated)" : "")
+      + (sessionState.resumeSessionId
         ? ` (resume: ${sessionState.resumeSessionId.slice(0, 8)}...)`
-        : "") +
-      (entry.subAgentName ? ` (+ sub-agent: ${entry.subAgentName})` : ""),
+        : "")
+      + (entry.subAgentName ? ` (+ sub-agent: ${entry.subAgentName})` : ""),
   );
 
   let sessionId: string | undefined;
@@ -514,10 +369,10 @@ export async function dispatch(
     }
 
     return { success: true, sessionId };
-  } catch (err) {
+  } catch (error) {
     console.error(
       `[dispatcher] ${itemId} failed:`,
-      err instanceof Error ? err.message : err,
+      error instanceof Error ? error.message : error,
     );
     return { success: false };
   }

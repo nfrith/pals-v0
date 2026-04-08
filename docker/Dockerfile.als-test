@@ -1,0 +1,17 @@
+FROM ubuntu:noble
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      bash curl git ca-certificates jq && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create non-root operator user
+RUN useradd -m -s /bin/bash operator
+
+# Install Claude Code as operator (goes to ~/.local/bin/claude)
+USER operator
+RUN curl -fsSL https://claude.ai/install.sh | bash && \
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+
+WORKDIR /home/operator
+CMD ["bash", "-l"]

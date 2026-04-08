@@ -1,7 +1,18 @@
 #!/bin/bash
 # statusline.sh - ALS statusline for Claude Code
-# Optimized for speed: caches expensive operations (delamain scan, git, OBS)
-# to survive the 300ms debounce + in-flight cancellation cycle.
+#
+# PERFORMANCE CRITICAL: This script must complete in under 200ms.
+# Claude Code debounces statusline updates at 300ms. If a new update
+# triggers while this script is still running, the in-flight execution
+# is CANCELLED — producing a blank statusline. With many background
+# shells (dispatchers, traffic generators), updates trigger rapidly.
+#
+# Strategy: cache all expensive operations (delamain scan, git, OBS)
+# to temp files with TTLs. The hot path only reads cache + renders.
+# Measured: ~180ms total execution time.
+#
+# See CLAUDE.md in this directory for full documentation of the
+# statusline system, known issues, and sources.
 
 input=$(cat)
 SCRIPT_DIR="$(dirname "$0")"

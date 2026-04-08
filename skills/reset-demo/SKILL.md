@@ -16,6 +16,7 @@ Reset the reference-system back to its natural resting state — as if `/run-dem
 - **Fabricated items** created by the traffic generator
 - **Modified records** that dispatchers advanced through state machines
 - **Dispatcher status files**
+- **Statusline changes** — restores the operator's original statusline if it was replaced by the demo
 
 ## Procedure
 
@@ -75,11 +76,33 @@ cd {skill-dir}/../../reference-system && git checkout -- \
   infra/
 ```
 
-### 4. Report
+### 4. Restore statusline
+
+If `/run-demo` installed the ALS statusline, restore the operator's original. Look for the backup file:
+
+```bash
+backup=$(ls -t .claude/scripts/statusline.sh.backup-* 2>/dev/null | head -1)
+if [[ -n "$backup" ]]; then
+  mv "$backup" .claude/scripts/statusline.sh
+fi
+```
+
+If no backup exists, the operator either didn't have a statusline before or chose to keep it. In that case, remove the ALS statusline and clear the settings:
+
+```bash
+if [[ ! -f .claude/scripts/statusline.sh.backup-* ]]; then
+  rm -f .claude/scripts/statusline.sh .claude/scripts/obs-status.py
+fi
+```
+
+Also remove the `statusLine` key from `.claude/settings.json` if the operator had no statusline before (no backup found). Read the file, remove the key, write it back.
+
+### 5. Report
 
 Tell the operator:
 - How many processes were killed
 - How many fabricated items were removed (count from `git clean` output)
+- Whether the statusline was restored (and from which backup) or removed
 - That the reference-system is ready for a fresh `/run-demo`
 
 ## Notes

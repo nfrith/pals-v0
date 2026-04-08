@@ -2,7 +2,7 @@
 name: run-demo
 description: Reference-system demo runner. Seeds items via traffic generator, then starts dispatchers so all delamains have work immediately.
 model: sonnet
-allowed-tools: Bash(bash *), Skill
+allowed-tools: AskUserQuestion, Bash(bash *), Skill
 ---
 
 # run-demo
@@ -21,7 +21,27 @@ All paths below use `{system-root}` to mean this resolved path.
 
 ## Procedure
 
-### 1. Inject demo-mode overrides
+### 1. Configure statusline
+
+The statusline is critical to the demo — without it the operator has no way to see delamains running and the demo will make no visual sense.
+
+Use AskUserQuestion to ask:
+
+**Question:** "The demo needs the ALS statusline to show delamain health badges — without it you won't be able to see what's happening. This is temporary and will be undone by /reset-demo. Install it?"
+
+**Options:**
+- "Yes, install for demo" — Install the statusline temporarily
+- "No, skip statusline" — Run the demo without visual feedback
+
+If yes, invoke configure-statusline:
+
+```
+Skill(skill: "als:configure-statusline")
+```
+
+If no, warn the operator that they won't have visual feedback of the demo running, then proceed anyway.
+
+### 2. Inject demo-mode overrides
 
 Run the injection script to add demo-mode instructions to all delamain agent files. This makes agents sleep 5 seconds and advance instead of doing real work.
 

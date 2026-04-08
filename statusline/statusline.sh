@@ -97,12 +97,40 @@ fi
 # Build output — each echo = separate row in Claude Code statusline
 # ---------------------------------------------------------------------------
 
-# Line 1: directory, branch, model, context
+# Line 1: directory, branch, model, context, clock, OBS
 line1=""
 line1+=$(printf '\033[1;36m%s\033[0m' "$dir")
 [[ -n "$branch" ]] && line1+=$(printf ' \033[1;33m⎇ %s\033[0m' "$branch")
 line1+=$(printf ' \033[2;34m(%s)\033[0m' "$model")
 line1+="$context_info"
+
+# Clock in dimmed white
+line1+=$(printf ' \033[2;37mTIME %s\033[0m' "$(date +%H:%M)")
+
+# OBS streaming/recording indicator (Python stdlib WebSocket, no deps)
+obs_script="$(dirname "$0")/obs-status.py"
+if [[ -f "$obs_script" ]]; then
+    obs_json=$(python3 "$obs_script" 2>/dev/null)
+    if [[ -n "$obs_json" ]]; then
+        obs_streaming=$(echo "$obs_json" | jq -r '.streaming' 2>/dev/null)
+        obs_recording=$(echo "$obs_json" | jq -r '.recording' 2>/dev/null)
+    fi
+    blink_on=$(( $(date +%s) % 2 ))
+    if [[ "$obs_streaming" == "true" ]]; then
+        if (( blink_on )); then
+            line1+=$(printf ' \033[1;31m● LIVE\033[0m')
+        else
+            line1+=$(printf ' \033[2;31m○ LIVE\033[0m')
+        fi
+    elif [[ "$obs_recording" == "true" ]]; then
+        if (( blink_on )); then
+            line1+=$(printf ' \033[1;33m● REC\033[0m')
+        else
+            line1+=$(printf ' \033[2;33m○ REC\033[0m')
+        fi
+    fi
+fi
+
 echo "$line1"
 
 # Delamain lines: each echo = one row, wrap badges to fit within max_line

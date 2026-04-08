@@ -21,25 +21,19 @@ All paths below use `{system-root}` to mean this resolved path.
 
 ## Procedure
 
-### 1. Configure statusline
+### 1. Ask about statusline
 
-The statusline is critical to the demo — without it the operator has no way to see delamains running and the demo will make no visual sense.
+The statusline is critical to the demo — without it the operator has no way to see delamains running. Ask upfront so the operator knows it's coming, but DON'T install it yet — installation happens in step 5, AFTER all shells are running.
 
 Use AskUserQuestion to ask:
 
 **Question:** "The demo needs the ALS statusline to show delamain health badges — without it you won't be able to see what's happening. This is temporary and will be undone by /reset-demo. Install it?"
 
 **Options:**
-- "Yes, install for demo" — Install the statusline temporarily
+- "Yes, install for demo" — Install the statusline (after dispatchers are up)
 - "No, skip statusline" — Run the demo without visual feedback
 
-If yes, invoke configure-statusline:
-
-```
-Skill(skill: "als:configure-statusline")
-```
-
-If no, warn the operator that they won't have visual feedback of the demo running, then proceed anyway.
+Store the answer and proceed either way.
 
 ### 2. Register delamain roots
 
@@ -57,17 +51,9 @@ Run the injection script to add demo-mode instructions to all delamain agent fil
 Bash(command: "ALS_SYSTEM_ROOT={skill-dir}/../../reference-system bash {skill-dir}/inject-demo-mode.sh")
 ```
 
-### 3.5. Pre-warm statusline cache (Option A — tech debt)
+### 4. Start traffic generators and dispatchers
 
-The statusline's first render after delamain-roots registration requires a cold-cache delamain scan. If background shells launch before this completes, Claude Code's 300ms debounce cancels the script and disables the statusline for the session. Pre-warming populates all caches so the hot path is instant during the shell launch burst.
-
-```
-Bash(command: "echo '{\"workspace\":{\"current_dir\":\"'$(pwd)'\"},\"model\":{\"display_name\":\"warm\"},\"context_window\":{\"used_percentage\":0}}' | bash .claude/scripts/statusline.sh > /dev/null 2>&1 && echo 'statusline cache warmed'")
-```
-
-### 4. Start the traffic generators
-
-Start one background shell per delamain — true process-level parallelism. The traffic generator accepts a `module/delamain` argument to filter to a single delamain.
+Start one background shell per delamain for both generators and dispatchers.
 
 First, install dependencies:
 
@@ -85,25 +71,50 @@ Bash(command: "cd {skill-dir}/dispatcher && ALS_SYSTEM_ROOT={skill-dir}/../../re
 Bash(command: "cd {skill-dir}/dispatcher && ALS_SYSTEM_ROOT={skill-dir}/../../reference-system bun run src/index.ts infra/release-lifecycle", run_in_background: true)
 ```
 
-Wait ~5 seconds for the generators to start, then proceed.
-
-### 5. Start dispatchers
-
-Invoke the `als:run-delamains` skill to start all dispatchers. **Important:** after the skill loads, ensure it ONLY starts dispatchers from the reference-system (`{skill-dir}/../../reference-system`). The operator may have their own ALS system in the current directory — the demo must not touch it. Only reference-system delamains should be started.
+Wait ~5 seconds for the generators to seed initial items. Then start all 5 dispatchers in parallel from the reference-system ONLY (not Ghost's own delamains):
 
 ```
-Skill(skill: "als:run-delamains")
+Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/development-pipeline/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
+Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/incident-lifecycle/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
+Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/postmortem-lifecycle/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
+Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/release-lifecycle/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
+Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/run-lifecycle/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
 ```
 
-Every dispatcher will find items waiting on its first scan.
+Wait ~5 seconds for dispatchers to start and scan their first items.
 
-### 6. Report
+### 5. Configure statusline (AFTER shells are running)
+
+If the operator said yes in step 1, NOW install the statusline. Installing AFTER all shells are running avoids the debounce problem: rapid-fire statusline updates during shell launches can cancel the script and disable it for the session. With everything already running, the shell burst is over and the statusline renders cleanly.
+
+```
+Skill(skill: "als:configure-statusline")
+```
+
+Then pre-warm the statusline cache so it's ready on the next turn:
+
+```
+Bash(command: "echo '{\"workspace\":{\"current_dir\":\"'$(pwd)'\"},\"model\":{\"display_name\":\"warm\"},\"context_window\":{\"used_percentage\":0}}' | bash .claude/scripts/statusline.sh > /dev/null 2>&1 && echo 'statusline cache warmed'")
+```
+
+If the operator said no, warn them they won't have visual feedback, then proceed anyway.
+
+### 6. Verify dispatchers
+
+Verify all 5 reference-system dispatchers are running:
+
+```
+Bash(command: "sleep 3 && for sf in {skill-dir}/../../reference-system/.claude/delamains/*/status.json; do [ -f \"$sf\" ] && echo \"=== $(jq -r .name \"$sf\") ===\" && jq '{name, pid, items_scanned, active_dispatches}' \"$sf\"; done")
+```
+
+### 7. Report
 
 Tell the operator:
-- How many delamains were discovered
-- That 5 traffic generators are running continuously in the background
+- 5 delamains discovered and dispatching
+- 5 traffic generators running continuously in the background
+- Badges visible in the statusline showing live delamain health
 - They can watch items flow via module operator consoles (e.g., `/factory-operate`)
-- The generators stop when the Claude session ends
+- Everything stops when the Claude session ends
 
 ## Notes
 

@@ -11,7 +11,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SR="${1:-$SCRIPT_DIR/../../reference-system}"
-PROJECT="${2:-$(pwd)}"
+
+# Find project root by walking up from system root to find .claude/
+PROJECT=""
+_d="$SR"
+while [[ "$_d" != "/" ]]; do
+  [[ -d "$_d/.claude" ]] && PROJECT="$_d" && break
+  _d=$(dirname "$_d")
+done
+[[ -z "$PROJECT" ]] && echo "[reset-demo] ERROR: could not find project root" && exit 1
 
 echo "[reset-demo] system root: $SR"
 echo "[reset-demo] project root: $PROJECT"

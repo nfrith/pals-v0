@@ -23,10 +23,10 @@ Reset the reference-system back to its natural resting state — as if `/run-dem
 Run the reset script in a single call:
 
 ```
-Bash(command: "bash {skill-dir}/reset.sh '{skill-dir}/../../reference-system' '$(pwd)'")
+Bash(command: "bash {skill-dir}/reset.sh '{skill-dir}/../../reference-system'")
 ```
 
-The script handles everything: killing processes (daemon, Agent SDK children, dispatchers, generators), removing fabricated items, restoring agent files and records, removing delamain-roots, and restoring the statusline backup.
+The script finds the project root automatically by walking up from the system root. It handles everything: killing processes (daemon, Agent SDK children, dispatchers, generators), removing fabricated items, restoring agent files and records, removing delamain-roots, and restoring the statusline backup.
 
 After the script completes, report the output to the operator.
 

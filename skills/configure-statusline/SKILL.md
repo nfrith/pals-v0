@@ -42,8 +42,9 @@ Copy the statusline scripts from the ALS plugin into the operator's project:
 ```bash
 mkdir -p .claude/scripts
 cp {skill-dir}/../../statusline/statusline.sh .claude/scripts/statusline.sh
+cp {skill-dir}/../../statusline/statusline-daemon.sh .claude/scripts/statusline-daemon.sh
 cp {skill-dir}/../../statusline/obs-status.py .claude/scripts/obs-status.py
-chmod +x .claude/scripts/statusline.sh
+chmod +x .claude/scripts/statusline.sh .claude/scripts/statusline-daemon.sh
 ```
 
 ### 4. Wire up settings.json

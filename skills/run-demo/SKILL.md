@@ -53,24 +53,13 @@ Bash(command: "ALS_SYSTEM_ROOT={skill-dir}/../../reference-system bash {skill-di
 
 ### 4. Start traffic generators and dispatchers
 
-Start one background shell per delamain for both generators and dispatchers.
-
 First, install dependencies:
 
 ```
 Bash(command: "cd {skill-dir}/dispatcher && bun install --silent 2>/dev/null")
 ```
 
-**Pre-warm the statusline cache before generator burst (TECH DEBT — see statusline CLAUDE.md):**
-The statusline render cache may be stale (>30s since session start). Pre-warm it RIGHT before
-launching shells so rapid-fire invocations during the burst hit the cached path (~12ms) instead
-of the cold scan (~73ms). This must run immediately before the background shell launches.
-
-```
-Bash(command: "echo '{\"workspace\":{\"current_dir\":\"'$(pwd)'\"},\"model\":{\"display_name\":\"warm\"},\"context_window\":{\"used_percentage\":0}}' | bash .claude/scripts/statusline.sh > /dev/null 2>&1 && echo 'cache warmed (pre-generators)'")
-```
-
-Then start all 5 generators in parallel (one `Bash(run_in_background: true)` call per delamain, all in a single message):
+Start all 5 generators in parallel (one `Bash(run_in_background: true)` call per delamain, all in a single message):
 
 ```
 Bash(command: "cd {skill-dir}/dispatcher && ALS_SYSTEM_ROOT={skill-dir}/../../reference-system bun run src/index.ts experiments/run-lifecycle", run_in_background: true)
@@ -80,16 +69,7 @@ Bash(command: "cd {skill-dir}/dispatcher && ALS_SYSTEM_ROOT={skill-dir}/../../re
 Bash(command: "cd {skill-dir}/dispatcher && ALS_SYSTEM_ROOT={skill-dir}/../../reference-system bun run src/index.ts infra/release-lifecycle", run_in_background: true)
 ```
 
-Wait ~5 seconds for the generators to seed initial items.
-
-**Pre-warm again before dispatcher burst:**
-The 5 generator launches took ~5-10s. Pre-warm again to reset the 30s cache window before the next burst.
-
-```
-Bash(command: "echo '{\"workspace\":{\"current_dir\":\"'$(pwd)'\"},\"model\":{\"display_name\":\"warm\"},\"context_window\":{\"used_percentage\":0}}' | bash .claude/scripts/statusline.sh > /dev/null 2>&1 && echo 'cache warmed (pre-dispatchers)'")
-```
-
-Then start all 5 dispatchers in parallel from the reference-system ONLY (not Ghost's own delamains):
+Wait ~5 seconds, then start all 5 dispatchers in parallel from the reference-system ONLY:
 
 ```
 Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/development-pipeline/dispatcher && bun install --silent 2>/dev/null && bun run src/index.ts", run_in_background: true)
@@ -101,19 +81,21 @@ Bash(command: "cd {skill-dir}/../../reference-system/.claude/delamains/run-lifec
 
 Wait ~5 seconds for dispatchers to start and scan their first items.
 
-### 5. Configure statusline (AFTER shells are running)
+### 5. Configure statusline and start daemon
 
-If the operator said yes in step 1, NOW install the statusline. Installing AFTER all shells are running avoids the debounce problem: rapid-fire statusline updates during shell launches can cancel the script and disable it for the session. With everything already running, the shell burst is over and the statusline renders cleanly.
+If the operator said yes in step 1, install the statusline and start the data collection daemon:
 
 ```
 Skill(skill: "als:configure-statusline")
 ```
 
-Then pre-warm the statusline cache so it's ready on the next turn:
+Then start the statusline daemon as a background process. The daemon collects delamain badge state, git branch, and OBS status every 3 seconds, writing to cache files. The statusline script becomes a pure reader (~5ms) that never gets cancelled by Claude Code's debounce:
 
 ```
-Bash(command: "echo '{\"workspace\":{\"current_dir\":\"'$(pwd)'\"},\"model\":{\"display_name\":\"warm\"},\"context_window\":{\"used_percentage\":0}}' | bash .claude/scripts/statusline.sh > /dev/null 2>&1 && echo 'statusline cache warmed'")
+Bash(command: "bash .claude/scripts/statusline-daemon.sh '$(pwd)' &", run_in_background: true)
 ```
+
+Wait ~3 seconds for the daemon to complete its first data collection cycle, then the statusline will show badges on the next turn.
 
 If the operator said no, warn them they won't have visual feedback, then proceed anyway.
 
@@ -130,7 +112,7 @@ Bash(command: "sleep 3 && for sf in {skill-dir}/../../reference-system/.claude/d
 Tell the operator:
 - 5 delamains discovered and dispatching
 - 5 traffic generators running continuously in the background
-- Badges visible in the statusline showing live delamain health
+- Statusline daemon running (updates badges every 3s)
 - They can watch items flow via module operator consoles (e.g., `/factory-operate`)
 - Everything stops when the Claude session ends
 

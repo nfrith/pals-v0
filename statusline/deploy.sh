@@ -34,9 +34,10 @@ echo "[deploy] target: $TARGET"
 # 1. Copy statusline files
 mkdir -p "$TARGET/scripts"
 cp "$STATUSLINE_DIR/statusline.sh" "$TARGET/scripts/statusline.sh"
+cp "$STATUSLINE_DIR/statusline-daemon.sh" "$TARGET/scripts/statusline-daemon.sh"
 cp "$STATUSLINE_DIR/obs-status.py" "$TARGET/scripts/obs-status.py"
-chmod +x "$TARGET/scripts/statusline.sh"
-echo "[deploy] copied statusline.sh + obs-status.py to $TARGET/scripts/"
+chmod +x "$TARGET/scripts/statusline.sh" "$TARGET/scripts/statusline-daemon.sh"
+echo "[deploy] copied statusline.sh + statusline-daemon.sh + obs-status.py to $TARGET/scripts/"
 
 # 2. Update settings.json
 SETTINGS="$TARGET/settings.json"

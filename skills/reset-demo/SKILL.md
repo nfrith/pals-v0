@@ -27,7 +27,10 @@ Demo processes form a tree: parent processes (`bun run src/index.ts`) spawn Agen
 Run this single command to kill everything:
 
 ```bash
-# Kill Agent SDK children first (they're doing the actual writes)
+# Kill statusline daemon first
+daemon_pid_file=".claude/scripts/.cache/daemon.pid"
+[ -f "$daemon_pid_file" ] && kill $(cat "$daemon_pid_file") 2>/dev/null && rm -f "$daemon_pid_file"
+# Kill Agent SDK children (they're doing the actual writes)
 ps aux | grep "claude-agent-sdk/cli.js" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
 # Kill dispatcher and traffic generator parents
 for sf in {skill-dir}/../../reference-system/.claude/delamains/*/status.json; do

@@ -185,25 +185,36 @@ echo "$line1"
 badges_raw=$(cat "$badge_cache" 2>/dev/null)
 widths_raw=$(cat "$badge_width_cache" 2>/dev/null)
 
+badges_per_line=4
+
 if [[ -n "$badges_raw" ]]; then
     IFS='|' read -ra badge_arr <<< "$badges_raw"
     IFS='|' read -ra width_arr <<< "$widths_raw"
 
+    # Find max visible width for uniform padding
+    max_w=0
+    for w in "${width_arr[@]}"; do
+        [[ -n "$w" ]] && (( w > max_w )) && max_w=$w
+    done
+
     line=""
-    line_len=0
+    count=0
     for i in "${!badge_arr[@]}"; do
         b="${badge_arr[$i]}"
         [[ -z "$b" ]] && continue
-        bw="${width_arr[$i]:-20}"
-        needed=$(( bw + 1 ))
+        bw="${width_arr[$i]:-0}"
 
-        if (( line_len + needed > max_line && line_len > 0 )); then
+        # Right-pad badge to max width with spaces (before the ANSI reset)
+        pad=$(( max_w - bw ))
+        padding=""
+        (( pad > 0 )) && printf -v padding "%${pad}s" ""
+
+        if (( count > 0 && count % badges_per_line == 0 )); then
             echo "$line"
             line=""
-            line_len=0
         fi
-        line+=" $b"
-        line_len=$(( line_len + needed ))
+        line+=" ${b}${padding}"
+        count=$((count + 1))
     done
     [[ -n "$line" ]] && echo "$line"
 fi

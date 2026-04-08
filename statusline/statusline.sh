@@ -1,170 +1,179 @@
 #!/bin/bash
-# statusline.sh - Starship-inspired statusline for Claude Code
+# statusline.sh - ALS statusline for Claude Code
+# Optimized for speed: caches expensive operations (delamain scan, git, OBS)
+# to survive the 300ms debounce + in-flight cancellation cycle.
 
-# Read JSON input from stdin
 input=$(cat)
+SCRIPT_DIR="$(dirname "$0")"
 
-# Extract data from JSON
-cwd=$(echo "$input" | jq -r '.workspace.current_dir')
-model=$(echo "$input" | jq -r '.model.display_name')
+# ---------------------------------------------------------------------------
+# Extract fields — three jq calls (fast, no subshells beyond jq itself)
+# ---------------------------------------------------------------------------
+cwd=$(echo "$input" | jq -r '.workspace.current_dir // ""')
+model=$(echo "$input" | jq -r '.model.display_name // ""')
+used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 
-# Get directory name (truncated path like Starship)
 dir=$(basename "$cwd")
 
-# Get git branch if in a git repo (with --git-dir to avoid optional locks)
-branch=$(cd "$cwd" 2>/dev/null && git --git-dir="$(git rev-parse --git-dir 2>/dev/null)" branch --show-current 2>/dev/null)
-
-# Detect terminal width — stty hack reads from /dev/tty since Claude pipes stdin
+# ---------------------------------------------------------------------------
+# Terminal width (cached per-session, stty is slow)
+# ---------------------------------------------------------------------------
+tw_cache="/tmp/statusline-tw-$$"
 term_width=80
-if tw=$( (stty size < /dev/tty) 2>/dev/null | awk '{print $2}') && [[ -n "$tw" ]] && (( tw > 0 )); then
+if [[ -f "$tw_cache" ]]; then
+    term_width=$(<"$tw_cache")
+elif tw=$( (stty size < /dev/tty) 2>/dev/null | awk '{print $2}') && [[ -n "$tw" ]] && (( tw > 0 )); then
     term_width=$tw
+    echo "$tw" > "$tw_cache"
 fi
-# Reserve space for right-side notifications (MCP errors, "Approaching limit", etc.)
 max_line=$((term_width - 6))
 
-# Calculate context usage with visual progress bar
-used_pct=$(echo "$input" | jq '.context_window.used_percentage // empty')
-remaining_pct=$(echo "$input" | jq '.context_window.remaining_percentage // empty')
+# ---------------------------------------------------------------------------
+# Context bar (inline math, no subshells)
+# ---------------------------------------------------------------------------
 context_info=""
 if [[ -n "$used_pct" && "$used_pct" != "null" ]]; then
     pct=${used_pct%.*}
-    rem=${remaining_pct%.*}
-
-    bar_width=10
-    filled=$((pct * bar_width / 100))
-    empty=$((bar_width - filled))
-
+    filled=$((pct * 10 / 100))
+    empty=$((10 - filled))
     bar="["
     for ((i=0; i<filled; i++)); do bar+="█"; done
     for ((i=0; i<empty; i++)); do bar+="░"; done
     bar+="]"
-
     context_info=$(printf ' \033[2;35m%s %d%%\033[0m' "$bar" "$pct")
 fi
 
 # ---------------------------------------------------------------------------
-# Delamain health badges — discover all, wrap across lines to fit terminal
+# Git branch (cached 10s)
 # ---------------------------------------------------------------------------
-
-# Collect delamain directories to scan:
-# 1. Walk up from cwd to find .claude/delamains (project-level)
-# 2. Read .claude/delamain-roots for additional paths (e.g., run-demo)
-delamain_dirs=()
-
-sys_root="$cwd"
-while [[ "$sys_root" != "/" ]]; do
-    [[ -d "$sys_root/.claude/delamains" ]] && delamain_dirs+=("$sys_root/.claude/delamains") && break
-    sys_root=$(dirname "$sys_root")
-done
-
-roots_file="$cwd/.claude/delamain-roots"
-if [[ -f "$roots_file" ]]; then
-    while IFS= read -r extra_root; do
-        [[ -n "$extra_root" && -d "$extra_root/.claude/delamains" ]] && delamain_dirs+=("$extra_root/.claude/delamains")
-    done < "$roots_file"
+git_cache="/tmp/statusline-git-cache"
+branch=""
+if [[ ! -f "$git_cache" ]] || (( $(date +%s) - $(stat -f %m "$git_cache" 2>/dev/null || stat -c %Y "$git_cache" 2>/dev/null || echo 0) > 10 )); then
+    branch=$(cd "$cwd" 2>/dev/null && git branch --show-current 2>/dev/null)
+    echo "$branch" > "$git_cache"
+else
+    branch=$(<"$git_cache")
 fi
 
-# Collect badge data: parallel arrays for rendered badge and visible width
-badge_rendered=()
-badge_width=()
-delamain_count=0
+# ---------------------------------------------------------------------------
+# Delamain badges (cached 5s — the expensive part)
+# ---------------------------------------------------------------------------
+badge_cache="/tmp/statusline-badges"
+badge_width_cache="/tmp/statusline-badges-w"
 
-for delamains_path in "${delamain_dirs[@]}"; do
-    for dy in "$delamains_path"/*/delamain.yaml; do
-        [[ -f "$dy" ]] || continue
-        d_dir=$(dirname "$dy")
-        d_name=$(basename "$d_dir")
-        sf="$d_dir/status.json"
-        delamain_count=$((delamain_count + 1))
-
-        # Determine state
-        symbol="○"; color="2;37"  # default: off (dimmed)
-        if [[ -f "$sf" ]]; then
-            d_pid=$(jq -r '.pid // empty' "$sf" 2>/dev/null)
-            d_active=$(jq -r '.active_dispatches // 0' "$sf" 2>/dev/null)
-            d_error=$(jq -r '.last_error // empty' "$sf" 2>/dev/null)
-
-            if [[ -n "$d_pid" ]] && kill -0 "$d_pid" 2>/dev/null; then
-                if [[ -n "$d_error" ]]; then
-                    symbol="✗"; color="1;31"   # errored — red
-                elif (( d_active > 0 )); then
-                    symbol="⚡"; color="1;32"  # processing — bright green
-                else
-                    symbol="✓"; color="32"     # on, idle — green
-                fi
-            else
-                symbol="✗"; color="1;31"       # dead PID — red
-            fi
-        fi
-
-        rendered=$(printf '\033[%sm[%s %s]\033[0m' "$color" "$d_name" "$symbol")
-        visible_w=$(( ${#d_name} + 4 ))  # [name S] = name + [ + space + symbol + ]
-
-        badge_rendered+=("$rendered")
-        badge_width+=("$visible_w")
+if [[ ! -f "$badge_cache" ]] || (( $(date +%s) - $(stat -f %m "$badge_cache" 2>/dev/null || stat -c %Y "$badge_cache" 2>/dev/null || echo 0) > 5 )); then
+    # Discover delamain directories
+    delamain_dirs=()
+    sr="$cwd"
+    while [[ "$sr" != "/" ]]; do
+        [[ -d "$sr/.claude/delamains" ]] && delamain_dirs+=("$sr/.claude/delamains") && break
+        sr=$(dirname "$sr")
     done
-done
+    rf="$cwd/.claude/delamain-roots"
+    if [[ -f "$rf" ]]; then
+        while IFS= read -r er; do
+            [[ -n "$er" && -d "$er/.claude/delamains" ]] && delamain_dirs+=("$er/.claude/delamains")
+        done < "$rf"
+    fi
+
+    badges=""
+    widths=""
+    for dp in "${delamain_dirs[@]}"; do
+        for dy in "$dp"/*/delamain.yaml; do
+            [[ -f "$dy" ]] || continue
+            d_dir=$(dirname "$dy")
+            d_name=$(basename "$d_dir")
+            sf="$d_dir/status.json"
+
+            symbol="○"; color="2;37"
+            if [[ -f "$sf" ]]; then
+                d_pid=$(jq -r '.pid // empty' "$sf" 2>/dev/null)
+                d_active=$(jq -r '.active_dispatches // 0' "$sf" 2>/dev/null)
+                d_error=$(jq -r '.last_error // empty' "$sf" 2>/dev/null)
+                if [[ -n "$d_pid" ]] && kill -0 "$d_pid" 2>/dev/null; then
+                    if [[ -n "$d_error" ]]; then
+                        symbol="✗"; color="1;31"
+                    elif (( d_active > 0 )); then
+                        symbol="⚡"; color="1;32"
+                    else
+                        symbol="✓"; color="32"
+                    fi
+                else
+                    symbol="✗"; color="1;31"
+                fi
+            fi
+
+            badges+="$(printf '\033[%sm[%s %s]\033[0m' "$color" "$d_name" "$symbol")|"
+            widths+="$(( ${#d_name} + 4 ))|"
+        done
+    done
+    echo -n "$badges" > "$badge_cache"
+    echo -n "$widths" > "$badge_width_cache"
+fi
 
 # ---------------------------------------------------------------------------
-# Build output — each echo = separate row in Claude Code statusline
+# OBS indicator (cached 5s — calls python + websocket)
 # ---------------------------------------------------------------------------
+obs_indicator=""
+obs_cache="/tmp/statusline-obs"
+obs_script="$SCRIPT_DIR/obs-status.py"
+if [[ -f "$obs_script" ]]; then
+    if [[ ! -f "$obs_cache" ]] || (( $(date +%s) - $(stat -f %m "$obs_cache" 2>/dev/null || stat -c %Y "$obs_cache" 2>/dev/null || echo 0) > 5 )); then
+        python3 "$obs_script" > "$obs_cache" 2>/dev/null || echo '{}' > "$obs_cache"
+    fi
+    obs_json=$(<"$obs_cache")
+    if [[ -n "$obs_json" && "$obs_json" != "{}" ]]; then
+        obs_streaming=$(echo "$obs_json" | jq -r '.streaming' 2>/dev/null)
+        obs_recording=$(echo "$obs_json" | jq -r '.recording' 2>/dev/null)
+        blink_on=$(( $(date +%s) % 2 ))
+        if [[ "$obs_streaming" == "true" ]]; then
+            if (( blink_on )); then obs_indicator=$(printf ' \033[1;31m● LIVE\033[0m')
+            else obs_indicator=$(printf ' \033[2;31m○ LIVE\033[0m'); fi
+        elif [[ "$obs_recording" == "true" ]]; then
+            if (( blink_on )); then obs_indicator=$(printf ' \033[1;33m● REC\033[0m')
+            else obs_indicator=$(printf ' \033[2;33m○ REC\033[0m'); fi
+        fi
+    fi
+fi
 
-# Line 1: directory, branch, model, context, clock, OBS
+# ---------------------------------------------------------------------------
+# Render line 1: dir, branch, model, context, clock, OBS
+# ---------------------------------------------------------------------------
 line1=""
 line1+=$(printf '\033[1;36m%s\033[0m' "$dir")
 [[ -n "$branch" ]] && line1+=$(printf ' \033[1;33m⎇ %s\033[0m' "$branch")
 line1+=$(printf ' \033[2;34m(%s)\033[0m' "$model")
 line1+="$context_info"
-
-# Clock in dimmed white
 line1+=$(printf ' \033[2;37mTIME %s\033[0m' "$(date +%H:%M)")
-
-# OBS streaming/recording indicator (Python stdlib WebSocket, no deps)
-obs_script="$(dirname "$0")/obs-status.py"
-if [[ -f "$obs_script" ]]; then
-    obs_json=$(python3 "$obs_script" 2>/dev/null)
-    if [[ -n "$obs_json" ]]; then
-        obs_streaming=$(echo "$obs_json" | jq -r '.streaming' 2>/dev/null)
-        obs_recording=$(echo "$obs_json" | jq -r '.recording' 2>/dev/null)
-    fi
-    blink_on=$(( $(date +%s) % 2 ))
-    if [[ "$obs_streaming" == "true" ]]; then
-        if (( blink_on )); then
-            line1+=$(printf ' \033[1;31m● LIVE\033[0m')
-        else
-            line1+=$(printf ' \033[2;31m○ LIVE\033[0m')
-        fi
-    elif [[ "$obs_recording" == "true" ]]; then
-        if (( blink_on )); then
-            line1+=$(printf ' \033[1;33m● REC\033[0m')
-        else
-            line1+=$(printf ' \033[2;33m○ REC\033[0m')
-        fi
-    fi
-fi
+line1+="$obs_indicator"
 
 echo "$line1"
 
-# Delamain lines: each echo = one row, wrap badges to fit within max_line
-if (( delamain_count > 0 )); then
+# ---------------------------------------------------------------------------
+# Render delamain badge lines from cache
+# ---------------------------------------------------------------------------
+badges_raw=$(<"$badge_cache" 2>/dev/null)
+widths_raw=$(<"$badge_width_cache" 2>/dev/null)
+
+if [[ -n "$badges_raw" ]]; then
+    IFS='|' read -ra badge_arr <<< "$badges_raw"
+    IFS='|' read -ra width_arr <<< "$widths_raw"
+
     line=""
     line_len=0
+    for i in "${!badge_arr[@]}"; do
+        b="${badge_arr[$i]}"
+        [[ -z "$b" ]] && continue
+        bw="${width_arr[$i]:-20}"
+        needed=$(( bw + 1 ))
 
-    for i in "${!badge_rendered[@]}"; do
-        bw=${badge_width[$i]}
-        needed=$(( bw + 1 ))  # +1 for leading space
-
-        # Wrap to next line if this badge won't fit
         if (( line_len + needed > max_line && line_len > 0 )); then
             echo "$line"
             line=""
             line_len=0
         fi
-
-        line+=" ${badge_rendered[$i]}"
+        line+=" $b"
         line_len=$(( line_len + needed ))
     done
-
-    # Flush remaining badges
     [[ -n "$line" ]] && echo "$line"
 fi

@@ -58,8 +58,8 @@ while true; do
       badges+="$(printf '\033[%sm[%s %s]\033[0m' "$color" "$name" "$symbol")|"
       widths+="$(( ${#name} + 4 ))|"
     done < "$CACHE_DIR/test-mode"
-    echo -n "$badges" > "$CACHE_DIR/badges"
-    echo -n "$widths" > "$CACHE_DIR/badges-w"
+    echo -n "$badges" > "$CACHE_DIR/badges.tmp" && mv "$CACHE_DIR/badges.tmp" "$CACHE_DIR/badges"
+    echo -n "$widths" > "$CACHE_DIR/badges-w.tmp" && mv "$CACHE_DIR/badges-w.tmp" "$CACHE_DIR/badges-w"
   else
     badges=""
     widths=""
@@ -90,15 +90,15 @@ while true; do
         widths+="$(( ${#d_name} + 4 ))|"
       done
     done
-    echo -n "$badges" > "$CACHE_DIR/badges"
-    echo -n "$widths" > "$CACHE_DIR/badges-w"
+    echo -n "$badges" > "$CACHE_DIR/badges.tmp" && mv "$CACHE_DIR/badges.tmp" "$CACHE_DIR/badges"
+    echo -n "$widths" > "$CACHE_DIR/badges-w.tmp" && mv "$CACHE_DIR/badges-w.tmp" "$CACHE_DIR/badges-w"
   fi
 
   # -------------------------------------------------------------------------
   # Git branch
   # -------------------------------------------------------------------------
   branch=$(cd "$CWD" 2>/dev/null && git branch --show-current 2>/dev/null)
-  echo "$branch" > "$CACHE_DIR/git-branch"
+  echo "$branch" > "$CACHE_DIR/git-branch.tmp" && mv "$CACHE_DIR/git-branch.tmp" "$CACHE_DIR/git-branch"
 
   # -------------------------------------------------------------------------
   # OBS status → simple state string (no JSON parsing needed by statusline)
@@ -117,7 +117,7 @@ while true; do
   fi
   # Test mode: always show streaming
   [[ -f "$CACHE_DIR/test-mode" ]] && obs_state="streaming"
-  echo "$obs_state" > "$CACHE_DIR/obs-state"
+  echo "$obs_state" > "$CACHE_DIR/obs-state.tmp" && mv "$CACHE_DIR/obs-state.tmp" "$CACHE_DIR/obs-state"
 
   sleep 3
 done

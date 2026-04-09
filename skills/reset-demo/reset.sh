@@ -29,32 +29,32 @@ echo "[reset-demo] project root: $PROJECT"
 
 # Daemon
 daemon_pid=$(cat "$PROJECT/.claude/scripts/.cache/daemon.pid" 2>/dev/null || true)
-[[ -n "$daemon_pid" ]] && kill "$daemon_pid" 2>/dev/null && rm -f "$PROJECT/.claude/scripts/.cache/daemon.pid" && echo "[reset-demo] daemon killed (PID $daemon_pid)"
+[[ -n "$daemon_pid" ]] && { kill "$daemon_pid" 2>/dev/null || true; } && rm -f "$PROJECT/.claude/scripts/.cache/daemon.pid" && echo "[reset-demo] daemon killed (PID $daemon_pid)"
 
 # Agent SDK children first (they do the actual writes)
 sdk_pids=$(ps aux | grep "claude-agent-sdk/cli.js" | grep -v grep | awk '{print $2}' || true)
-[[ -n "$sdk_pids" ]] && echo "$sdk_pids" | xargs kill -9 2>/dev/null
+[[ -n "$sdk_pids" ]] && { echo "$sdk_pids" | xargs kill -9 2>/dev/null || true; }
 
 # Dispatchers via status.json
 for sf in "$SR"/.claude/delamains/*/status.json; do
   [[ -f "$sf" ]] || continue
   pid=$(jq -r '.pid // empty' "$sf" 2>/dev/null)
-  [[ -n "$pid" ]] && kill -9 "$pid" 2>/dev/null
+  [[ -n "$pid" ]] && { kill -9 "$pid" 2>/dev/null || true; }
   rm -f "$sf"
 done
 
 # Remaining bun processes
 bun_pids=$(ps aux | grep "bun run src/index.ts" | grep -v grep | awk '{print $2}' || true)
-[[ -n "$bun_pids" ]] && echo "$bun_pids" | xargs kill -9 2>/dev/null
+[[ -n "$bun_pids" ]] && { echo "$bun_pids" | xargs kill -9 2>/dev/null || true; }
 
 # Statusline daemon (grep fallback)
 daemon_pids=$(ps aux | grep "statusline-daemon" | grep -v grep | awk '{print $2}' || true)
-[[ -n "$daemon_pids" ]] && echo "$daemon_pids" | xargs kill -9 2>/dev/null
+[[ -n "$daemon_pids" ]] && { echo "$daemon_pids" | xargs kill -9 2>/dev/null || true; }
 
 # Wait and sweep survivors
 sleep 2
 survivor_pids=$(ps aux | grep -E "(claude-agent-sdk/cli.js|bun run src/index.ts)" | grep -v grep | awk '{print $2}' || true)
-[[ -n "$survivor_pids" ]] && echo "$survivor_pids" | xargs kill -9 2>/dev/null
+[[ -n "$survivor_pids" ]] && { echo "$survivor_pids" | xargs kill -9 2>/dev/null || true; }
 
 proc_count=$( (echo "$sdk_pids"; echo "$bun_pids"; echo "$daemon_pids"; echo "$survivor_pids") | grep -c . 2>/dev/null || echo 0)
 echo "[reset-demo] killed $proc_count processes"

@@ -80,3 +80,26 @@ Read this when:
 - Naming a pipeline console skill
 - Understanding how `alsc deploy claude` projects assets
 - Setting up system.yaml and shape.yaml for a delamain
+
+### Architect Notes
+
+[`references/architect-notes.md`](references/architect-notes.md)
+
+Practical tips and shortcuts for ALS architects working on live systems. Field notes from operating real ALS systems — not part of the formal spec.
+
+Read this when:
+- Making quick edits to agent prompts or skill files without a full version cycle
+- Debugging delamain behavior with in-place edits
+- Looking for operational shortcuts that bypass change/migrate safely
+
+### Bootup Configuration
+
+[`references/bootup-config.md`](references/bootup-config.md)
+
+The `.als/config.md` file format — operator-local boot configuration that tells `/bootup` how to start delamain dispatchers and other runtime services.
+
+Read this when:
+- Setting up a new ALS system's runtime environment
+- Understanding how `/bootup` determines dispatcher launch behavior
+- Creating or modifying `.als/config.md`
+- Designing custom boot configurations for different environments

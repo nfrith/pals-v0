@@ -43,8 +43,10 @@ Use the Bash tool with `run_in_background: true`. One call per dispatcher, all i
 
 ### 4. Verify
 
+Check status files. Dispatchers write `status.json` on startup — if missing, they haven't started yet. Run without sleep; if any show ✗, wait a moment and retry once.
+
 ```bash
-sleep 2 && for name in {all_names}; do sf="{SYSTEM_ROOT}/.claude/delamains/$name/status.json"; [ -f "$sf" ] && echo "$name: ✓" || echo "$name: ✗"; done
+for name in {all_names}; do sf="{SYSTEM_ROOT}/.claude/delamains/$name/status.json"; [ -f "$sf" ] && echo "$name: ✓" || echo "$name: ✗"; done
 ```
 
 ### 5. Report

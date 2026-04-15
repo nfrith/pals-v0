@@ -35,7 +35,9 @@ If a class has zero targets for this state, omit that row entirely.
 | **Initial** (`initial: true`) | Confirm ready to enter pipeline. |
 | **Non-initial** | Perform what the preceding agent requires — answer questions, record test results, provide context. |
 
-For non-initial states, the console determines what the operator is responding to by reading the entity's current content — agent questions in a questions section, test instructions in a test section, etc. The console guides the operator through providing what the next agent (or terminal transition) needs.
+For non-initial states, the console determines what the operator is responding to by reading the entity's current content — agent questions in a questions section, test instructions in a test section, etc.
+
+**Phase 1 is guided, not delegated.** The console walks the operator through the work step by step — presenting one item at a time, collecting responses, running verification where possible. The agent is an active partner during Phase 1, not a questionnaire that hands the operator a checklist and waits. For example: UAT testing presents each test case individually, helps verify results, and records outcomes as they happen. Input states present each question one at a time, collect answers, and ask follow-ups for clarity.
 
 **Phase 2 — Choose direction.** After the work is done, the console presents the legal transitions from the delamain:
 

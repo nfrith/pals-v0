@@ -17,26 +17,36 @@ When the operator selects an {entity} in an operator-owned state, the console re
 | Action | Description | When shown |
 |--------|-------------|------------|
 | **Review** | Present the entity to the operator for reading | Always |
-| **Respond & advance** to {state} | Provide input, move forward | If advance transitions exist for this state |
-| **Respond & rework** to {state} | Provide input, send back | If rework transitions exist for this state |
+| **Respond** | Do the state-specific work, then choose a transition | If any advance or rework transitions exist |
 | **Terminal** (shelve, cancel, etc.) | Exit the pipeline | If exit transitions exist for this state |
 | **Exit** | Exit the console | Always |
 | **Other** | Freeform operator instruction | Always |
 
-If a class has multiple targets (e.g., the initial state advances to three different states depending on entity type), show one option per target.
-
 If a class has zero targets for this state, omit that row entirely.
 
-### What "respond" means
+### Respond: two-phase pattern
 
-The meaning of "respond" depends on whether the state is initial:
+"Respond" is a single action with two phases:
 
-| State kind | Respond means |
+**Phase 1 — Do the work.** The operator performs whatever the state requires. The meaning depends on whether the state is initial:
+
+| State kind | Phase 1 means |
 |------------|---------------|
-| **Initial** (`initial: true`) | Confirm ready to enter pipeline. Advance to next state(s). |
-| **Non-initial** | Perform the actions the preceding agent requires — answer questions, record test results, provide context. |
+| **Initial** (`initial: true`) | Confirm ready to enter pipeline. |
+| **Non-initial** | Perform what the preceding agent requires — answer questions, record test results, provide context. |
 
 For non-initial states, the console determines what the operator is responding to by reading the entity's current content — agent questions in a questions section, test instructions in a test section, etc. The console guides the operator through providing what the next agent (or terminal transition) needs.
+
+**Phase 2 — Choose direction.** After the work is done, the console presents the legal transitions from the delamain:
+
+| Transition class | Presented as |
+|------------------|-------------|
+| **advance** | Advance to {state} — one option per advance target |
+| **rework** | Rework to {state} — one option per rework target |
+
+If a class has multiple targets (e.g., the initial state advances to three different states depending on entity type), show one option per target. If a class has zero targets, omit it.
+
+The operator chooses the direction *after* doing the work, not before. This matters most for states where the response determines the outcome (e.g., UAT — pass vs fail isn't known until tests are performed).
 
 ### After every transition
 
@@ -83,11 +93,11 @@ State-specific behavior (like type-gated advance options for the initial state) 
 
 Four operator states, one universal pattern:
 
-| State | Initial? | Advance to | Rework to | Respond means |
-|-------|----------|-----------|-----------|---------------|
-| `drafted` | yes | research, planning, or dev (type-gated) | n/a | Confirm ready |
-| `research-input` | no | planning | research | Answer research agent questions |
-| `plan-input` | no | dev | planning | Answer planner agent questions |
-| `uat` | no | done | dev | Record test results |
+| State | Initial? | Phase 1 (do the work) | Phase 2 (choose direction) |
+|-------|----------|-----------------------|---------------------------|
+| `drafted` | yes | Confirm ready to enter pipeline | Advance to research, planning, or dev (type-gated) |
+| `research-input` | no | Answer research agent questions | Advance to planning / Rework to research |
+| `plan-input` | no | Answer planner agent questions | Advance to dev / Rework to planning |
+| `uat` | no | Perform tests, record results | Advance to done / Rework to dev |
 
-The console doesn't know about these states specifically. It reads the delamain, sees what's legal, and presents the universal action menu. The only state-specific knowledge is what "respond" means — and that comes from reading the entity, not from console code.
+The console doesn't know about these states specifically. It reads the delamain, sees what's legal, and presents the universal action menu. The only state-specific knowledge is what phase 1 means — and that comes from reading the entity, not from console code.

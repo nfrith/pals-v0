@@ -245,6 +245,7 @@ export async function resolve(
 
 const sdkEnv: Record<string, string | undefined> = { ...process.env };
 delete sdkEnv["ANTHROPIC_API_KEY"];
+sdkEnv["DELAMAIN_SESSION"] = "1";
 
 const today = () => new Date().toISOString().slice(0, 10);
 

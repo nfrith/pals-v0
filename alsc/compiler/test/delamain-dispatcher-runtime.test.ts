@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DispatchLifecycle } from "../../../skills/new/references/dispatcher/src/dispatch-lifecycle.ts";
 import {
   buildSessionRuntimeState,
   shouldPersistDispatcherSession,
@@ -129,6 +130,116 @@ test("delegated dispatch without a session field still emits null-shaped runtime
   expect(state.runtimeSessionField).toBeNull();
   expect(state.runtimeSessionId).toBeNull();
   expect(state.resume).toBe("no");
+});
+
+test("delegated lifecycle moves successful launcher dispatches into delegated guards", () => {
+  const lifecycle = new DispatchLifecycle();
+  lifecycle.reconcile([{ id: "ALS-002", status: "dev" }]);
+  lifecycle.markDispatchStarted("ALS-002", "dev");
+
+  const disposition = lifecycle.completeDispatch({
+    itemId: "ALS-002",
+    state: "dev",
+    success: true,
+    delegated: true,
+    delegatedAtMs: Date.parse("2026-04-17T04:05:06.000Z"),
+  });
+
+  expect(disposition).toBe("guarded_delegated");
+  expect(lifecycle.isGuarded("ALS-002")).toBe(true);
+  expect(lifecycle.heartbeat()).toEqual({
+    active_dispatches: 0,
+    delegated_dispatches: 1,
+    delegated_items: [
+      {
+        item_id: "ALS-002",
+        state: "dev",
+        delegated_at: "2026-04-17T04:05:06.000Z",
+      },
+    ],
+  });
+});
+
+test("delegated lifecycle releases delegated guards when status changes", () => {
+  const lifecycle = new DispatchLifecycle();
+  lifecycle.reconcile([{ id: "ALS-002", status: "dev" }]);
+  lifecycle.markDispatchStarted("ALS-002", "dev");
+  lifecycle.completeDispatch({
+    itemId: "ALS-002",
+    state: "dev",
+    success: true,
+    delegated: true,
+    delegatedAtMs: Date.parse("2026-04-17T04:05:06.000Z"),
+  });
+
+  const releases = lifecycle.reconcile([{ id: "ALS-002", status: "in-review" }]);
+
+  expect(releases).toEqual([
+    {
+      itemId: "ALS-002",
+      previousStatus: "dev",
+      nextStatus: "in-review",
+      releasedActive: false,
+      releasedDelegated: true,
+    },
+  ]);
+  expect(lifecycle.isGuarded("ALS-002")).toBe(false);
+  expect(lifecycle.heartbeat().delegated_items).toEqual([]);
+});
+
+test("delegated lifecycle ignores stale completions after the item already moved on", () => {
+  const lifecycle = new DispatchLifecycle();
+  lifecycle.reconcile([{ id: "ALS-002", status: "dev" }]);
+  lifecycle.markDispatchStarted("ALS-002", "dev");
+  lifecycle.reconcile([{ id: "ALS-002", status: "in-review" }]);
+
+  const disposition = lifecycle.completeDispatch({
+    itemId: "ALS-002",
+    state: "dev",
+    success: true,
+    delegated: true,
+    delegatedAtMs: Date.parse("2026-04-17T04:05:06.000Z"),
+  });
+
+  expect(disposition).toBe("ignored_stale");
+  expect(lifecycle.isGuarded("ALS-002")).toBe(false);
+  expect(lifecycle.heartbeat()).toEqual({
+    active_dispatches: 0,
+    delegated_dispatches: 0,
+    delegated_items: [],
+  });
+});
+
+test("direct lifecycle keeps successful direct dispatches active until status changes", () => {
+  const lifecycle = new DispatchLifecycle();
+  lifecycle.reconcile([{ id: "ALS-002", status: "dev" }]);
+  lifecycle.markDispatchStarted("ALS-002", "dev");
+
+  const disposition = lifecycle.completeDispatch({
+    itemId: "ALS-002",
+    state: "dev",
+    success: true,
+    delegated: false,
+  });
+
+  expect(disposition).toBe("guarded_direct");
+  expect(lifecycle.counts()).toEqual({ active: 1, delegated: 0 });
+});
+
+test("failed dispatches release active guards immediately", () => {
+  const lifecycle = new DispatchLifecycle();
+  lifecycle.reconcile([{ id: "ALS-002", status: "dev" }]);
+  lifecycle.markDispatchStarted("ALS-002", "dev");
+
+  const disposition = lifecycle.completeDispatch({
+    itemId: "ALS-002",
+    state: "dev",
+    success: false,
+    delegated: true,
+  });
+
+  expect(disposition).toBe("released_after_failure");
+  expect(lifecycle.counts()).toEqual({ active: 0, delegated: 0 });
 });
 
 test("dispatcher session persistence is disabled for delegated states", () => {

@@ -27,7 +27,7 @@ The dispatcher is supported from deployed `.claude/delamains/<name>/` bundles. R
 
 The dispatcher now emits two runtime surfaces per deployed Delamain bundle:
 
-- `status.json` — the small compatibility heartbeat for liveness, PID checks, poll cadence, active dispatch count, and scanned item count
+- `status.json` — the small compatibility heartbeat for liveness, PID checks, poll cadence, direct active dispatch count, scanned item count, and current delegated handoffs
 - `telemetry/events.jsonl` — the bounded recent activity log for dashboard history
 
 `telemetry/events.jsonl` is append-only at the contract level, but the writer keeps only the most recent bounded window of events so the file does not grow without limit. Each event is a single JSON object using schema `als-delamain-telemetry-event@1`.
@@ -51,7 +51,17 @@ Entry point. Handles:
 - **System root discovery**: walks up directories from its own location looking for `.als/system.ts`. Also respects the `SYSTEM_ROOT` environment variable.
 - **Template version check**: reads local `dispatcher/VERSION` and canonical `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/VERSION`, logs the current/latest versions, and fails before polling when either source is missing or malformed.
 - **Startup**: calls `resolve()` once to load `runtime-manifest.json`, local `delamain.yaml`, and state-agent files, then enters the poll loop.
-- **Poll loop**: scans items at a configurable interval (`POLL_MS`, default 30s). Tracks active dispatches and releases items when their status changes.
+- **Poll loop**: scans items at a configurable interval (`POLL_MS`, default 30s). Tracks direct dispatch ownership separately from delegated handoffs, releases either guard when the item's status changes, and refreshes the heartbeat after dispatch completions.
+- **Runtime hardening**: keeps the event loop alive with an internal keepalive server, logs tick and process lifecycle events, and ignores stray `SIGTERM` so dispatcher children do not accidentally kill the parent runtime.
+
+### `src/dispatch-lifecycle.ts`
+
+Pure lifecycle helper for the poll loop:
+
+- Tracks observed item statuses
+- Separates direct active dispatch ownership from delegated handoffs
+- Converts successful delegated launches into `delegated_items` heartbeat entries
+- Releases stale guards when the item's status changes or when a late completion arrives after the item already moved on
 
 ### `src/watcher.ts`
 
@@ -144,7 +154,7 @@ The `findSystemRoot` walk-up in `index.ts` makes the dispatcher work at any nest
 
 The dashboard service reads:
 
-- `status.json` for liveness
+- `status.json` for liveness and current delegated handoffs
 - `telemetry/events.jsonl` for recent run history and failures
 - `runtime-manifest.json` for bundle identity and item binding
 - `delamain.yaml` for phase and actor context
@@ -203,6 +213,24 @@ Environment variables:
 - `CLAUDE_PLUGIN_ROOT` — installed ALS plugin root used to read the canonical dispatcher `VERSION` file (required)
 
 If `dispatcher/VERSION`, `CLAUDE_PLUGIN_ROOT`, the canonical dispatcher `VERSION`, or `runtime-manifest.json` is missing or invalid, the dispatcher fails closed before polling. Stale but readable dispatcher versions continue running and instruct the operator to run `/upgrade-dispatchers`.
+
+## Heartbeat Shape
+
+`status.json` always keeps these compatibility fields:
+
+- `name`
+- `pid`
+- `last_tick`
+- `poll_ms`
+- `active_dispatches`
+- `items_scanned`
+
+Delegation-aware dispatchers add:
+
+- `delegated_dispatches` — current number of delegated items still owned by external workers
+- `delegated_items` — array of `{ item_id, state, delegated_at }` objects for the live delegated handoffs
+
+Older consumers that only read the compatibility fields remain valid.
 
 ## Dependencies
 

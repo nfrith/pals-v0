@@ -98,7 +98,7 @@ Delamain runtime monitoring now has two layers:
 
 Dispatchers remain the producers of runtime truth. They emit:
 
-- `status.json` for compatibility-oriented liveness
+- `status.json` for compatibility-oriented liveness plus additive delegated-runtime metadata
 - `telemetry/events.jsonl` for bounded recent dispatch history
 
 The dashboard service reads those runtime files plus bundle metadata and current item files, then serves one normalized snapshot to both the localhost web UI and the OpenTUI client.

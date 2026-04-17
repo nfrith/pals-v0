@@ -1,7 +1,7 @@
 ---
 name: install-reference
 description: Install pre-built modules from the ALS plugin's bundled reference system. Lets the operator pick one or many modules, copies them into the current project, validates, and auto-deploys the Claude projection. Re-runnable any time — not an onboarding-only flow.
-allowed-tools: AskUserQuestion, Bash(bash *), Read, Write, Edit
+allowed-tools: AskUserQuestion, Bash(bash *), Read, Write, Edit, Skill
 ---
 
 # install-reference
@@ -167,7 +167,31 @@ If the dry-run surfaces target collisions, stop and report them — do not push 
 
 The operator does not request this step. New modules are useless until projected — auto-deploy is the default.
 
-## Phase 8 — Report
+## Phase 8 — Offer bootup
+
+Installed modules may include delamains — autonomous dispatchers that watch for pipeline work and act on it. Delamains are inert until their dispatchers are running, which the `/bootup` skill handles. Ask the operator before invoking it.
+
+Use a single AskUserQuestion:
+
+- **Header**: `Bootup`
+- **Question**: "Start the delamain dispatchers now? Delamains are background processes that keep the system's pipelines alive — without them, modules are installed but nothing watches for or acts on pipeline work. Picking No leaves the system dormant; you can always run `/bootup` later."
+- **Options**:
+  1. `Yes` — description: `Invoke /bootup to start all dispatchers.`
+  2. `No` — description: `Leave dispatchers stopped. You can run /bootup later.`
+
+**Hand off:**
+
+| Choice | Action |
+|--------|--------|
+| Yes | Invoke `als:bootup` via the Skill tool. No args. |
+| No | Skip. Proceed to Phase 9. |
+| Other | Interpret. If it maps to starting dispatchers, invoke `als:bootup`. Otherwise proceed to Phase 9. |
+
+Do not read `/bootup`'s SKILL.md before invoking — the Skill tool loads it. Do not narrate what it will do — the operator sees its output directly.
+
+Proceed to Phase 9 after the invoked skill (if any) returns.
+
+## Phase 9 — Report
 
 One block, no ceremony:
 
@@ -176,12 +200,13 @@ One block, no ceremony:
 - Skipped (conflicts): `<module_id>: <reason>` (one per line, or "none")
 - Validation: `pass`
 - Deploy: `pass` (or the error summary if it failed)
-- Next: installed skills and delamains are live under `.claude/`. Invoke them directly.
+- Bootup: `invoked` / `skipped` (Phase 8 outcome)
+- Next: installed skills and delamains are live under `.claude/`. Invoke them directly. If you skipped bootup, run `/bootup` when you want dispatchers running.
 
 ## Notes
 
 - **13-module threshold is a skill-only display constraint.** AskUserQuestion allows at most 16 option slots per call; the single-call picker needs 2 for `[ALL]` + `[CANCEL]`, leaving 13 for modules. This is **not** an ALS language rule — ALS systems can declare any number of modules. When a reference system has 14+ modules, this skill silently falls back to paged rounds (see Phase 3). No schema enforcement, no compiler change.
 - **Descriptions**: See [`ALS-006`](../../../als-factory/jobs/ALS-006.md). Until that job ships, option descriptions in Phase 3 fall back to path/version/skill count. After it ships, every module in a reference system will carry a human-readable description at the declaration site and this skill will surface it directly.
-- **Scope**: copy + register + validate + deploy. Not module authoring. If the operator wants a new module from scratch, hand off to `/new`.
+- **Scope**: copy + register + validate + deploy + optional bootup. Not module authoring. If the operator wants a new module from scratch, hand off to `/new`.
 - **Re-runnable**: running this skill again after an earlier install just adds more modules. Existing modules already in the target get renamed on the incoming copy (Phase 4).
 - **No versioning story yet**: this skill installs at the version declared in the reference system. There is no "upgrade this reference module" flow. When that becomes a need, it gets its own job.

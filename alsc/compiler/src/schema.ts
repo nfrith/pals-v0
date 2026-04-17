@@ -718,10 +718,44 @@ export const moduleShapeSchema = z.object({
   }
 });
 
+export const SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH = 120;
+
 const systemModuleConfigSchema = z.object({
   path: moduleMountPath,
   version: positiveInt,
   skills: z.array(entityName),
+  description: z.string().superRefine((value, ctx) => {
+    if (value.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "module_description.blank",
+      });
+      return;
+    }
+
+    if (value !== value.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "module_description.trimmed",
+      });
+      return;
+    }
+
+    if (value.includes("\n") || value.includes("\r")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "module_description.single_line",
+      });
+      return;
+    }
+
+    if (value.length > SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "module_description.too_long",
+      });
+    }
+  }),
 });
 
 export type SystemModuleConfig = z.infer<typeof systemModuleConfigSchema>;

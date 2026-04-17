@@ -62,7 +62,7 @@ Read the chosen reference system's `.als/system.ts` and extract the `modules` ob
 - `path`
 - `version`
 - `skills` array
-- **`description`** when present (see [`als-factory/jobs/ALS-006.md`](../../../als-factory/jobs/ALS-006.md) — until that job ships, the field is not yet in the schema. Present whatever is there; fall back to an empty description and render the option with `path`, `version`, `skills count` only.)
+- required `description`
 
 ## Phase 3 — Select modules
 
@@ -96,7 +96,7 @@ For smaller systems, collapse into fewer questions while keeping the same rules.
 **Option metadata:**
 
 - label = module id
-- description = `<description if present, else "—">. <path>, v<version>, <N> skill(s)`
+- description = `<description>. <path>, v<version>, <N> skill(s)`
 
 **Answer handling:**
 
@@ -142,7 +142,7 @@ For each surviving candidate, in order:
    mkdir -p "{module.path}"
    ```
 
-3. Append the module's entry to the target `.als/system.ts`'s `modules: {}` block. Use Edit to insert a new key immediately before the closing `}` of the modules record. Preserve indentation. Copy the reference system's fields verbatim (`path`, `version`, `skills`, and `description` if present). If the module was renamed in Phase 4, use the new id as the key and keep the renamed id consistent across the copied bundle and this entry.
+3. Append the module's entry to the target `.als/system.ts`'s `modules: {}` block. Use Edit to insert a new key immediately before the closing `}` of the modules record. Preserve indentation. Copy the reference system's fields verbatim (`path`, `version`, `description`, and `skills`). If the module was renamed in Phase 4, use the new id as the key and keep the renamed id consistent across the copied bundle and this entry.
 
 Do this per-module so a failure mid-way is easy to surface and partial state is visible.
 
@@ -206,7 +206,7 @@ One block, no ceremony:
 ## Notes
 
 - **13-module threshold is a skill-only display constraint.** AskUserQuestion allows at most 16 option slots per call; the single-call picker needs 2 for `[ALL]` + `[CANCEL]`, leaving 13 for modules. This is **not** an ALS language rule — ALS systems can declare any number of modules. When a reference system has 14+ modules, this skill silently falls back to paged rounds (see Phase 3). No schema enforcement, no compiler change.
-- **Descriptions**: See [`ALS-006`](../../../als-factory/jobs/ALS-006.md). Until that job ships, option descriptions in Phase 3 fall back to path/version/skill count. After it ships, every module in a reference system will carry a human-readable description at the declaration site and this skill will surface it directly.
+- **Descriptions**: See [`ALS-006`](../../../als-factory/jobs/ALS-006.md). Every module in a reference system now carries a human-readable description at the declaration site, and this skill surfaces it directly in Phase 3.
 - **Scope**: copy + register + validate + deploy + optional bootup. Not module authoring. If the operator wants a new module from scratch, hand off to `/new`.
 - **Re-runnable**: running this skill again after an earlier install just adds more modules. Existing modules already in the target get renamed on the incoming copy (Phase 4).
 - **No versioning story yet**: this skill installs at the version declared in the reference system. There is no "upgrade this reference module" flow. When that becomes a need, it gets its own job.

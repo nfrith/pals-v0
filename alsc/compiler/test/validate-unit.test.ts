@@ -69,11 +69,13 @@ test("system config schema rejects duplicate module mount paths", () => {
         path: "workspace/backlog",
         version: 1,
         skills: ["backlog"],
+        description: "Track backlog work.",
       },
       archive: {
         path: "workspace/backlog",
         version: 1,
         skills: ["archive"],
+        description: "Store archived work.",
       },
     },
   });
@@ -95,11 +97,13 @@ test("system config schema rejects overlapping module mount paths", () => {
         path: "workspace/backlog",
         version: 1,
         skills: ["backlog"],
+        description: "Track backlog work.",
       },
       workspace: {
         path: "workspace",
         version: 1,
         skills: ["workspace"],
+        description: "Own workspace-level records.",
       },
     },
   });
@@ -170,6 +174,7 @@ test("system config schema rejects duplicate skill ids inside one module", () =>
         path: "workspace/backlog",
         version: 1,
         skills: ["backlog", "backlog"],
+        description: "Track backlog work.",
       },
     },
   });
@@ -180,6 +185,56 @@ test("system config schema rejects duplicate skill ids inside one module", () =>
   }
 
   expect(result.error.issues.some((issue) => issue.path.join(".") === "modules.backlog.skills.1")).toBe(true);
+});
+
+for (const [label, description] of [
+  ["blank", ""],
+  ["trimmed", " backlog"],
+  ["single-line", "Backlog work\nwith wrap"],
+  ["too-long", "x".repeat(121)],
+] as const) {
+  test(`system config schema rejects invalid module descriptions (${label})`, () => {
+    const result = systemConfigSchema.safeParse({
+      als_version: 1,
+      system_id: "test-system",
+      modules: {
+        backlog: {
+          path: "workspace/backlog",
+          version: 1,
+          skills: ["backlog"],
+          description,
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      throw new Error(`Expected invalid module description (${label}) to fail schema validation`);
+    }
+
+    expect(result.error.issues.some((issue) => issue.path.join(".") === "modules.backlog.description")).toBe(true);
+  });
+}
+
+test("system config schema rejects missing module descriptions", () => {
+  const result = systemConfigSchema.safeParse({
+    als_version: 1,
+    system_id: "test-system",
+    modules: {
+      backlog: {
+        path: "workspace/backlog",
+        version: 1,
+        skills: ["backlog"],
+      },
+    },
+  });
+
+  expect(result.success).toBe(false);
+  if (result.success) {
+    throw new Error("Expected missing module description to fail schema validation");
+  }
+
+  expect(result.error.issues.some((issue) => issue.path.join(".") === "modules.backlog.description")).toBe(true);
 });
 
 test("jsonl entity shapes validate without markdown-only surfaces", () => {

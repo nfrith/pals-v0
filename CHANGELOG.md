@@ -4,6 +4,8 @@ All notable changes to ALS preview releases should be recorded here.
 
 ## Unreleased
 
+- Added required module `description` fields to `.als/system.ts` declarations and validation.
+- Accepted and documented SDR 026 for system-level module descriptions and the hard-break migration.
 - Added first-class Delamain support to the ALS compiler:
   - `type: delamain` fields bound through a module `delamains` registry
   - Delamain bundle loading, graph validation, and state-owned agent validation

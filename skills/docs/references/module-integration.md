@@ -128,6 +128,7 @@ modules: {
   backlog: {
     path: "backlog",
     version: 2,
+    description: "Track backlog items and the delivery workflow around them.",
     skills: [
       "backlog-manage",
       "backlog-inspect",

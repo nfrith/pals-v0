@@ -193,6 +193,7 @@ async function installVariantDelamainModule(root: string): Promise<void> {
     modules["delamain-variants"] = {
       path: "workspace/delamain-variants",
       version: 1,
+      description: "Exercise variant-specific Delamain bindings in test fixtures.",
       skills: [],
     };
   });

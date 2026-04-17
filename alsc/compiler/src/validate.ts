@@ -31,6 +31,7 @@ import {
   moduleShapeSchema,
   modulePathsOverlap,
   splitModuleMountPath,
+  SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH,
   systemConfigSchema,
   type EntityShape,
   type FilePathBase,
@@ -3693,7 +3694,7 @@ function parseAuthoredSourceFile<T>(
     success: false,
     diagnostics: rawDiagnostics.concat(
       parsed.error.issues.map((issue) =>
-        diag(resolveParseIssueCode(code, phase, issue), "error", phase, fileRel, issue.message, {
+        diag(resolveParseIssueCode(code, phase, issue), "error", phase, fileRel, resolveParseIssueMessage(phase, issue), {
           module_id: module_id ?? undefined,
           field: issue.path.join(".") || null,
           reason: resolveParseIssueReason(phase, issue),
@@ -3714,6 +3715,45 @@ function parseFrontmatter(source: string) {
       { cause: error },
     );
   }
+}
+
+function resolveParseIssueMessage(
+  phase: "system_config" | "module_shape",
+  issue: ZodError["issues"][number],
+): string {
+  if (
+    phase === "system_config"
+    && issue.path[0] === "modules"
+    && typeof issue.path[1] === "string"
+    && issue.path[2] === "description"
+  ) {
+    const moduleId = issue.path[1];
+    if (issue.code === "invalid_type") {
+      return `module ${moduleId} description is required and must be a trimmed single-line string no longer than ${SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH} characters`;
+    }
+
+    if (typeof issue.message === "string") {
+      if (issue.message === "module_description.blank") {
+        return `module ${moduleId} description must be a non-empty trimmed single-line string no longer than ${SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH} characters`;
+      }
+
+      if (issue.message === "module_description.trimmed") {
+        return `module ${moduleId} description must not start or end with whitespace and must stay within ${SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH} characters`;
+      }
+
+      if (issue.message === "module_description.single_line") {
+        return `module ${moduleId} description must stay on a single line and within ${SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH} characters`;
+      }
+
+      if (issue.message === "module_description.too_long") {
+        return `module ${moduleId} description must be ${SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH} characters or fewer`;
+      }
+    }
+
+    return `module ${moduleId} description must be a trimmed single-line string no longer than ${SYSTEM_MODULE_DESCRIPTION_MAX_LENGTH} characters`;
+  }
+
+  return issue.message;
 }
 
 function resolveParseIssueCode(
@@ -3745,6 +3785,24 @@ function resolveParseIssueReason(
 ): string | undefined {
   if (phase === "system_config" && issue.path[0] === "als_version") {
     return reasons.SYSTEM_ALS_VERSION_INVALID;
+  }
+
+  if (
+    phase === "system_config"
+    && issue.code === "custom"
+    && issue.path[0] === "modules"
+    && issue.path[2] === "description"
+  ) {
+    return reasons.SYSTEM_MODULE_DESCRIPTION_INVALID;
+  }
+
+  if (
+    phase === "system_config"
+    && issue.code === "invalid_type"
+    && issue.path[0] === "modules"
+    && issue.path[2] === "description"
+  ) {
+    return reasons.SYSTEM_MODULE_DESCRIPTION_INVALID;
   }
 
   if (

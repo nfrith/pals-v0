@@ -36,11 +36,13 @@ export const system = defineSystem({
     backlog: {
       path: "workspace/backlog",
       version: 1,
+      description: "Track work items with status, ownership, and delivery context.",
       skills: ["backlog-module"],
     },
     people: {
       path: "workspace/people",
       version: 1,
+      description: "Manage people records used across the system.",
       skills: ["people-module"],
     },
   },
@@ -54,6 +56,7 @@ Rules:
 - `als_version` is the active ALS language version declared by `.als/system.ts`.
 - `modules.{module_id}.path` is the mounted record root for that module.
 - `modules.{module_id}.version` points at `.als/modules/{module_id}/v{version}`.
+- `modules.{module_id}.description` is a required one-line summary for scanners and operators.
 - `modules.{module_id}.skills` lists the active operator-facing skill ids for that mounted version.
 - Active skill ids must stay globally unique across the system.
 - Module mount paths must stay normalized, relative, and non-overlapping.
@@ -538,6 +541,8 @@ Authored Delamains are TypeScript, but Claude deploy still writes a runtime `del
 - Module ids must match `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`.
 - Module mount paths are normalized relative paths from the ALS system root.
 - Module mount paths must not be absolute, contain empty segments, contain `.` or `..`, or contain hidden segments such as `.als`.
+- Module descriptions are required, must be trimmed, must stay on one line, and must be 120 characters or fewer.
+- Validators reject missing module descriptions. ALS does not infer or default them from the module id.
 - No two modules may have identical or overlapping mount paths.
 - The declared module path must exist as a directory when validating.
 - Active skill ids must be globally unique across the live system.

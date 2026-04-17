@@ -362,6 +362,65 @@ test.concurrent("invalid skill ids are rejected", async () => {
   });
 });
 
+for (const {
+  label,
+  mutate,
+  expectedMessage,
+} of [
+  {
+    label: "missing",
+    mutate: (moduleConfig: Record<string, unknown>) => {
+      delete moduleConfig.description;
+    },
+    expectedMessage: "module backlog description is required",
+  },
+  {
+    label: "blank",
+    mutate: (moduleConfig: Record<string, unknown>) => {
+      moduleConfig.description = "   ";
+    },
+    expectedMessage: "module backlog description must be a non-empty trimmed single-line string",
+  },
+  {
+    label: "trimmed",
+    mutate: (moduleConfig: Record<string, unknown>) => {
+      moduleConfig.description = " backlog work";
+    },
+    expectedMessage: "module backlog description must not start or end with whitespace",
+  },
+  {
+    label: "single-line",
+    mutate: (moduleConfig: Record<string, unknown>) => {
+      moduleConfig.description = "Backlog work\nwith wrap";
+    },
+    expectedMessage: "module backlog description must stay on a single line",
+  },
+  {
+    label: "too-long",
+    mutate: (moduleConfig: Record<string, unknown>) => {
+      moduleConfig.description = "x".repeat(121);
+    },
+    expectedMessage: "module backlog description must be 120 characters or fewer",
+  },
+] as const) {
+  test.concurrent(`module descriptions fail with a targeted diagnostic (${label})`, async () => {
+    await withFixtureSandbox(`system-module-description-${label}`, async ({ root }) => {
+      await updateSystemYaml(root, (config) => {
+        const modules = config.modules as Record<string, Record<string, unknown>>;
+        mutate(modules.backlog);
+      });
+
+      const result = validateFixture(root);
+      expect(result.status).toBe("fail");
+      const diagnostic = expectSystemDiagnostic(result, codes.SYSTEM_INVALID, ".als/system.ts");
+      expect(diagnostic.field).toBe("modules.backlog.description");
+      expect(diagnostic.reason).toBe(reasons.SYSTEM_MODULE_DESCRIPTION_INVALID);
+      expect(diagnostic.message).toContain(expectedMessage);
+      expect(diagnostic.message).toContain("120");
+    });
+  });
+}
+
 test.concurrent("duplicate skill ids surface a stable machine-readable reason", async () => {
   await withFixtureSandbox("system-skills-duplicate-reason", async ({ root }) => {
     await updateSystemYaml(root, (config) => {

@@ -709,6 +709,7 @@ test("deploy CLI fails when flat Delamain names collide across modules", { timeo
       modules.release = {
         path: "workspace/release",
         version: 1,
+        description: "Synthetic release module used to force Delamain name collisions in deploy tests.",
         skills: [],
       };
     });

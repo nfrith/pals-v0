@@ -77,7 +77,11 @@ Ask the operator for a `system_id`. Use a single AskUserQuestion:
 
 - **Header**: `System ID`
 - **Question**: "What should this ALS system be called? The `system_id` lives in `.als/system.ts` and is surfaced in logs, deploys, and dashboard output. Short, slug-cased."
-- **Options**: 2–3 suggestions grounded in project signals — the working directory name, a sanitized version of it, or a common default like `personal` or `workspace`. Operator can always use Other to type their own.
+- **Options** (fixed — do not substitute based on working directory):
+  1. `personal-assistant` — label: `personal-assistant (Recommended)`, description: `Recommended default for a personal ALS system.`
+  2. `workspace` — description: `Generic default for a shared workspace.`
+  3. `personal` — description: `Generic default for a solo/personal system.`
+- Operator can always use Other to type their own slug.
 
 Do not interview for modules, entities, skills, or delamains here. Those belong to `/new` (create from scratch) or `/install-reference` (pull from a reference system), both invoked in Phase 7.
 

@@ -1,6 +1,6 @@
 ---
 name: install-reference
-description: Install pre-built modules from reference systems bundled with the ALS plugin. Scans the plugin's reference systems and their module manifests, lets the operator pick one or many modules, then copies them into the current project. Re-runnable any time — not an onboarding-only flow.
+description: Install pre-built modules from the ALS plugin's bundled reference system. Lets the operator pick one or many modules, copies them into the current project, validates, and auto-deploys the Claude projection. Re-runnable any time — not an onboarding-only flow.
 allowed-tools: AskUserQuestion, Bash(bash *), Read, Write, Edit
 ---
 
@@ -39,21 +39,20 @@ Then confirm the current project is an ALS system:
 
 If `SYSTEM: missing`, tell the operator: "This project isn't an ALS system yet. Run `/install` first to bootstrap." Do not attempt to bootstrap from a reference — that's a separate flow and pulling a 7-module reference into nothing is not a sane default.
 
-## Phase 1 — Scan for reference systems
+## Phase 1 — Resolve the reference system
 
-A reference system is any directory under the plugin root whose path ends in `reference-system` (singular, canonical name — see [`docs/references/platforms.md`](../docs/references/platforms.md) for why the name is load-bearing and coupled to ALS internals) or matches `*-reference-system` (for variants like `ts-reference-system`).
+There is exactly one reference system bundled with this plugin: `${CLAUDE_PLUGIN_ROOT}/reference-system`. This skill does not scan, does not offer a picker, and does not support variants. Use the canonical path directly:
 
 ```bash
-find "${CLAUDE_PLUGIN_ROOT}" -maxdepth 2 -type d \
-  \( -name "reference-system" -o -name "*-reference-system" \) \
-  -print
+REFERENCE_ROOT="${CLAUDE_PLUGIN_ROOT}/reference-system"
+if [ -f "$REFERENCE_ROOT/.als/system.ts" ]; then
+  printf 'REFERENCE_ROOT=%s\n' "$REFERENCE_ROOT"
+else
+  echo "REFERENCE_MISSING: $REFERENCE_ROOT"
+fi
 ```
 
-For each hit, confirm it has a `.als/system.ts` — that's the manifest that makes it installable. Skip directories that don't.
-
-- **0 reference systems found** → "No reference systems are bundled with this ALS plugin." Exit.
-- **1 reference system** → skip the picker, proceed with it.
-- **2+ reference systems** → AskUserQuestion with one option per system. Header `Reference`. Label = the directory name (e.g. `reference-system`, `ts-reference-system`). Description = `system_id` from the manifest, plus the module count. Single-select.
+If the manifest is missing, stop and tell the operator the plugin is malformed. Do not fall back to other paths or search elsewhere — the reference system's location is part of the plugin contract.
 
 ## Phase 2 — Enumerate modules
 
@@ -153,24 +152,36 @@ Do this per-module so a failure mid-way is easy to surface and partial state is 
 bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts validate .
 ```
 
-If validation fails, surface the full compiler output to the operator without trying to auto-fix. Tell them: "The installed modules are on disk but the system did not validate. Resolve the errors or run `/install-reference` again after undoing the copy. Nothing was deployed to `.claude/`."
+If validation fails, surface the full compiler output to the operator without trying to auto-fix. Tell them: "The installed modules are on disk but the system did not validate. Resolve the errors or run `/install-reference` again after undoing the copy. Nothing was deployed to `.claude/`." Stop — do not proceed to Phase 7.
 
-If validation passes, do **not** auto-deploy. The operator runs `deploy claude` via `/install`, `/new`, or the compiler directly. This skill stops at authored-and-validated.
+## Phase 7 — Deploy
 
-## Phase 7 — Report
+Validation passed. Dry-run the Claude projection, then live-deploy:
+
+```bash
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude --dry-run .
+bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude .
+```
+
+If the dry-run surfaces target collisions, stop and report them — do not push through. If the live deploy fails, report the full compiler output. Otherwise the installed modules' skills, delamains, and projections are now live under `.claude/`.
+
+The operator does not request this step. New modules are useless until projected — auto-deploy is the default.
+
+## Phase 8 — Report
 
 One block, no ceremony:
 
-- Reference system: `<system_id>` at `<source path>`
+- Reference system: `reference-system` at `${CLAUDE_PLUGIN_ROOT}/reference-system`
 - Installed: `<module_id_1>, <module_id_2>, ...`
 - Skipped (conflicts): `<module_id>: <reason>` (one per line, or "none")
-- Validation: `pass` / `fail`
-- Next step: run `bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude --dry-run .` to preview projection, then drop the `--dry-run` to deploy.
+- Validation: `pass`
+- Deploy: `pass` (or the error summary if it failed)
+- Next: installed skills and delamains are live under `.claude/`. Invoke them directly.
 
 ## Notes
 
 - **13-module threshold is a skill-only display constraint.** AskUserQuestion allows at most 16 option slots per call; the single-call picker needs 2 for `[ALL]` + `[CANCEL]`, leaving 13 for modules. This is **not** an ALS language rule — ALS systems can declare any number of modules. When a reference system has 14+ modules, this skill silently falls back to paged rounds (see Phase 3). No schema enforcement, no compiler change.
 - **Descriptions**: See [`ALS-006`](../../../als-factory/jobs/ALS-006.md). Until that job ships, option descriptions in Phase 3 fall back to path/version/skill count. After it ships, every module in a reference system will carry a human-readable description at the declaration site and this skill will surface it directly.
-- **Scope**: copy + register + validate. Not deploy, not module authoring. If the operator wants a new module from scratch, hand off to `/new`.
+- **Scope**: copy + register + validate + deploy. Not module authoring. If the operator wants a new module from scratch, hand off to `/new`.
 - **Re-runnable**: running this skill again after an earlier install just adds more modules. Existing modules already in the target get renamed on the incoming copy (Phase 4).
 - **No versioning story yet**: this skill installs at the version declared in the reference system. There is no "upgrade this reference module" flow. When that becomes a need, it gets its own job.

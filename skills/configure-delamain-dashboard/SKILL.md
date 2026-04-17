@@ -27,7 +27,7 @@ If the operator says no, acknowledge and stop.
 Determine the absolute ALS plugin root from `CLAUDE_PLUGIN_ROOT`. The dashboard app lives at:
 
 ```bash
-dashboard_root="$CLAUDE_PLUGIN_ROOT/delamain-dashboard"
+dashboard_root="${CLAUDE_PLUGIN_ROOT}/delamain-dashboard"
 ```
 
 If `CLAUDE_PLUGIN_ROOT` is missing, stop and tell the operator you cannot install the launchers without the ALS plugin root.

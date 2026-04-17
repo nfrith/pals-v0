@@ -12,8 +12,10 @@ test("dashboard view model derives pipeline, active dispatch, and spend summarie
   const snapshot = createDesignDashboardSnapshot();
   const view = buildDashboardViewModel(snapshot);
   const liveDispatcher = view.dispatchers.find((dispatcher) => dispatcher.name === "als-factory-jobs");
+  const staleDispatcher = view.dispatchers.find((dispatcher) => dispatcher.name === "research-pipeline");
 
   expect(view.summary.totalSpendUsd).toBeCloseTo(1.20, 2);
+  expect(view.summary.totalSpendEventCount).toBe(4);
   expect(view.summary.activeDispatchCount).toBe(1);
   expect(view.summary.stateSummaryLine).toContain("LIVE 1");
   expect(view.summary.stateSummaryLine).toContain("ERROR 1");
@@ -26,6 +28,8 @@ test("dashboard view model derives pipeline, active dispatch, and spend summarie
   expect(liveDispatcher?.pipeline.horizontalLine).toContain("draft(3)");
   expect(liveDispatcher?.pipeline.compactLine).toContain("dft(3)");
   expect(liveDispatcher?.spend.sessionUsd).toBeCloseTo(0.55, 2);
+  expect(staleDispatcher?.spend.amountLabel).toBe("n/a");
+  expect(staleDispatcher?.spend.line).toContain("no metered runs");
   expect(liveDispatcher?.itemGroups.map((group) => group.state)).toEqual([
     "drafted",
     "research",

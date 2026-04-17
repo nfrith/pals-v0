@@ -167,7 +167,7 @@ function buildSubheader(
 
   const base = viewMode === "detail" && dispatcher
     ? layoutMode === "compact"
-      ? `${dispatcher.stateBadge} • ${dispatcher.module.moduleId ?? "module?"} • HB ${dispatcher.heartbeat.ageLabel} • $${dispatcher.spend.sessionUsd.toFixed(2)}`
+      ? `${dispatcher.stateBadge} • ${dispatcher.module.moduleId ?? "module?"} • HB ${dispatcher.heartbeat.ageLabel} • ${dispatcher.spend.amountLabel}`
       : `${dispatcher.stateBadge} • ${dispatcher.module.moduleId ?? "module?"} • ${dispatcher.heartbeat.tickLine} • ${dispatcher.spend.line}`
     : layoutMode === "compact"
       ? `${view.summary.stateSummaryLine} • ${view.summary.totalSpendLabel}`

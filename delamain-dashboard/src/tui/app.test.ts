@@ -73,12 +73,39 @@ test("scene renderer builds overview and detail frames from the design fixture",
     await renderOnce();
 
     const detailFrame = captureCharFrame();
-    expect(detailFrame).toContain("Meta");
-    expect(detailFrame).toContain("Pipeline");
+    expect(detailFrame).toContain("Runtime");
+    expect(detailFrame).toContain("Pipeline Counts");
     expect(detailFrame).toContain("Active");
-    expect(detailFrame).toContain("Items");
+    expect(detailFrame).toContain("Items by State");
     expect(detailFrame).toContain("ALS-006");
     expect(detailFrame).toContain("[drafted] 3");
+  } finally {
+    renderer.destroy();
+  }
+});
+
+test("compact overview keeps the selected dispatcher visible in short panes", async () => {
+  const snapshot = createDesignDashboardSnapshot();
+  const view = buildDashboardViewModel(snapshot);
+  const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
+    width: 48,
+    height: 16,
+  });
+
+  try {
+    renderDashboardTuiScene(renderer, view, {
+      detailItemIndex: 0,
+      errorMessage: null,
+      selectedDispatcherIndex: 3,
+      serviceUrl: "http://127.0.0.1:4646",
+      viewMode: "overview",
+    });
+    renderer.requestRender();
+    await renderOnce();
+
+    const frame = captureCharFrame();
+    expect(frame).toContain("ops-incident-feed");
+    expect(frame).not.toContain("als-factory-jobs");
   } finally {
     renderer.destroy();
   }

@@ -51,7 +51,7 @@ LIVE 1 • IDLE 1 • STALE 1 • ERROR 1 • spend $1.20 • 1 active • updat
 │ research • HB 2m 5s • poll 5s                          │ │ ops • HB 16s • poll 4s                                  │
 │ 0 active • 4 tracked • 7 scanned                       │ │ 0 active • 3 tracked • 5 scanned                        │
 │ draft(0) → research(2) → review(1) → done(1)           │ │ triage(0) → investigate(1) → review(1) → done(1)        │
-│ Spend $0.00 • 0 metered runs • Heartbeat is older than…│ │ Spend $0.49 • 1 metered run • Last run failed on OPS-2… │
+│ Spend n/a • no metered runs • Heartbeat is older than …│ │ Spend $0.49 • 1 metered run • Last run failed on OPS-2… │
 └────────────────────────────────────────────────────────┘ └─────────────────────────────────────────────────────────┘
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 j/k move • Enter detail • r refresh • q quit • http://127.0.0.1:4646
@@ -63,20 +63,20 @@ j/k move • Enter detail • r refresh • q quit • http://127.0.0.1:4646
 Delamain Dashboard • overview • 4 dispatchers
 LIVE 1 • IDLE 1 • STALE 1 • ERROR 1 • $1.20
 ────────────────────────────────────────────────
-┌─────────────────────────────────────────────┐
-│ [LIVE] als-factory-jobs                     │
-│ als-factory • 4s hb                         │
-│ 15 tracked • 1 active                       │
-│ ALS-006 research 45s                        │
-│ Spend $0.55 • 2 metered runs • 1 active dis…│
-└─────────────────────────────────────────────┘
-┌─────────────────────────────────────────────┐
-│ [IDLE] ghost-factory-jobs                   │
-│ ghost-factory • 11s hb                      │
-│ 4 tracked • 0 active                        │
-│ dft(1) → dev(1) → rev(1) → done(1)          │
-│ Spend $0.16 • 1 metered run • Dispatcher is…│
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ [LIVE] als-factory-jobs                      │
+│ als-factory • 4s hb                          │
+│ 15 tracked • 1 active                        │
+│ ALS-006 research 45s                         │
+│ Spend $0.55 • 2 metered runs • 1 active dis… │
+└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ [IDLE] ghost-factory-jobs                    │
+│ ghost-factory • 11s hb                       │
+│ 4 tracked • 0 active                         │
+│ dft(1) → dev(1) → rev(1) → done(1)           │
+│ Spend $0.16 • 1 metered run • Dispatcher is… │
+└──────────────────────────────────────────────┘
 ```
 
 ### Detail
@@ -85,8 +85,9 @@ LIVE 1 • IDLE 1 • STALE 1 • ERROR 1 • $1.20
 Delamain Dashboard • als-factory-jobs
 LIVE • als-factory • HB 4s • poll 2s • Spend $0.55 • 2 metered runs
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-┌─Meta─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ als-factory • job • jobs/{id}.md                                                                                     │
+┌─Runtime──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Module als-factory • job                                                                                             │
+│ Path jobs/{id}.md                                                                                                    │
 │ Mount workspace/factory • v4                                                                                         │
 │ HB 4s • poll 2s                                                                                                      │
 │ Spend $0.55 • 2 metered runs                                                                                         │
@@ -95,13 +96,15 @@ LIVE • als-factory • HB 4s • poll 2s • Spend $0.55 • 2 metered runs
 │ PASS • ALS-003 • planning → in-dev • 1m 34s • $0.34                                                                  │
 │ PASS • ALS-002 • research → planning • 1m 3s • $0.21                                                                 │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-┌─Pipeline─────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌─Pipeline Counts──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Count by phase. (n) = items in that phase.                                                                           │
 │ draft(3) → research(1) → planning(0) → dev(1) → review(0) → uat(2) → done(8)                                         │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌─Active───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ ▶ ALS-006 research (45s, cost pending, 8 turns)                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-┌─Items────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+┌─Items by State───────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Headers=count; detail=state • phase • type.                                                                          │
 │ ▶ [drafted] 3                                                                                                        │
 │   draft                                                                                                              │
 │     ALS-001                                                                                                          │

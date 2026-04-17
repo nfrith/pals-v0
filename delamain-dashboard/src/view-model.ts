@@ -39,6 +39,7 @@ export interface DashboardSummaryView {
   rootCount: number;
   stateCounts: Record<DispatcherLivenessState, number>;
   stateSummaryLine: string;
+  totalSpendEventCount: number;
   totalSpendLabel: string;
   totalSpendUsd: number;
 }
@@ -87,6 +88,8 @@ export interface DispatcherTelemetryView {
 }
 
 export interface DispatcherSpendView {
+  amountLabel: string;
+  available: boolean;
   eventCount: number;
   line: string;
   sessionUsd: number;
@@ -202,6 +205,7 @@ export function buildDashboardViewModel(snapshot: DashboardSnapshot): DashboardV
   const now = coerceTimestamp(snapshot.generatedAt);
   const dispatchers = snapshot.dispatchers.map((dispatcher) => buildDispatcherViewModel(dispatcher, now));
   const totalSpendUsd = dispatchers.reduce((sum, dispatcher) => sum + dispatcher.spend.sessionUsd, 0);
+  const totalSpendEventCount = dispatchers.reduce((sum, dispatcher) => sum + dispatcher.spend.eventCount, 0);
   const stateCounts = {
     idle: 0,
     live: 0,
@@ -221,7 +225,8 @@ export function buildDashboardViewModel(snapshot: DashboardSnapshot): DashboardV
     rootCount: snapshot.roots.length,
     stateCounts,
     stateSummaryLine: formatStateCounts(stateCounts),
-    totalSpendLabel: formatCurrency(totalSpendUsd),
+    totalSpendEventCount,
+    totalSpendLabel: totalSpendEventCount > 0 ? formatCurrency(totalSpendUsd) : "n/a",
     totalSpendUsd,
   };
 
@@ -246,6 +251,8 @@ export function buildDispatcherViewModel(
   const pipeline = buildPipelineView(dispatcher, activeDispatches);
   const spendUsd = recentHistory.reduce((sum, entry) => sum + (entry.costUsd ?? 0), 0);
   const spendEventCount = recentHistory.filter((entry) => entry.costUsd !== null).length;
+  const spendAvailable = spendEventCount > 0;
+  const spendAmountLabel = spendAvailable ? formatCurrency(spendUsd) : "n/a";
   const activeCount = Math.max(dispatcher.activeDispatches, activeDispatches.length);
 
   const moduleLine = dispatcher.moduleId
@@ -275,7 +282,9 @@ export function buildDispatcherViewModel(
       ? activeDispatches[0]!.summaryLine
       : `${activeDispatches[0]!.summaryLine} +${activeDispatches.length - 1} more`
     : "Idle • no active dispatch inferred";
-  const spendLine = `Spend ${formatCurrency(spendUsd)} • ${spendEventCount} metered run${spendEventCount === 1 ? "" : "s"}`;
+  const spendLine = spendAvailable
+    ? `Spend ${spendAmountLabel} • ${spendEventCount} metered run${spendEventCount === 1 ? "" : "s"}`
+    : "Spend n/a • no metered runs";
 
   const items = buildItemViews(dispatcher, activeItemIds);
   const itemGroups = buildItemGroups(items);
@@ -321,6 +330,8 @@ export function buildDispatcherViewModel(
     recentHistory,
     recentLine,
     spend: {
+      amountLabel: spendAmountLabel,
+      available: spendAvailable,
       eventCount: spendEventCount,
       line: spendLine,
       sessionUsd: spendUsd,

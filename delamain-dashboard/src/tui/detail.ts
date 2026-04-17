@@ -32,12 +32,18 @@ export function mountDetailView(
   parent.add(root);
 
   if (layoutMode === "compact") {
-    root.add(buildInfoBox(renderer, "Meta", [
-      dispatcher.moduleLine,
+    root.add(buildInfoBox(renderer, "Runtime", [
+      `Module ${dispatcher.module.moduleId ?? "module?"} • ${dispatcher.module.entityName ?? "entity"}`,
+      `Path ${dispatcher.module.entityPath ?? "unknown path"}`,
       `HB ${dispatcher.heartbeat.ageLabel} • ${dispatcher.spend.line}`,
       dispatcher.recentHistory.length > 0 ? `Recent ${dispatcher.recentHistory[0]!.compactLine}` : "Recent n/a",
     ], lineWidth));
-    root.add(buildInfoBox(renderer, "Pipeline", dispatcher.pipeline.verticalLines.slice(0, 4), lineWidth));
+    root.add(buildInfoBox(
+      renderer,
+      "Pipeline Counts",
+      ["Count by phase. ▶ active • ! bottleneck.", ...dispatcher.pipeline.verticalLines.slice(0, 4)],
+      lineWidth,
+    ));
     root.add(buildInfoBox(
       renderer,
       "Active",
@@ -47,8 +53,9 @@ export function mountDetailView(
       lineWidth,
     ));
   } else {
-    root.add(buildInfoBox(renderer, "Meta", [
-      dispatcher.moduleLine,
+    root.add(buildInfoBox(renderer, "Runtime", [
+      `Module ${dispatcher.module.moduleId ?? "module?"} • ${dispatcher.module.entityName ?? "entity"}`,
+      `Path ${dispatcher.module.entityPath ?? "unknown path"}`,
       `Mount ${dispatcher.module.moduleMountPath ?? "unknown"} • v${dispatcher.module.moduleVersion ?? "?"}`,
       `HB ${dispatcher.heartbeat.ageLabel} • poll ${dispatcher.heartbeat.pollLabel}`,
       dispatcher.spend.line,
@@ -65,8 +72,8 @@ export function mountDetailView(
 
     root.add(buildInfoBox(
       renderer,
-      "Pipeline",
-      [dispatcher.pipeline.horizontalLine],
+      "Pipeline Counts",
+      ["Count by phase. (n) = items in that phase.", dispatcher.pipeline.horizontalLine],
       lineWidth,
     ));
 
@@ -86,11 +93,26 @@ export function mountDetailView(
     borderColor: TUI_THEME.border,
     flexDirection: "column",
     flexGrow: 1,
-    minHeight: layoutMode === "compact" ? 6 : 8,
-    title: "Items",
+    minHeight: layoutMode === "compact" ? 7 : 9,
+    paddingLeft: 1,
+    paddingRight: 1,
+    title: "Items by State",
     width: "100%",
   });
   root.add(itemsBox);
+
+  itemsBox.add(new TextRenderable(renderer, {
+    content: fitLine(
+      layoutMode === "compact"
+        ? "Headers=count; rows=item ids."
+        : "Headers=count; detail=state • phase • type.",
+      lineWidth - 2,
+    ),
+    fg: TUI_THEME.muted,
+    height: 1,
+    width: "100%",
+    wrapMode: "none",
+  }));
 
   const itemList = new SelectRenderable(renderer, {
     backgroundColor: TUI_THEME.card,

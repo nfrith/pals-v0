@@ -1,12 +1,10 @@
-import { BoxRenderable, ScrollBoxRenderable, TextRenderable, bold, fg, t, type CliRenderer } from "@opentui/core";
+import { BoxRenderable, TextRenderable, bold, fg, t, type CliRenderer } from "@opentui/core";
 import type { DashboardViewModel, DispatcherViewModel } from "../view-model.ts";
 import { fitLine, overviewCardContentWidth, type LayoutMode, type ViewportSize } from "./layout.ts";
 import { TUI_THEME, badgeText, stateBorderColor, stateColor } from "./theme.ts";
 
-export interface OverviewRenderResult {
-  scrollBox: ScrollBoxRenderable;
-  selectedCardId: string | null;
-}
+const OVERVIEW_CARD_HEIGHT = 7;
+const OVERVIEW_FRAME_CHROME = 5;
 
 export function mountOverviewView(
   renderer: CliRenderer,
@@ -15,48 +13,23 @@ export function mountOverviewView(
   layoutMode: LayoutMode,
   viewport: ViewportSize,
   selectedDispatcherIndex: number,
-): OverviewRenderResult {
+): void {
   const lineWidth = overviewCardContentWidth(viewport, layoutMode);
-  const scrollBox = new ScrollBoxRenderable(renderer, {
+  const dispatchers = visibleOverviewDispatchers(view, layoutMode, viewport, selectedDispatcherIndex);
+  const container = new BoxRenderable(renderer, {
+    backgroundColor: TUI_THEME.background,
+    columnGap: layoutMode === "wide" ? 1 : 0,
+    flexDirection: layoutMode === "wide" ? "row" : "column",
     flexGrow: 1,
-    height: "100%",
+    flexWrap: layoutMode === "wide" ? "wrap" : "no-wrap",
+    rowGap: 0,
     width: "100%",
-    scrollY: true,
-    rootOptions: {
-      backgroundColor: TUI_THEME.background,
-    },
-    viewportOptions: {
-      backgroundColor: TUI_THEME.background,
-    },
-    contentOptions: layoutMode === "wide"
-      ? {
-        backgroundColor: TUI_THEME.background,
-        columnGap: 1,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        rowGap: 0,
-        width: "100%",
-      }
-      : {
-        backgroundColor: TUI_THEME.background,
-        flexDirection: "column",
-        rowGap: 0,
-        width: "100%",
-      },
   });
-  parent.add(scrollBox);
+  parent.add(container);
 
-  let selectedCardId: string | null = null;
-
-  view.dispatchers.forEach((dispatcher, index) => {
+  dispatchers.forEach(({ dispatcher, index }) => {
     const selected = index === selectedDispatcherIndex;
-    const cardId = `dispatcher-card-${index}`;
-    if (selected) {
-      selectedCardId = cardId;
-    }
-
     const card = new BoxRenderable(renderer, {
-      id: cardId,
       backgroundColor: selected
         ? TUI_THEME.cardSelected
         : dispatcher.activeDispatches.length > 0
@@ -70,7 +43,7 @@ export function mountOverviewView(
       paddingRight: 1,
       width: layoutMode === "wide" ? "49%" : "100%",
     });
-    scrollBox.content.add(card);
+    container.add(card);
 
     card.add(new TextRenderable(renderer, {
       content: buildTitleLine(dispatcher, selected, lineWidth),
@@ -110,15 +83,30 @@ export function mountOverviewView(
       wrapMode: "none",
     }));
   });
+}
 
-  if (selectedCardId) {
-    scrollBox.scrollChildIntoView(selectedCardId);
-  }
+function visibleOverviewDispatchers(
+  view: DashboardViewModel,
+  layoutMode: LayoutMode,
+  viewport: ViewportSize,
+  selectedDispatcherIndex: number,
+): Array<{ dispatcher: DispatcherViewModel; index: number }> {
+  const columns = layoutMode === "wide" ? 2 : 1;
+  const availableHeight = Math.max(OVERVIEW_CARD_HEIGHT, viewport.height - OVERVIEW_FRAME_CHROME);
+  const visibleRows = Math.max(1, Math.ceil(availableHeight / OVERVIEW_CARD_HEIGHT));
+  const totalRows = Math.ceil(view.dispatchers.length / columns);
+  const selectedRow = Math.floor(selectedDispatcherIndex / columns);
+  const maxStartRow = Math.max(0, totalRows - visibleRows);
+  const startRow = Math.min(maxStartRow, Math.max(0, selectedRow - visibleRows + 1));
+  const startIndex = startRow * columns;
+  const endIndex = Math.min(view.dispatchers.length, startIndex + (visibleRows * columns));
 
-  return {
-    scrollBox,
-    selectedCardId,
-  };
+  return view.dispatchers
+    .slice(startIndex, endIndex)
+    .map((dispatcher, offset) => ({
+      dispatcher,
+      index: startIndex + offset,
+    }));
 }
 
 function buildActiveLine(dispatcher: DispatcherViewModel, layoutMode: LayoutMode, lineWidth: number): string {

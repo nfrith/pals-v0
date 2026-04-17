@@ -6,13 +6,11 @@ Include:
 
 - `Platform` — the acknowledged ALS platform code
 - `Prerequisites` — whether `CLAUDE_PLUGIN_ROOT`, `bun`, and `jq` were confirmed
-- `Created` — `.als/authoring.ts`, `.als/system.ts`, `.als/modules/<module_id>/v1/...`, the mounted data directory, `.claude/skills/...`, and optional `.claude/delamains/...`
+- `System ID` — the `system_id` chosen in Phase 4
+- `Created` — `.als/authoring.ts`, `.als/system.ts`, and the empty `.als/modules/` directory
 - `Validation` — result of `validate`
-- `Deploy` — result of `deploy claude --dry-run --require-empty-targets` and live `deploy claude`
-- `Next` — `/new` to add another module, `/change` to evolve the first module, `/validate` to re-check the system
+- `Deploy` — result of `deploy claude --dry-run --require-empty-targets` and the live `deploy claude` (produces `.claude/CLAUDE.md` and an otherwise empty projection surface)
+- `Next` — the Phase 7 outcome: which skill was invoked (`/install-reference` or `/new`), or "stopped at skeleton"
+- `Later` — commands the operator can reach for any time: `/new`, `/install-reference`, `/change`, `/validate`
 
-If the install authored a Delamain:
-
-- Say where the bundle lives under `.als/modules/<module_id>/v1/delamains/...`
-- Say where it deployed under `.claude/delamains/...`
-- Remind the operator if any agent files are TODO scaffolds
+No module, skill, or delamain output belongs in this report — `/install` does not author any of those. If a downstream skill was invoked in Phase 7, its own output covers what it produced.

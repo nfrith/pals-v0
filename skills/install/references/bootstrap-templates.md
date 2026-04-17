@@ -1,6 +1,6 @@
 # Bootstrap Templates
 
-Use these templates for the first-touch authored shell.
+Use these templates for the `/install` skeleton. Only two files are authored here — `.als/authoring.ts` and `.als/system.ts` — plus the empty `.als/modules/` directory. Module bundles are NOT authored by `/install`; they arrive from `/install-reference` or `/new` in Phase 7.
 
 ## `.als/authoring.ts`
 
@@ -12,7 +12,7 @@ export { defineSystem, defineModule, defineDelamain } from "__ALS_AUTHORING_IMPO
 
 ## `.als/system.ts`
 
-Use quoted keys and values to match the current authored style. Replace the placeholders.
+Use quoted keys and values to match the current authored style. Replace `__ALS_SYSTEM_ID__` with the operator's chosen `system_id` from Phase 4.
 
 ```ts
 import { defineSystem } from "./authoring.ts";
@@ -20,29 +20,17 @@ import { defineSystem } from "./authoring.ts";
 export const system = defineSystem({
   "als_version": 1,
   "system_id": "__ALS_SYSTEM_ID__",
-  "modules": {
-    "__ALS_MODULE_ID__": {
-      "path": "__ALS_MODULE_PATH__",
-      "version": 1,
-      "skills": [
-        "__ALS_SKILL_ID_1__"
-      ]
-    }
-  }
+  "modules": {}
 } as const);
 
 export default system;
 ```
 
-If the first module has no active skills yet, use:
+The `modules: {}` block stays empty. Module entries are appended later by `/install-reference` (copying from a reference system) or `/new` (authoring from scratch).
 
-```ts
-"skills": []
-```
+## Bootstrap contract
 
-Bootstrap contract:
-
-- Always create `.als/` and `.als/modules/` before module files.
-- The first module bundle lives at `.als/modules/<module_id>/v1/`.
+- Always create `.als/` and `.als/modules/` (the latter as an empty directory) before writing any `.als/*.ts` file.
+- `/install` never writes anything under `.als/modules/` — that is the downstream skill's job.
 - `.als/CLAUDE.md` is deploy-generated and must not be written by hand.
 - The absolute import path in `.als/authoring.ts` is acceptable for this exploratory first pass.

@@ -1,21 +1,15 @@
 ---
 name: install
-description: Bootstrap ALS into a fresh project and create the first module. Use this when the operator is starting from zero, wants to make the current project ALS-aware, or needs the first-touch onboarding flow before `/new`.
-allowed-tools: AskUserQuestion, Bash(bash *), Read, Write, Edit
+description: Bootstrap ALS into a fresh project — author the empty skeleton (`.als/authoring.ts`, `.als/system.ts` with an empty `modules: {}`), validate and deploy it, then hand off to `/install-reference` or `/new` for module work. Use this when the operator is starting from zero on a non-ALS project.
+allowed-tools: AskUserQuestion, Bash(bash *), Read, Write, Edit, Skill
 ---
 
 # install
 
-You are the first-touch ALS onboarding flow. Take a project from zero to a working ALS system with its first module. Optimize for feel: the operator should see a welcome, a short but real interview, bootstrap files appear, validation run, Claude assets deploy, and clear next steps.
-
-This is exploratory. Prefer a concrete, runnable first pass over production hardening. Placeholders and TODO scaffolds are acceptable when the language contract requires more design later.
+You are the first-touch ALS onboarding flow. Take a project from zero to a bootstrapped ALS system — `.als/system.ts` with the operator's chosen system id and an empty `modules: {}` block — validate it, deploy the Claude projection, then hand off to `/install-reference` (pre-built modules from a reference system) or `/new` (author a module from scratch). **First-module authoring is not this skill's job.**
 
 Before authoring anything, read:
 
-- `../new/SKILL.md` — reuse its Phase 2 interview, Phase 3 proposal, skill authoring, and Delamain bundle rules for the first module. `/install` owns onboarding and bootstrap; `/new` remains the canonical add-module contract.
-- `../docs/references/shape-language.md`
-- `../docs/references/skill-patterns.md`
-- `../docs/references/delamain-dispatcher.md`
 - `references/first-touch-flow.md`
 - `references/platform-detection.md`
 - `references/bootstrap-templates.md`
@@ -27,9 +21,10 @@ Use `references/first-touch-flow.md` to open the interaction. The operator shoul
 
 1. verify prerequisites
 2. detect and acknowledge the ALS platform code
-3. interview for the first module
-4. bootstrap `.als/`
-5. validate and deploy Claude assets
+3. ask for a `system_id`
+4. bootstrap `.als/` with an empty modules block
+5. validate and deploy the Claude projection
+6. ask what to do next and hand off to the matching skill
 
 Do not ask the operator to open a terminal. Use Claude tools from inside the session.
 
@@ -76,85 +71,95 @@ Check whether `.als/system.ts` already exists in the working directory.
 - Tell the operator `/install` will not overwrite an existing ALS system and direct them to `/new` for another module or `/change` for schema evolution.
 - Re-running `/install` in an existing system is a safe refusal, not a repair path.
 
-## Phase 4: First-module interview
+## Phase 4: Establish system_id
 
-This is still the `/new` interview, but in a fresh system.
+Ask the operator for a `system_id`. Use a single AskUserQuestion:
 
-1. Start with the same opening question as `/new`: "What do you need to track? Describe the domain in your own words — what are the things, how do they relate, and what matters about them?"
+- **Header**: `System ID`
+- **Question**: "What should this ALS system be called? The `system_id` lives in `.als/system.ts` and is surfaced in logs, deploys, and dashboard output. Short, slug-cased."
+- **Options**: 2–3 suggestions grounded in project signals — the working directory name, a sanitized version of it, or a common default like `personal` or `workspace`. Operator can always use Other to type their own.
 
-2. Establish `system_id`. If there are multiple viable ids, use AskUserQuestion to present 2-3 normalized options plus Other.
+Do not interview for modules, entities, skills, or delamains here. Those belong to `/new` (create from scratch) or `/install-reference` (pull from a reference system), both invoked in Phase 7.
 
-3. Establish the first module's scope and `module_id`. Challenge over-broad first modules; the first module should feel coherent and teach the shape cleanly.
+## Phase 5: Bootstrap the skeleton
 
-4. Establish the mount path. It must:
-   - be relative to the system root
-   - not be `.als` or `.claude`
-   - not collide with paths you are about to create
+With `system_id` chosen, write the authored skeleton. Follow `references/bootstrap-templates.md` for exact contents.
 
-5. Follow `../new/SKILL.md` Phase 2 and Phase 3 for:
-   - entity decomposition
-   - fields
-   - sections
-   - skill-pattern selection
-   - Delamain design when needed
-   - proposal and operator approval
+1. Create `.als/` and `.als/modules/` (the latter an empty directory).
+2. Write `.als/authoring.ts`. Resolve the compiler import path from `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/authoring/index.ts`.
+3. Write `.als/system.ts` with `als_version: 1`, the chosen `system_id`, and an empty `modules: {}` block.
 
-When adapting `/new`'s guidance:
+Do not author any modules, skills, or delamains. Those arrive via `/new` or `/install-reference` in Phase 7.
 
-- There are no existing modules yet, so dependency and cross-module reference checks are usually empty on the first pass.
-- Keep the initial skill set minimal but complete-feeling. One well-scoped module is better than a sprawling first install.
-- Explicitly confirm the initial skill ids before writing `.als/system.ts`.
+Do not hand-author `.als/CLAUDE.md` — that is generated by `deploy claude` in Phase 6.
 
-Do not write files until the operator approves the proposal.
+## Phase 6: Validate and deploy the skeleton
 
-## Phase 5: Bootstrap and author
-
-Once approved, create the first ALS system.
-
-1. Create `.als/` and `.als/modules/`.
-2. Create `.als/authoring.ts` using `references/bootstrap-templates.md`. Resolve the absolute compiler import path from `${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/authoring/index.ts`.
-3. Create `.als/system.ts` using the same reference. Register the first module with version `1`, its mount path, and the final skill id list.
-4. Create the module version bundle at `.als/modules/{module_id}/v1/`.
-5. Create the module's authored entrypoint at `.als/modules/{module_id}/v1/module.ts`.
-6. If the module has skills, create `.als/modules/{module_id}/v1/skills/` and each `SKILL.md`.
-7. If a Delamain was designed, create `.als/modules/{module_id}/v1/delamains/{delamain-name}/...` and follow the Delamain bundle authoring rules from `../new/SKILL.md`, including copying the dispatcher template from `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/`.
-8. Create the mounted data directory at `{path}/`.
-9. Create the empty subdirectory tree implied by the path templates.
-10. Do not hand-author `.als/CLAUDE.md`. That file is generated by `deploy claude`.
-
-## Phase 6: Validate and deploy
-
-With the authored system in place, run the full first-touch verification flow:
+Validate:
 
 ```bash
 bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts validate <system-root>
 ```
 
+An empty `modules: {}` record is valid — this should pass clean.
+
+Dry-run the Claude projection:
+
 ```bash
 bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude --dry-run --require-empty-targets <system-root>
 ```
 
-Confirm the dry-run is clean and includes the planned `.als/CLAUDE.md` write.
+Confirm the dry-run is clean and includes the planned `.als/CLAUDE.md` write. If it reports target collisions, stop and resolve with the operator before live deploy.
 
-If the dry-run reports target collisions under `.claude/` or Delamain name conflicts, stop and resolve them with the operator before live deploy.
+Live deploy:
 
 ```bash
 bun ${CLAUDE_PLUGIN_ROOT}/alsc/compiler/src/cli.ts deploy claude <system-root>
 ```
 
-The deployed result should include `.claude/skills/...` and, when applicable, `.claude/delamains/...`.
+The skeleton deploy produces `.claude/CLAUDE.md` and an otherwise empty projection surface. Modules and their projections arrive when the operator runs the next skill.
 
-## Phase 7: Final report
+If any step fails, stop — do not proceed to Phase 7.
+
+## Phase 7: Pick next step and hand off
+
+Skeleton is live. Ask the operator what they want to do next via a single AskUserQuestion:
+
+- **Header**: `Next`
+- **Question**: "Skeleton is live. What next?"
+- **Options**:
+  1. `Install pre-made modules (Recommended)` — pick from a reference system shipped with the ALS plugin.
+  2. `Create a new module` — design a module from scratch via guided interview.
+  3. `Stop here` — leave the system bootstrapped with no modules.
+
+Operator can use Other to describe a different path in their own words.
+
+**Hand off:**
+
+| Choice | Action |
+|--------|--------|
+| Install pre-made modules | Invoke `als:install-reference` via the Skill tool. No args. |
+| Create a new module | Invoke `als:new` via the Skill tool. No args. |
+| Stop here | No invocation. Proceed to Phase 8. |
+| Other | Interpret the operator's instruction. If it maps to an existing skill, invoke it. Otherwise explain next steps and proceed to Phase 8. |
+
+Do not read the invoked skill's SKILL.md before invoking — the Skill tool loads it. Do not narrate what the invoked skill will do — the operator will see its output directly.
+
+Proceed to Phase 8 after the invoked skill (if any) returns.
+
+## Phase 8: Final report
 
 Use `references/final-report.md`.
 
 Report:
 
-- acknowledged platform code
-- prerequisite checks (`bun`, `jq`, `CLAUDE_PLUGIN_ROOT`)
-- authored files and directories
-- validation and deploy results
-- whether a Delamain bundle was included
-- next commands: `/new`, `/change`, `/validate`
+- Acknowledged platform code (Phase 2)
+- Prerequisite checks (`bun`, `jq`, `CLAUDE_PLUGIN_ROOT`)
+- System id (Phase 4)
+- Authored skeleton files (Phase 5)
+- Validation and deploy results (Phase 6)
+- Phase 7 outcome — which skill was invoked, or "stopped at skeleton"
 
-If the operator re-runs `/install` after a successful bootstrap, refuse destructive changes and redirect them to `/new` or `/change`.
+Next commands the operator can reach for any time: `/new`, `/install-reference`, `/change`, `/validate`.
+
+If the operator re-runs `/install` after a successful bootstrap, Phase 3 refuses and redirects to `/new` or `/install-reference`.

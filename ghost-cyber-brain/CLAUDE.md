@@ -19,3 +19,4 @@ Ghost is the origin where the cyber-brain is built and proven. ALS is where it b
 ## Status
 
 Receiving. No features deployed yet — Ghost is still building v1.
+When Ghost deploys cyber-brain here, carry `preflight.ts` alongside `index.ts` because Max-subscription billing depends on the first-import auth strip.

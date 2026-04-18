@@ -18,6 +18,30 @@ test("dispatcher version parser accepts positive integers", () => {
   expect(parseDispatcherVersion("42", "canonical")).toBe(42);
 });
 
+test("canonical dispatcher template strips ANTHROPIC_API_KEY before SDK imports", async () => {
+  const indexText = await Bun.file(
+    new URL("../../../skills/new/references/dispatcher/src/index.ts", import.meta.url),
+  ).text();
+  const preflightText = await Bun.file(
+    new URL("../../../skills/new/references/dispatcher/src/preflight.ts", import.meta.url),
+  ).text();
+
+  expect(indexText.split("\n")[0]).toBe('import "./preflight.js";');
+  expect(preflightText).toContain("delete process.env.ANTHROPIC_API_KEY;");
+});
+
+test("run-demo dispatcher strips ANTHROPIC_API_KEY before SDK imports", async () => {
+  const indexText = await Bun.file(
+    new URL("../../../skills/run-demo/dispatcher/src/index.ts", import.meta.url),
+  ).text();
+  const preflightText = await Bun.file(
+    new URL("../../../skills/run-demo/dispatcher/src/preflight.ts", import.meta.url),
+  ).text();
+
+  expect(indexText.split("\n")[0]).toBe('import "./preflight.js";');
+  expect(preflightText).toContain("delete process.env.ANTHROPIC_API_KEY;");
+});
+
 test("dispatcher version parser rejects malformed values", () => {
   expect(() => parseDispatcherVersion("0\n", "local")).toThrow(
     "local dispatcher VERSION must be a positive integer",

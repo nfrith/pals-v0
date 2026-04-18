@@ -12,6 +12,8 @@ The dispatcher template lives at `${CLAUDE_PLUGIN_ROOT}/skills/new/references/di
 
 The canonical template exposes its latest template version in `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/VERSION`. Every copied dispatcher bundle carries a local `dispatcher/VERSION` file. Startup reads both files, logs `[dispatcher] version: X (latest: Y)`, and appends `run /upgrade-dispatchers to update` when the local version is stale. Missing or malformed local or canonical `VERSION` files are hard startup errors.
 
+Every dispatcher entrypoint begins with `import "./preflight.js";`. That sibling module deletes `process.env.ANTHROPIC_API_KEY` before the Claude Agent SDK loads, which keeps plain `bun run src/index.ts` on Max-subscription routing instead of cached API-key billing.
+
 When a Delamain bundle is deployed to `.claude/delamains/<name>/`, later `alsc deploy claude` runs preserve an existing `dispatcher/node_modules/` directory. Deploy itself does not install packages. If dependencies have never been installed in the deployed target, deploy warns and leaves installation as an explicit `bun install` step.
 
 The deployed bundle root also receives `runtime-manifest.json`. That manifest is the authoritative binding contract for the runtime:
@@ -48,11 +50,20 @@ Older dispatcher copies that only emit `status.json` remain valid. Consumers mus
 
 Entry point. Handles:
 
+- **Auth preflight**: imports `src/preflight.ts` as the literal first line so the Claude Agent SDK never sees `ANTHROPIC_API_KEY` during module evaluation.
 - **System root discovery**: walks up directories from its own location looking for `.als/system.ts`. Also respects the `SYSTEM_ROOT` environment variable.
 - **Template version check**: reads local `dispatcher/VERSION` and canonical `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/VERSION`, logs the current/latest versions, and fails before polling when either source is missing or malformed.
 - **Startup**: calls `resolve()` once to load `runtime-manifest.json`, local `delamain.yaml`, and state-agent files, then enters the poll loop.
 - **Poll loop**: scans items at a configurable interval (`POLL_MS`, default 30s). Tracks direct dispatch ownership separately from delegated handoffs, releases either guard when the item's status changes, and refreshes the heartbeat after dispatch completions.
 - **Runtime hardening**: keeps the event loop alive with an internal keepalive server, logs tick and process lifecycle events, and ignores stray `SIGTERM` so dispatcher children do not accidentally kill the parent runtime.
+
+### `src/preflight.ts`
+
+Auth-strip shim.
+
+- Deletes `process.env.ANTHROPIC_API_KEY` before any SDK import executes
+- Protects plain `bun run` entrypoints from the SDK's module-init auth capture
+- Keeps the later `sdkEnv` clone aligned with the already-stripped process environment
 
 ### `src/dispatch-lifecycle.ts`
 

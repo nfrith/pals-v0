@@ -1,3 +1,4 @@
+import "./preflight.js";
 import { existsSync, statSync, readdirSync } from "fs";
 import { readFile } from "fs/promises";
 import { join, dirname } from "path";

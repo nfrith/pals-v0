@@ -1,3 +1,4 @@
+import "./preflight.js";
 import { existsSync } from "fs";
 import { writeFileSync, unlinkSync } from "fs";
 import { resolve as resolvePath, dirname, join } from "path";

@@ -1,6 +1,6 @@
 # Bootstrap Templates
 
-Use these templates for the `/install` skeleton. Only two files are authored here — `.als/authoring.ts` and `.als/system.ts` — plus the empty `.als/modules/` directory. Module bundles are NOT authored by `/install`; they arrive from `/install-reference` or `/new` in Phase 7.
+Use these templates for the `/install` skeleton. Only two files are authored here — `.als/authoring.ts` and `.als/system.ts` — plus the empty `.als/modules/` directory. Module bundles are NOT authored by `/install`; they arrive from `/foundry` or `/new` in Phase 7.
 
 ## `.als/authoring.ts`
 
@@ -26,7 +26,7 @@ export const system = defineSystem({
 export default system;
 ```
 
-The `modules: {}` block stays empty. Module entries are appended later by `/install-reference` (copying from a reference system) or `/new` (authoring from scratch).
+The `modules: {}` block stays empty. Module entries are appended later by `/foundry` (copying from the curated shelf) or `/new` (authoring from scratch).
 
 ## Bootstrap contract
 

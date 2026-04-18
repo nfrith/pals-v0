@@ -1,6 +1,6 @@
 # First-Touch Flow
 
-Use a short opening frame for `/install`. The operator should know, in plain language, that ALS is about to bootstrap the project, validate and deploy the skeleton, then hand off to either `/install-reference` (pre-built modules) or `/new` (author from scratch). First-module authoring does not happen inside `/install`.
+Use a short opening frame for `/install`. The operator should know, in plain language, that ALS is about to bootstrap the project, validate and deploy the skeleton, then hand off to either `/foundry` (curated pre-built modules) or `/new` (author from scratch). First-module authoring does not happen inside `/install`.
 
 Suggested shape:
 

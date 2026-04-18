@@ -4,6 +4,8 @@ All notable changes to ALS preview releases should be recorded here.
 
 ## Unreleased
 
+- Added a new `/foundry` skill plus an empty `foundry/` ALS mini-system as the curated bundled source for end-user module installs.
+- Retargeted `/install` to hand first-touch operators to `/foundry` while keeping `/install-reference` available for internal/reference-system painting work.
 - Added required module `description` fields to `.als/system.ts` declarations and validation.
 - Accepted and documented SDR 026 for system-level module descriptions and the hard-break migration.
 - Added first-class Delamain support to the ALS compiler:

@@ -21,6 +21,8 @@ test("collector enriches dispatcher snapshots with runtime metadata and item cou
     expect(dispatcher.itemSummary.totalItems).toBe(2);
     expect(dispatcher.itemSummary.byState["in-dev"]).toBe(1);
     expect(dispatcher.itemSummary.byState["in-review"]).toBe(1);
+    expect(dispatcher.runtime.available).toBe(true);
+    expect(dispatcher.runtime.active[0]?.item_id).toBe("ALS-001");
     expect(dispatcher.telemetry.available).toBe(true);
     expect(dispatcher.recentRun?.outcome).toBe("success");
   } finally {

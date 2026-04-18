@@ -1,6 +1,13 @@
+import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { loadRuntimeManifest } from "../../../skills/new/references/dispatcher/src/runtime-manifest.ts";
+import {
+  readRuntimeState,
+  resolveRuntimeStatePaths,
+  summarizeRuntimeState,
+  type RuntimeDispatchSummary,
+} from "../../../skills/new/references/dispatcher/src/runtime-state.ts";
 import {
   readTelemetryEvents,
   resolveTelemetryPaths,
@@ -54,6 +61,7 @@ async function collectDispatcherSnapshot(
   const heartbeatResult = await readHeartbeat(bundle.bundleRoot);
   const manifestResult = await readRuntimeManifest(bundle.bundleRoot);
   const definitionResult = await readDefinition(bundle.bundleRoot);
+  const runtimeResult = await readDispatcherRuntimeState(bundle.bundleRoot);
   const telemetryResult = await readTelemetryEvents(bundle.bundleRoot, telemetryLimit);
   const telemetryPaths = resolveTelemetryPaths(bundle.bundleRoot);
   const items = await readItems(bundle.systemRoot, manifestResult.manifest);
@@ -67,6 +75,7 @@ async function collectDispatcherSnapshot(
     heartbeatError: heartbeatResult.error,
     manifestError: manifestResult.error,
     definitionError: definitionResult.error,
+    runtimeSummary: runtimeResult.summary,
     recentRun,
     now,
   });
@@ -81,7 +90,10 @@ async function collectDispatcherSnapshot(
     pidLive: classification.pidLive,
     lastTickAgeMs: classification.lastTickAgeMs,
     pollMs: heartbeatResult.heartbeat?.pollMs ?? null,
-    activeDispatches: heartbeatResult.heartbeat?.activeDispatches ?? 0,
+    activeDispatches: Math.max(
+      heartbeatResult.heartbeat?.activeDispatches ?? 0,
+      runtimeResult.summary.activeCount,
+    ),
     itemsScanned: heartbeatResult.heartbeat?.itemsScanned ?? 0,
     moduleId: manifestResult.manifest?.module_id ?? null,
     moduleVersion: manifestResult.manifest?.module_version ?? null,
@@ -96,6 +108,15 @@ async function collectDispatcherSnapshot(
     recentEvents: telemetryResult.events,
     recentRun,
     recentError,
+    runtime: {
+      available: runtimeResult.available,
+      path: runtimeResult.path,
+      active: runtimeResult.summary.active,
+      blocked: runtimeResult.summary.blocked,
+      orphaned: runtimeResult.summary.orphaned,
+      guarded: runtimeResult.summary.guarded,
+      delegated: runtimeResult.summary.delegated,
+    },
     telemetry: {
       available: telemetryResult.available,
       legacyMode: !telemetryResult.available,
@@ -153,6 +174,10 @@ async function readHeartbeat(bundleRoot: string): Promise<{
       lastTick: asString(value["last_tick"]),
       pollMs: asNumber(value["poll_ms"]),
       activeDispatches: asNumber(value["active_dispatches"]) ?? 0,
+      blockedDispatches: asNumber(value["blocked_dispatches"]) ?? 0,
+      orphanedDispatches: asNumber(value["orphaned_dispatches"]) ?? 0,
+      guardedDispatches: asNumber(value["guarded_dispatches"]) ?? 0,
+      delegatedDispatches: asNumber(value["delegated_dispatches"]) ?? 0,
       itemsScanned: asNumber(value["items_scanned"]) ?? 0,
     },
     error: null,
@@ -192,6 +217,37 @@ async function readDefinition(bundleRoot: string): Promise<{
     return {
       definition: null,
       error: `Delamain graph unavailable: ${formatError(error)}`,
+    };
+  }
+}
+
+async function readDispatcherRuntimeState(bundleRoot: string): Promise<{
+  available: boolean;
+  path: string;
+  summary: RuntimeDispatchSummary;
+}> {
+  const paths = resolveRuntimeStatePaths(bundleRoot);
+  const available = existsSync(paths.stateFile);
+
+  try {
+    const state = await readRuntimeState(bundleRoot);
+    return {
+      available,
+      path: paths.stateFile,
+      summary: summarizeRuntimeState(state),
+    };
+  } catch (error) {
+    console.warn(
+      `[delamain-dashboard] failed reading runtime worktree state for '${bundleRoot}': ${formatError(error)}`,
+    );
+    return {
+      available,
+      path: paths.stateFile,
+      summary: summarizeRuntimeState({
+        schema: "als-delamain-worktree-state@1",
+        updated_at: new Date().toISOString(),
+        records: [],
+      }),
     };
   }
 }
@@ -299,6 +355,7 @@ function classifyDispatcher(input: {
   heartbeatError: string | null;
   manifestError: string | null;
   definitionError: string | null;
+  runtimeSummary: RuntimeDispatchSummary;
   recentRun: DispatcherRecentRun | null;
   now: Date;
 }): {
@@ -384,10 +441,29 @@ function classifyDispatcher(input: {
     };
   }
 
-  if (heartbeat.activeDispatches > 0) {
+  if (input.runtimeSummary.blockedCount > 0) {
+    return {
+      state: "error",
+      detail: `${input.runtimeSummary.blockedCount} blocked dispatch incident${input.runtimeSummary.blockedCount === 1 ? "" : "s"}`,
+      pidLive,
+      lastTickAgeMs,
+    };
+  }
+
+  if (input.runtimeSummary.orphanedCount > 0) {
+    return {
+      state: "error",
+      detail: `${input.runtimeSummary.orphanedCount} orphaned worktree${input.runtimeSummary.orphanedCount === 1 ? "" : "s"}`,
+      pidLive,
+      lastTickAgeMs,
+    };
+  }
+
+  const activeDispatches = Math.max(heartbeat.activeDispatches, input.runtimeSummary.activeCount);
+  if (activeDispatches > 0) {
     return {
       state: "live",
-      detail: `${heartbeat.activeDispatches} active dispatch${heartbeat.activeDispatches === 1 ? "" : "es"}`,
+      detail: `${activeDispatches} active dispatch${activeDispatches === 1 ? "" : "es"}`,
       pidLive,
       lastTickAgeMs,
     };

@@ -42,6 +42,22 @@ test("run-demo dispatcher strips ANTHROPIC_API_KEY before SDK imports", async ()
   expect(preflightText).toContain("delete process.env.ANTHROPIC_API_KEY;");
 });
 
+test("canonical dispatcher template ships worktree runtime modules", async () => {
+  const runtimeText = await Bun.file(
+    new URL("../../../skills/new/references/dispatcher/src/dispatcher-runtime.ts", import.meta.url),
+  ).text();
+  const isolationText = await Bun.file(
+    new URL("../../../skills/new/references/dispatcher/src/git-worktree-isolation.ts", import.meta.url),
+  ).text();
+  const registryText = await Bun.file(
+    new URL("../../../skills/new/references/dispatcher/src/dispatch-registry.ts", import.meta.url),
+  ).text();
+
+  expect(runtimeText).toContain("class DispatcherRuntime");
+  expect(isolationText).toContain("class GitWorktreeIsolationStrategy");
+  expect(registryText).toContain("class DispatchRegistry");
+});
+
 test("dispatcher version parser rejects malformed values", () => {
   expect(() => parseDispatcherVersion("0\n", "local")).toThrow(
     "local dispatcher VERSION must be a positive integer",

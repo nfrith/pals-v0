@@ -6,6 +6,11 @@ import {
   DISPATCH_TELEMETRY_SCHEMA,
   type DispatchTelemetryEvent,
 } from "../../skills/new/references/dispatcher/src/telemetry.ts";
+import {
+  DELAMAIN_RUNTIME_STATE_SCHEMA,
+  type RuntimeDispatchRecord,
+  writeRuntimeState,
+} from "../../skills/new/references/dispatcher/src/runtime-state.ts";
 import type { DashboardSnapshot, DispatcherSnapshot } from "./feed/types.ts";
 
 export interface DashboardFixture {
@@ -14,6 +19,7 @@ export interface DashboardFixture {
   statusFile: string;
   cleanup(): Promise<void>;
   writeHeartbeat(overrides?: Partial<FixtureHeartbeat>): Promise<void>;
+  writeRuntimeRecords(records: RuntimeDispatchRecord[]): Promise<void>;
   appendSuccess(itemId?: string): Promise<void>;
   appendFailure(itemId?: string, error?: string): Promise<void>;
 }
@@ -28,6 +34,10 @@ interface FixtureHeartbeat {
   last_tick: string;
   poll_ms: number;
   active_dispatches: number;
+  blocked_dispatches: number;
+  orphaned_dispatches: number;
+  guarded_dispatches: number;
+  delegated_dispatches: number;
   items_scanned: number;
 }
 
@@ -142,11 +152,22 @@ export async function createDashboardFixture(label: string): Promise<DashboardFi
         last_tick: new Date().toISOString(),
         poll_ms: 1000,
         active_dispatches: 1,
+        blocked_dispatches: 0,
+        orphaned_dispatches: 0,
+        guarded_dispatches: 0,
+        delegated_dispatches: 0,
         items_scanned: 2,
         ...overrides,
       };
 
       await writeFile(statusFile, JSON.stringify(heartbeat, null, 2) + "\n", "utf-8");
+    },
+    writeRuntimeRecords: async (records) => {
+      await writeRuntimeState(bundleRoot, {
+        schema: DELAMAIN_RUNTIME_STATE_SCHEMA,
+        updated_at: new Date().toISOString(),
+        records,
+      });
     },
     appendSuccess: async (itemId = "ALS-001") => {
       await appendTelemetryEvent(bundleRoot, buildTelemetryEvent(itemId, "dispatch_finish", null));
@@ -157,6 +178,15 @@ export async function createDashboardFixture(label: string): Promise<DashboardFi
   };
 
   await fixture.writeHeartbeat();
+  await fixture.writeRuntimeRecords([
+    runtimeRecord({
+      itemId: "ALS-001",
+      state: "in-dev",
+      status: "active",
+      branchName: "delamain/factory-jobs/ALS-001/d-test",
+      worktreePath: "/tmp/.worktrees/delamain/factory-jobs/ALS-001/d-test",
+    }),
+  ]);
   return fixture;
 }
 
@@ -178,6 +208,10 @@ export function createDesignDashboardSnapshot(
         lastTick: "2026-04-17T10:19:56.000Z",
         pollMs: 2000,
         activeDispatches: 1,
+        blockedDispatches: 0,
+        orphanedDispatches: 0,
+        guardedDispatches: 0,
+        delegatedDispatches: 0,
         itemsScanned: 15,
       },
       pidLive: true,
@@ -277,6 +311,24 @@ export function createDesignDashboardSnapshot(
         sessionId: "sess-als-003",
       },
       recentError: null,
+      runtime: {
+        available: true,
+        path: "/tmp/als/reference-system/.claude/delamains/als-factory-jobs/runtime/worktree-state.json",
+        active: [
+          runtimeRecord({
+            itemId: "ALS-006",
+            state: "research",
+            status: "active",
+            branchName: "delamain/als-factory-jobs/ALS-006/d-abc123def456",
+            worktreePath: "/tmp/.worktrees/delamain/als-factory-jobs/ALS-006/d-abc123def456",
+            startedAt: "2026-04-17T10:19:15.000Z",
+          }),
+        ],
+        blocked: [],
+        orphaned: [],
+        guarded: [],
+        delegated: [],
+      },
       telemetry: {
         available: true,
         legacyMode: false,
@@ -296,6 +348,10 @@ export function createDesignDashboardSnapshot(
         lastTick: "2026-04-17T10:19:49.000Z",
         pollMs: 3000,
         activeDispatches: 0,
+        blockedDispatches: 1,
+        orphanedDispatches: 0,
+        guardedDispatches: 0,
+        delegatedDispatches: 0,
         itemsScanned: 9,
       },
       pidLive: true,
@@ -363,6 +419,28 @@ export function createDesignDashboardSnapshot(
         sessionId: "sess-ghost-143",
       },
       recentError: null,
+      runtime: {
+        available: true,
+        path: "/tmp/als/reference-system/.claude/delamains/ghost-factory-jobs/runtime/worktree-state.json",
+        active: [],
+        blocked: [
+          runtimeRecord({
+            itemId: "GHOST-142",
+            state: "in-dev",
+            status: "blocked",
+            branchName: "delamain/ghost-factory-jobs/GHOST-142/d-merge1",
+            worktreePath: "/tmp/.worktrees/delamain/ghost-factory-jobs/GHOST-142/d-merge1",
+            incident: {
+              kind: "merge_conflict",
+              message: "Operator changed the same file during integration",
+              detected_at: "2026-04-17T10:18:00.000Z",
+            },
+          }),
+        ],
+        orphaned: [],
+        guarded: [],
+        delegated: [],
+      },
       telemetry: {
         available: true,
         legacyMode: false,
@@ -382,6 +460,10 @@ export function createDesignDashboardSnapshot(
         lastTick: "2026-04-17T10:17:55.000Z",
         pollMs: 5000,
         activeDispatches: 0,
+        blockedDispatches: 0,
+        orphanedDispatches: 1,
+        guardedDispatches: 0,
+        delegatedDispatches: 0,
         itemsScanned: 7,
       },
       pidLive: true,
@@ -425,6 +507,28 @@ export function createDesignDashboardSnapshot(
       recentEvents: [],
       recentRun: null,
       recentError: null,
+      runtime: {
+        available: true,
+        path: "/tmp/als/reference-system/.claude/delamains/research-pipeline/runtime/worktree-state.json",
+        active: [],
+        blocked: [],
+        orphaned: [
+          runtimeRecord({
+            itemId: "RSH-012",
+            state: "researching",
+            status: "orphaned",
+            branchName: "delamain/research-pipeline/RSH-012/d-lost1",
+            worktreePath: "/tmp/.worktrees/delamain/research-pipeline/RSH-012/d-lost1",
+            incident: {
+              kind: "stale_dispatch",
+              message: "Dispatcher died while the worktree still had preserved work",
+              detected_at: "2026-04-17T10:18:12.000Z",
+            },
+          }),
+        ],
+        guarded: [],
+        delegated: [],
+      },
       telemetry: {
         available: false,
         legacyMode: true,
@@ -444,6 +548,10 @@ export function createDesignDashboardSnapshot(
         lastTick: "2026-04-17T10:19:44.000Z",
         pollMs: 4000,
         activeDispatches: 0,
+        blockedDispatches: 0,
+        orphanedDispatches: 0,
+        guardedDispatches: 0,
+        delegatedDispatches: 0,
         itemsScanned: 5,
       },
       pidLive: true,
@@ -515,6 +623,15 @@ export function createDesignDashboardSnapshot(
         state: "review",
         error: "Human review blocked merge window",
       },
+      runtime: {
+        available: false,
+        path: "/tmp/als/reference-system/.claude/delamains/ops-incident-feed/runtime/worktree-state.json",
+        active: [],
+        blocked: [],
+        orphaned: [],
+        guarded: [],
+        delegated: [],
+      },
       telemetry: {
         available: true,
         legacyMode: false,
@@ -546,8 +663,10 @@ function buildTelemetryEvent(
     timestamp: new Date().toISOString(),
     dispatcher_name: "factory-jobs",
     module_id: "factory",
+    dispatch_id: `d-${itemId.toLowerCase()}`,
     item_id: itemId,
     item_file: `/tmp/${itemId}.md`,
+    isolated_item_file: `/tmp/.worktrees/${itemId}.md`,
     state: eventType === "dispatch_failure" ? "in-review" : "in-dev",
     agent_name: "in-dev",
     sub_agent_name: null,
@@ -558,6 +677,12 @@ function buildTelemetryEvent(
     runtime_session_id: null,
     resume_session_id: null,
     worker_session_id: null,
+    worktree_path: `/tmp/.worktrees/${itemId}`,
+    branch_name: `delamain/factory-jobs/${itemId}/d-${itemId.toLowerCase()}`,
+    worktree_commit: null,
+    integrated_commit: null,
+    merge_outcome: eventType === "dispatch_failure" ? "blocked" : "merged",
+    incident_kind: eventType === "dispatch_failure" ? "merge_conflict" : null,
     transition_targets: ["in-review"],
     duration_ms: 1500,
     num_turns: 7,
@@ -613,8 +738,10 @@ function telemetryEvent(input: {
     timestamp: input.timestamp,
     dispatcher_name: input.dispatcherName ?? "als-factory-jobs",
     module_id: input.moduleId ?? "als-factory",
+    dispatch_id: `d-${input.itemId.toLowerCase()}`,
     item_id: input.itemId,
     item_file: `/tmp/${input.itemId}.md`,
+    isolated_item_file: `/tmp/.worktrees/${input.itemId}.md`,
     state: input.state,
     agent_name: input.state,
     sub_agent_name: null,
@@ -625,10 +752,59 @@ function telemetryEvent(input: {
     runtime_session_id: null,
     resume_session_id: null,
     worker_session_id: input.workerSessionId ?? null,
+    worktree_path: `/tmp/.worktrees/${input.itemId}`,
+    branch_name: `delamain/${input.dispatcherName ?? "als-factory-jobs"}/${input.itemId}/d-${input.itemId.toLowerCase()}`,
+    worktree_commit: null,
+    integrated_commit: null,
+    merge_outcome: input.eventType === "dispatch_failure" ? "blocked" : "merged",
+    incident_kind: input.eventType === "dispatch_failure" ? "merge_conflict" : null,
     transition_targets: input.transitionTargets ?? [],
     duration_ms: input.durationMs ?? null,
     num_turns: input.numTurns ?? null,
     cost_usd: input.costUsd ?? null,
     error: input.error ?? null,
+  };
+}
+
+function runtimeRecord(input: {
+  itemId: string;
+  state: string;
+  status: RuntimeDispatchRecord["status"];
+  branchName: string;
+  worktreePath: string;
+  startedAt?: string;
+  incident?: RuntimeDispatchRecord["incident"];
+}): RuntimeDispatchRecord {
+  return {
+    dispatch_id: `d-${input.itemId.toLowerCase()}`,
+    item_id: input.itemId,
+    item_file: `/tmp/${input.itemId}.md`,
+    isolated_item_file: `/tmp/worktrees/${input.itemId}.md`,
+    state: input.state,
+    agent_name: input.state,
+    dispatcher_name: "fixture-dispatcher",
+    delegated: false,
+    resumable: false,
+    session_field: null,
+    status: input.status,
+    worktree_path: input.worktreePath,
+    branch_name: input.branchName,
+    base_commit: "1111111111111111111111111111111111111111",
+    worktree_commit: null,
+    integrated_commit: null,
+    started_at: input.startedAt ?? "2026-04-17T10:19:15.000Z",
+    updated_at: "2026-04-17T10:19:30.000Z",
+    heartbeat_at: input.status === "active" ? "2026-04-17T10:19:30.000Z" : null,
+    owner_pid: process.pid,
+    transition_targets: ["in-review"],
+    merge_outcome: "pending",
+    merge_attempted_at: null,
+    merge_message: null,
+    latest_error: input.incident?.message ?? null,
+    latest_session_id: null,
+    latest_duration_ms: null,
+    latest_num_turns: null,
+    latest_cost_usd: null,
+    incident: input.incident ?? null,
   };
 }

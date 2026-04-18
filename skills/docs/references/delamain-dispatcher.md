@@ -2,6 +2,8 @@
 
 The dispatcher is a generic Bun application template that scans entity items and invokes Delamain-bound agents via the Claude Agent SDK. Its runtime identity comes from a compiler-generated `runtime-manifest.json` projected into each deployed Delamain bundle.
 
+Each dispatch now runs inside its own isolated git worktree. The dispatcher owns the full lifecycle: create worktree, rewrite the bound item path into that worktree, run the SDK session with that worktree as `cwd`, auto-commit successful edits, serialize merge-back to the integration checkout, and preserve blocked or orphaned worktrees instead of silently dropping work.
+
 ## Audience
 
 ALS Developer, ALS Architect, Claude.
@@ -27,9 +29,10 @@ The dispatcher is supported from deployed `.claude/delamains/<name>/` bundles. R
 
 ## Telemetry Files
 
-The dispatcher now emits two runtime surfaces per deployed Delamain bundle:
+The dispatcher now emits three runtime surfaces per deployed Delamain bundle:
 
 - `status.json` — the small compatibility heartbeat for liveness, PID checks, poll cadence, direct active dispatch count, scanned item count, and current delegated handoffs
+- `runtime/worktree-state.json` — the current runtime registry for active, blocked, orphaned, guarded, and delegated dispatch ownership
 - `telemetry/events.jsonl` — the bounded recent activity log for dashboard history
 
 `telemetry/events.jsonl` is append-only at the contract level, but the writer keeps only the most recent bounded window of events so the file does not grow without limit. Each event is a single JSON object using schema `als-delamain-telemetry-event@1`.
@@ -37,10 +40,14 @@ The dispatcher now emits two runtime surfaces per deployed Delamain bundle:
 Recent telemetry events include:
 
 - dispatch start
+- worktree prepared
 - dispatch finish
 - dispatch failure
+- merge success
+- merge blocked
+- cleanup
 
-Each event records the Delamain name, module id, item id, current state, agent identity, resume metadata, transition targets, duration, turn count, cost, and error text when present.
+Each event records the Delamain name, module id, dispatch id, item id, current state, agent identity, resume metadata, worktree path and branch, merge outcome, transition targets, duration, turn count, cost, and error text when present.
 
 Older dispatcher copies that only emit `status.json` remain valid. Consumers must degrade to heartbeat-only mode instead of failing when `telemetry/events.jsonl` is absent.
 
@@ -54,7 +61,8 @@ Entry point. Handles:
 - **System root discovery**: walks up directories from its own location looking for `.als/system.ts`. Also respects the `SYSTEM_ROOT` environment variable.
 - **Template version check**: reads local `dispatcher/VERSION` and canonical `${CLAUDE_PLUGIN_ROOT}/skills/new/references/dispatcher/VERSION`, logs the current/latest versions, and fails before polling when either source is missing or malformed.
 - **Startup**: calls `resolve()` once to load `runtime-manifest.json`, local `delamain.yaml`, and state-agent files, then enters the poll loop.
-- **Poll loop**: scans items at a configurable interval (`POLL_MS`, default 30s). Tracks direct dispatch ownership separately from delegated handoffs, releases either guard when the item's status changes, and refreshes the heartbeat after dispatch completions.
+- **Runtime boot**: creates one `DispatcherRuntime`, runs orphan sweep at startup, and keeps the persisted dispatch registry as the source of truth for active, blocked, orphaned, guarded, and delegated ownership.
+- **Poll loop**: scans items at a configurable interval (`POLL_MS`, default 30s). Reconciles registry records against current item status, suppresses redispatch for unresolved incidents, runs periodic orphan sweeping, and refreshes the heartbeat after dispatch completions.
 - **Runtime hardening**: keeps the event loop alive with an internal keepalive server, logs tick and process lifecycle events, and ignores stray `SIGTERM` so dispatcher children do not accidentally kill the parent runtime.
 
 ### `src/preflight.ts`
@@ -65,14 +73,52 @@ Auth-strip shim.
 - Protects plain `bun run` entrypoints from the SDK's module-init auth capture
 - Keeps the later `sdkEnv` clone aligned with the already-stripped process environment
 
+### `src/dispatcher-runtime.ts`
+
+Runtime coordinator for isolated dispatch execution.
+
+- Creates per-dispatch worktrees
+- Owns the persisted dispatch registry
+- Finalizes successful and failed dispatches
+- Holds the repo-mutation lease during merge-back
+- Produces heartbeat counts for active, blocked, orphaned, guarded, and delegated runtime state
+
+### `src/dispatch-registry.ts`
+
+Persistent registry over `runtime/worktree-state.json`.
+
+- Stores the current dispatch/worktree owner for each item
+- Survives dispatcher restarts
+- Suppresses redispatch for blocked or orphaned incidents
+- Releases guards when an item's status changes
+
+### `src/git-worktree-isolation.ts`
+
+Git-backed isolation strategy.
+
+- Creates per-dispatch branches named `delamain/<dispatcher>/<item>/<dispatch-id>`
+- Creates worktrees under `~/.worktrees/delamain/<dispatcher>/<item>/<dispatch-id>/`
+- Rewrites bound item paths into the isolated workspace
+- Auto-commits successful worktree changes and cherry-picks them back into the integration checkout
+
+### `src/repo-mutation-lock.ts`
+
+Cross-process integration lease.
+
+- Serializes merge-back into the integration checkout
+- Sweeps stale locks left by dead dispatcher processes
+
+### `src/orphan-sweeper.ts`
+
+Recovery helper for stale active dispatches.
+
+- Removes pristine stale worktrees automatically
+- Preserves dirty or committed stale worktrees as orphaned incidents
+- Leaves operator-visible incident state instead of deleting ambiguous work
+
 ### `src/dispatch-lifecycle.ts`
 
-Pure lifecycle helper for the poll loop:
-
-- Tracks observed item statuses
-- Separates direct active dispatch ownership from delegated handoffs
-- Converts successful delegated launches into `delegated_items` heartbeat entries
-- Releases stale guards when the item's status changes or when a late completion arrives after the item already moved on
+Legacy in-memory lifecycle helper retained for compatibility tests. The persisted runtime registry is now the authoritative ownership mechanism.
 
 ### `src/watcher.ts`
 
@@ -89,13 +135,13 @@ The core logic. Two main functions:
 3. Loads state-agent and sub-agent markdown files from the same deployed bundle
 4. Builds a dispatch table from `actor: agent` states
 
-**`dispatch(itemId, itemFile, entry, agents, systemRoot)`** — invokes an agent:
+**`dispatch(itemId, itemFile, entry, agents, config, bundleRoot, runtime)`** — invokes an agent:
 
-1. Reads the agent's markdown file (frontmatter + body)
-2. Composes the prompt: agent body + runtime context (item ID, current state, legal transitions)
-3. Calls the Agent SDK `query()` directly with the agent's model, tools, and prompt
+1. Claims a persisted dispatch slot and creates an isolated worktree
+2. Rewrites the bound `item_file` into that worktree and adds worktree metadata to Runtime Context
+3. Calls the Agent SDK `query()` with the worktree as `cwd`
 4. Handles direct and delegated session behavior: reads session metadata, resumes direct SDK sessions, and skips SDK resume plus auto-persist for delegated states
-5. Passes sub-agents via the SDK `agents` parameter when the state declares `sub-agent`
+5. Finalizes through the runtime: auto-commit worktree changes, merge back under the repo-mutation lease, clean up on success, or preserve blocked/orphaned worktrees when integration is unsafe
 
 ### `src/runtime-manifest.ts`
 
@@ -132,6 +178,14 @@ Structured telemetry writer and reader.
 - Enforces bounded retention so only the most recent events remain on disk
 - Lets downstream consumers detect heartbeat-only legacy dispatchers when the file is absent
 
+### `src/runtime-state.ts`
+
+Shared reader/writer for `runtime/worktree-state.json`.
+
+- Normalizes persisted dispatch/worktree records
+- Lets dashboard consumers inspect current active, blocked, orphaned, guarded, and delegated state
+- Gives the dispatcher registry a single on-disk contract
+
 ## How Configuration Is Derived
 
 The dispatcher reads one generated runtime manifest plus the local Delamain bundle:
@@ -166,6 +220,7 @@ The `findSystemRoot` walk-up in `index.ts` makes the dispatcher work at any nest
 The dashboard service reads:
 
 - `status.json` for liveness and current delegated handoffs
+- `runtime/worktree-state.json` for active worktree ownership plus blocked/orphaned incidents
 - `telemetry/events.jsonl` for recent run history and failures
 - `runtime-manifest.json` for bundle identity and item binding
 - `delamain.yaml` for phase and actor context
@@ -238,6 +293,9 @@ If `dispatcher/VERSION`, `CLAUDE_PLUGIN_ROOT`, the canonical dispatcher `VERSION
 
 Delegation-aware dispatchers add:
 
+- `blocked_dispatches` — current count of blocked merge or cleanup incidents
+- `orphaned_dispatches` — current count of preserved orphaned worktrees
+- `guarded_dispatches` — current count of successful same-state direct runs still guarded against redispatch
 - `delegated_dispatches` — current number of delegated items still owned by external workers
 - `delegated_items` — array of `{ item_id, state, delegated_at }` objects for the live delegated handoffs
 

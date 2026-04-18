@@ -254,6 +254,8 @@ export function buildDispatcherViewModel(
   const spendAvailable = spendEventCount > 0;
   const spendAmountLabel = spendAvailable ? formatCurrency(spendUsd) : "n/a";
   const activeCount = Math.max(dispatcher.activeDispatches, activeDispatches.length);
+  const blockedCount = dispatcher.runtime.blocked.length;
+  const orphanedCount = dispatcher.runtime.orphaned.length;
 
   const moduleLine = dispatcher.moduleId
     ? [
@@ -262,7 +264,13 @@ export function buildDispatcherViewModel(
       dispatcher.entityPath ?? "unknown path",
     ].join(" • ")
     : "Runtime manifest unavailable";
-  const queueLine = `${activeCount} active • ${dispatcher.itemSummary.totalItems} tracked • ${dispatcher.itemsScanned} scanned`;
+  const queueLine = [
+    `${activeCount} active`,
+    `${blockedCount} blocked`,
+    `${orphanedCount} orphaned`,
+    `${dispatcher.itemSummary.totalItems} tracked`,
+    `${dispatcher.itemsScanned} scanned`,
+  ].join(" • ");
   const tickLine = dispatcher.lastTickAgeMs === null
     ? "Heartbeat unavailable"
     : `HB ${formatAge(dispatcher.lastTickAgeMs)} • poll ${formatDuration(dispatcher.pollMs)}`;
@@ -288,15 +296,21 @@ export function buildDispatcherViewModel(
 
   const items = buildItemViews(dispatcher, activeItemIds);
   const itemGroups = buildItemGroups(items);
+  const runtimeIncidentLines = buildRuntimeIncidentLines(dispatcher);
+  const errorLine = dispatcher.runtime.blocked[0]?.incident
+    ? `Blocked • ${dispatcher.runtime.blocked[0]!.item_id} • ${truncate(dispatcher.runtime.blocked[0]!.incident!.message, 96)}`
+    : dispatcher.runtime.orphaned[0]?.incident
+      ? `Orphaned • ${dispatcher.runtime.orphaned[0]!.item_id} • ${truncate(dispatcher.runtime.orphaned[0]!.incident!.message, 96)}`
+      : dispatcher.recentError
+        ? `Recent error • ${dispatcher.recentError.itemId} • ${truncate(dispatcher.recentError.error, 96)}`
+        : null;
 
   return {
     activeDispatches,
     activeLine,
     countsLine,
     detail: dispatcher.detail,
-    errorLine: dispatcher.recentError
-      ? `Recent error • ${dispatcher.recentError.itemId} • ${truncate(dispatcher.recentError.error, 96)}`
-      : null,
+    errorLine,
     heartbeat: {
       ageLabel: dispatcher.lastTickAgeMs === null ? "n/a" : formatAge(dispatcher.lastTickAgeMs),
       ageMs: dispatcher.lastTickAgeMs,
@@ -305,7 +319,11 @@ export function buildDispatcherViewModel(
       tickLine,
     },
     itemGroups,
-    itemLines: items.slice(0, 5).map((item) => `${item.id} • ${item.state} • ${item.type}`),
+    itemLines: [
+      ...runtimeIncidentLines,
+      ...items.slice(0, Math.max(0, 5 - runtimeIncidentLines.length))
+        .map((item) => `${item.id} • ${item.state} • ${item.type}`),
+    ],
     items,
     module: {
       entityName: dispatcher.entityName,
@@ -356,6 +374,36 @@ export function inferActiveDispatches(
   dispatcher: DispatcherSnapshot,
   now = coerceTimestamp(new Date().toISOString()),
 ): DispatcherActiveDispatchView[] {
+  if (dispatcher.runtime.active.length > 0) {
+    return dispatcher.runtime.active.map((record) => {
+      const elapsedMs = measureAgeMs(record.started_at, now);
+      const phase = dispatcher.states[record.state]?.phase ?? null;
+      const turnsLabel = record.latest_num_turns === null ? "turns pending" : `${record.latest_num_turns} turns`;
+      const costPending = record.latest_cost_usd === null;
+      const costLabel = costPending ? "cost pending" : formatCurrency(record.latest_cost_usd);
+      const elapsedLabel = elapsedMs === null ? "n/a" : formatDuration(elapsedMs);
+      const phaseLabel = phase ?? record.state;
+      const worktreeLabel = compactWorktreeLabel(record.branch_name, record.worktree_path);
+
+      return {
+        compactLine: `${record.item_id} ${phaseLabel} ${elapsedLabel} ${worktreeLabel}`.trim(),
+        costLabel,
+        costPending,
+        costUsd: record.latest_cost_usd,
+        elapsedLabel,
+        elapsedMs,
+        itemId: record.item_id,
+        phase,
+        startedAt: record.started_at,
+        summaryLine: `▶ ${record.item_id} ${record.state} (${elapsedLabel}, ${costLabel}, ${turnsLabel}) • ${worktreeLabel}`,
+        transitionTargets: record.transition_targets,
+        turns: record.latest_num_turns,
+        turnsLabel,
+        workerSessionId: record.latest_session_id,
+      };
+    });
+  }
+
   const ordered = dispatcher.recentEvents
     .map((event, index) => ({ event, index }))
     .sort((left, right) => {
@@ -403,6 +451,38 @@ export function inferActiveDispatches(
       workerSessionId: event.worker_session_id,
     };
   });
+}
+
+function buildRuntimeIncidentLines(dispatcher: DispatcherSnapshot): string[] {
+  const lines: string[] = [];
+
+  for (const record of dispatcher.runtime.active.slice(0, 2)) {
+    lines.push(
+      `ACTIVE ${record.item_id} • ${record.state} • ${compactWorktreeLabel(record.branch_name, record.worktree_path)}`,
+    );
+  }
+
+  for (const record of dispatcher.runtime.blocked.slice(0, 2)) {
+    lines.push(
+      `BLOCKED ${record.item_id} • ${record.incident?.kind ?? "incident"} • ${compactWorktreeLabel(record.branch_name, record.worktree_path)}`,
+    );
+  }
+
+  for (const record of dispatcher.runtime.orphaned.slice(0, 1)) {
+    lines.push(
+      `ORPHAN ${record.item_id} • ${record.incident?.kind ?? "incident"} • ${compactWorktreeLabel(record.branch_name, record.worktree_path)}`,
+    );
+  }
+
+  return lines.slice(0, 5);
+}
+
+function compactWorktreeLabel(branchName: string | null, worktreePath: string | null): string {
+  const branch = branchName ?? "branch:n/a";
+  if (!worktreePath) return branch;
+  const segments = worktreePath.split("/").filter(Boolean);
+  const tail = segments.slice(-4).join("/");
+  return `${branch} @ ${tail}`;
 }
 
 export function buildRecentHistory(

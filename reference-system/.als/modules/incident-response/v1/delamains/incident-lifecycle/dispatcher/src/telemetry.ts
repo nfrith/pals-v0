@@ -6,8 +6,13 @@ export const DEFAULT_TELEMETRY_RETENTION = 200;
 
 export type DispatchTelemetryEventType =
   | "dispatch_start"
+  | "dispatch_prepare"
   | "dispatch_finish"
-  | "dispatch_failure";
+  | "dispatch_failure"
+  | "dispatch_merge_success"
+  | "dispatch_merge_blocked"
+  | "dispatch_cleanup"
+  | "dispatch_orphaned";
 
 export interface DispatchTelemetryEvent {
   schema: typeof DISPATCH_TELEMETRY_SCHEMA;
@@ -16,8 +21,10 @@ export interface DispatchTelemetryEvent {
   timestamp: string;
   dispatcher_name: string;
   module_id: string;
+  dispatch_id: string | null;
   item_id: string;
   item_file: string;
+  isolated_item_file: string | null;
   state: string;
   agent_name: string;
   sub_agent_name: string | null;
@@ -28,6 +35,12 @@ export interface DispatchTelemetryEvent {
   runtime_session_id: string | null;
   resume_session_id: string | null;
   worker_session_id: string | null;
+  worktree_path: string | null;
+  branch_name: string | null;
+  worktree_commit: string | null;
+  integrated_commit: string | null;
+  merge_outcome: string | null;
+  incident_kind: string | null;
   transition_targets: string[];
   duration_ms: number | null;
   num_turns: number | null;
@@ -140,8 +153,12 @@ function normalizeTelemetryEvent(
     timestamp: event.timestamp ?? new Date().toISOString(),
     dispatcher_name: event.dispatcher_name ?? "unknown",
     module_id: event.module_id ?? "unknown",
+    dispatch_id: typeof event.dispatch_id === "string" ? event.dispatch_id : null,
     item_id: event.item_id ?? "unknown",
     item_file: event.item_file ?? "unknown",
+    isolated_item_file: typeof event.isolated_item_file === "string"
+      ? event.isolated_item_file
+      : null,
     state: event.state ?? "unknown",
     agent_name: event.agent_name ?? "unknown",
     sub_agent_name: event.sub_agent_name ?? null,
@@ -152,6 +169,14 @@ function normalizeTelemetryEvent(
     runtime_session_id: event.runtime_session_id ?? null,
     resume_session_id: event.resume_session_id ?? null,
     worker_session_id: event.worker_session_id ?? null,
+    worktree_path: typeof event.worktree_path === "string" ? event.worktree_path : null,
+    branch_name: typeof event.branch_name === "string" ? event.branch_name : null,
+    worktree_commit: typeof event.worktree_commit === "string" ? event.worktree_commit : null,
+    integrated_commit: typeof event.integrated_commit === "string"
+      ? event.integrated_commit
+      : null,
+    merge_outcome: typeof event.merge_outcome === "string" ? event.merge_outcome : null,
+    incident_kind: typeof event.incident_kind === "string" ? event.incident_kind : null,
     transition_targets: Array.isArray(event.transition_targets)
       ? event.transition_targets.filter((value): value is string => typeof value === "string")
       : [],

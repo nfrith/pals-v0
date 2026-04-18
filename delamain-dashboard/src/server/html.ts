@@ -129,6 +129,27 @@ const formatCounts = (dispatcher) => {
   return entries.map(([state, count]) => state + " " + count).join(" • ");
 };
 
+const compactWorktreeLabel = (record) => {
+  const branch = record.branch_name || "branch:n/a";
+  if (!record.worktree_path) return branch;
+  const tail = String(record.worktree_path).split("/").filter(Boolean).slice(-4).join("/");
+  return branch + " @ " + tail;
+};
+
+const runtimeItemLines = (dispatcher) => {
+  const lines = [];
+  for (const record of (dispatcher.runtime?.active || []).slice(0, 2)) {
+    lines.push("ACTIVE " + record.item_id + " • " + record.state + " • " + compactWorktreeLabel(record));
+  }
+  for (const record of (dispatcher.runtime?.blocked || []).slice(0, 2)) {
+    lines.push("BLOCKED " + record.item_id + " • " + (record.incident?.kind || "incident") + " • " + compactWorktreeLabel(record));
+  }
+  for (const record of (dispatcher.runtime?.orphaned || []).slice(0, 1)) {
+    lines.push("ORPHAN " + record.item_id + " • " + (record.incident?.kind || "incident") + " • " + compactWorktreeLabel(record));
+  }
+  return lines.slice(0, 5);
+};
+
 const formatTick = (dispatcher) =>
   dispatcher.lastTickAgeMs === null
     ? "No heartbeat age available"
@@ -145,16 +166,26 @@ const renderCards = (snapshot) => {
   }
 
   return snapshot.dispatchers.map((dispatcher) => {
-    const items = dispatcher.items.slice(0, 5).map((item) => "<li>" + escapeHtml(item.id + " • " + item.status + " • " + item.type) + "</li>").join("");
-    const errorLine = dispatcher.recentError
-      ? '<p class="error-line">' + escapeHtml("Recent error • " + dispatcher.recentError.itemId + " • " + dispatcher.recentError.error) + "</p>"
-      : "";
+    const itemLines = runtimeItemLines(dispatcher);
+    const itemList = [...itemLines, ...dispatcher.items
+      .slice(0, Math.max(0, 5 - itemLines.length))
+      .map((item) => item.id + " • " + item.status + " • " + item.type)];
+    const items = itemList.map((line) => "<li>" + escapeHtml(line) + "</li>").join("");
+    const runtimeBlocked = dispatcher.runtime?.blocked?.[0];
+    const runtimeOrphaned = dispatcher.runtime?.orphaned?.[0];
+    const errorLine = runtimeBlocked
+      ? '<p class="error-line">' + escapeHtml("Blocked • " + runtimeBlocked.item_id + " • " + (runtimeBlocked.incident?.message || "runtime incident")) + "</p>"
+      : runtimeOrphaned
+        ? '<p class="error-line">' + escapeHtml("Orphaned • " + runtimeOrphaned.item_id + " • " + (runtimeOrphaned.incident?.message || "runtime incident")) + "</p>"
+        : dispatcher.recentError
+          ? '<p class="error-line">' + escapeHtml("Recent error • " + dispatcher.recentError.itemId + " • " + dispatcher.recentError.error) + "</p>"
+          : "";
 
     return '<article class="dispatcher-card ' + stateClass(dispatcher.state) + '">' +
       '<header class="card-header"><div><p class="card-title">' + escapeHtml(dispatcher.name) + '</p><p class="card-detail">' + escapeHtml(dispatcher.detail) + '</p></div><span class="state-pill">' + escapeHtml(dispatcher.state) + '</span></header>' +
       '<dl class="card-lines">' +
       '<div><dt>Module</dt><dd>' + escapeHtml(formatModule(dispatcher)) + '</dd></div>' +
-      '<div><dt>Queue</dt><dd>' + escapeHtml(dispatcher.activeDispatches + " active • " + dispatcher.itemSummary.totalItems + " tracked • " + dispatcher.itemsScanned + " scanned") + '</dd></div>' +
+      '<div><dt>Queue</dt><dd>' + escapeHtml(dispatcher.activeDispatches + " active • " + (dispatcher.runtime?.blocked?.length || 0) + " blocked • " + (dispatcher.runtime?.orphaned?.length || 0) + " orphaned • " + dispatcher.itemSummary.totalItems + " tracked • " + dispatcher.itemsScanned + " scanned") + '</dd></div>' +
       '<div><dt>Heartbeat</dt><dd>' + escapeHtml(formatTick(dispatcher)) + '</dd></div>' +
       '<div><dt>States</dt><dd>' + escapeHtml(formatCounts(dispatcher)) + '</dd></div>' +
       '<div><dt>Recent</dt><dd>' + escapeHtml(formatRecent(dispatcher)) + '</dd></div>' +

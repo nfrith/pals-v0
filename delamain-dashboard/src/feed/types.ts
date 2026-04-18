@@ -1,4 +1,5 @@
 import type { DispatchTelemetryEvent } from "../../../skills/new/references/dispatcher/src/telemetry.ts";
+import type { RuntimeDispatchRecord } from "../../../skills/new/references/dispatcher/src/runtime-state.ts";
 
 export type DispatcherLivenessState = "live" | "idle" | "offline" | "stale" | "error";
 
@@ -8,6 +9,10 @@ export interface DispatcherHeartbeat {
   lastTick: string | null;
   pollMs: number | null;
   activeDispatches: number;
+   blockedDispatches: number;
+   orphanedDispatches: number;
+   guardedDispatches: number;
+   delegatedDispatches: number;
   itemsScanned: number;
 }
 
@@ -60,6 +65,16 @@ export interface DispatcherRecentError {
   error: string;
 }
 
+export interface DispatcherRuntimeState {
+  available: boolean;
+  path: string;
+  active: RuntimeDispatchRecord[];
+  blocked: RuntimeDispatchRecord[];
+  orphaned: RuntimeDispatchRecord[];
+  guarded: RuntimeDispatchRecord[];
+  delegated: RuntimeDispatchRecord[];
+}
+
 export interface DispatcherSnapshot {
   name: string;
   systemRoot: string;
@@ -85,6 +100,7 @@ export interface DispatcherSnapshot {
   recentEvents: DispatchTelemetryEvent[];
   recentRun: DispatcherRecentRun | null;
   recentError: DispatcherRecentError | null;
+  runtime: DispatcherRuntimeState;
   telemetry: {
     available: boolean;
     legacyMode: boolean;

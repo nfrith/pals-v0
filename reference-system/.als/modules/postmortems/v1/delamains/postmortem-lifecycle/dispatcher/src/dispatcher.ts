@@ -1,7 +1,9 @@
-import { readFile, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { basename, join } from "path";
 import { parse as parseYaml } from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { DispatcherRuntime } from "./dispatcher-runtime.js";
+import { parseMd, readFrontmatterField, setFrontmatterField } from "./frontmatter.js";
 import { buildSessionRuntimeState, shouldPersistDispatcherSession } from "./session-runtime.js";
 import { loadRuntimeManifest } from "./runtime-manifest.js";
 import {
@@ -64,94 +66,6 @@ export interface ResolvedConfig {
   agents: Record<string, AgentDef>;
   allStates: string[];
   dispatchTable: DispatchEntry[];
-}
-
-function parseMd(raw: string): { meta: Record<string, string>; body: string } {
-  const lines = raw.split("\n");
-  if (lines[0]?.trim() !== "---") return { meta: {}, body: raw };
-
-  const meta: Record<string, string> = {};
-  let end = 1;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i]!.trim() === "---") {
-      end = i + 1;
-      break;
-    }
-    const c = lines[i]!.indexOf(":");
-    if (c === -1) continue;
-    meta[lines[i]!.slice(0, c).trim()] = lines[i]!.slice(c + 1).trim();
-  }
-  return { meta, body: lines.slice(end).join("\n").trim() };
-}
-
-async function readFrontmatterField(
-  filePath: string,
-  field: string,
-): Promise<string | null> {
-  const lines = (await readFile(filePath, "utf-8")).split("\n");
-  if (lines[0]?.trim() !== "---") return null;
-
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i]!.trim() === "---") break;
-    const c = lines[i]!.indexOf(":");
-    if (c === -1) continue;
-    if (lines[i]!.slice(0, c).trim() !== field) continue;
-    let val = lines[i]!.slice(c + 1).trim();
-    if (val === "null" || val === "") return null;
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
-      val = val.slice(1, -1);
-    }
-    return val;
-  }
-  return null;
-}
-
-async function setFrontmatterField(
-  filePath: string,
-  field: string,
-  value: string,
-): Promise<boolean> {
-  const raw = await readFile(filePath, "utf-8");
-  const lines = raw.split("\n");
-  if (lines[0]?.trim() !== "---") {
-    console.warn(
-      `[dispatcher] could not persist ${field}: ${filePath} is missing YAML frontmatter fence`,
-    );
-    return false;
-  }
-
-  let closingFence = -1;
-  let existingLine = -1;
-
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i]!.trim() === "---") {
-      closingFence = i;
-      break;
-    }
-    const c = lines[i]!.indexOf(":");
-    if (c !== -1 && lines[i]!.slice(0, c).trim() === field) {
-      existingLine = i;
-    }
-  }
-
-  if (closingFence === -1) {
-    console.warn(
-      `[dispatcher] could not persist ${field}: ${filePath} has malformed YAML frontmatter fence`,
-    );
-    return false;
-  }
-
-  if (existingLine !== -1) {
-    lines[existingLine] = `${field}: ${value}`;
-  } else {
-    lines.splice(closingFence, 0, `${field}: ${value}`);
-  }
-
-  await writeFile(filePath, lines.join("\n"), "utf-8");
-  return true;
 }
 
 export async function resolve(
@@ -271,21 +185,37 @@ export async function dispatch(
   itemFile: string,
   entry: DispatchEntry,
   agents: Record<string, AgentDef>,
-  config: Pick<ResolvedConfig, "systemRoot" | "moduleId" | "delamainName">,
+  config: Pick<ResolvedConfig, "moduleId" | "delamainName">,
   bundleRoot: string,
-): Promise<{ success: boolean; sessionId?: string }> {
+  runtime: DispatcherRuntime,
+): Promise<{ success: boolean; blocked: boolean; sessionId?: string; dispatchId?: string }> {
   const agent = agents[entry.agentName]!;
+  const prepared = await runtime.prepareDispatch(itemId, itemFile, entry);
+  if (!prepared) {
+    console.log(`[dispatcher] ${itemId} skipped: runtime registry already owns this item`);
+    return { success: false, blocked: true };
+  }
+  const isolatedItemFile = prepared.isolatedItemFile;
 
   let storedSessionId: string | null = null;
   if (entry.sessionField) {
     try {
-      storedSessionId = await readFrontmatterField(itemFile, entry.sessionField);
+      storedSessionId = await readFrontmatterField(isolatedItemFile, entry.sessionField);
     } catch (error) {
+      await runtime.finalizeDispatch({
+        prepared,
+        entry,
+        sessionId: null,
+        durationMs: 0,
+        numTurns: null,
+        costUsd: null,
+        success: false,
+      });
       console.error(
         `[dispatcher] ${itemId} failed reading session metadata from ${entry.sessionField}:`,
         error instanceof Error ? error.message : error,
       );
-      return { success: false };
+      return { success: false, blocked: false, dispatchId: prepared.dispatchId };
     }
   }
 
@@ -313,10 +243,12 @@ export async function dispatch(
     "## Runtime Context",
     "",
     `item_id: ${itemId}`,
-    `item_file: ${itemFile}`,
+    `item_file: ${isolatedItemFile}`,
     `current_state: ${entry.state}`,
     `date: ${today()}`,
     `resume: ${sessionState.resume}`,
+    `worktree_path: ${prepared.worktreePath}`,
+    `worktree_branch: ${prepared.branchName}`,
     ...sessionContext,
     "",
     "legal_transitions:",
@@ -336,6 +268,7 @@ export async function dispatch(
       + (sessionState.resumeSessionId
         ? ` (resume: ${sessionState.resumeSessionId.slice(0, 8)}...)`
         : "")
+      + ` (worktree: ${prepared.branchName})`
       + (entry.subAgentName ? ` (+ sub-agent: ${entry.subAgentName})` : ""),
   );
 
@@ -349,28 +282,67 @@ export async function dispatch(
     }
     | null = null;
   const startedAt = Date.now();
+  const baseEvent = {
+    schema: DISPATCH_TELEMETRY_SCHEMA,
+    dispatcher_name: config.delamainName,
+    module_id: config.moduleId,
+    dispatch_id: prepared.dispatchId,
+    item_id: itemId,
+    item_file: itemFile,
+    isolated_item_file: isolatedItemFile,
+    state: entry.state,
+    agent_name: entry.agentName,
+    sub_agent_name: entry.subAgentName ?? null,
+    delegated: entry.delegated,
+    resumable: entry.resumable,
+    resume_requested: sessionState.resume === "yes",
+    session_field: entry.sessionField ?? null,
+    runtime_session_id: sessionState.runtimeSessionId ?? null,
+    resume_session_id: sessionState.resumeSessionId ?? null,
+    worktree_path: prepared.worktreePath,
+    branch_name: prepared.branchName,
+    worktree_commit: null,
+    integrated_commit: null,
+    merge_outcome: null,
+    incident_kind: null,
+    transition_targets: entry.transitions.map((transition) => transition.to),
+  } satisfies Omit<
+    DispatchTelemetryEvent,
+    "event_id"
+      | "event_type"
+      | "timestamp"
+      | "worker_session_id"
+      | "duration_ms"
+      | "num_turns"
+      | "cost_usd"
+      | "error"
+  >;
+  const heartbeat = setInterval(() => {
+    void runtime.touchDispatch(prepared.dispatchId).catch((error) => {
+      console.warn(
+        `[dispatcher] ${itemId} heartbeat update failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }, 10_000);
 
   try {
     await writeTelemetry({
-      schema: DISPATCH_TELEMETRY_SCHEMA,
+      ...baseEvent,
       event_id: crypto.randomUUID(),
       event_type: "dispatch_start",
       timestamp: new Date(startedAt).toISOString(),
-      dispatcher_name: config.delamainName,
-      module_id: config.moduleId,
-      item_id: itemId,
-      item_file: itemFile,
-      state: entry.state,
-      agent_name: entry.agentName,
-      sub_agent_name: entry.subAgentName ?? null,
-      delegated: entry.delegated,
-      resumable: entry.resumable,
-      resume_requested: sessionState.resume === "yes",
-      session_field: entry.sessionField ?? null,
-      runtime_session_id: sessionState.runtimeSessionId ?? null,
-      resume_session_id: sessionState.resumeSessionId ?? null,
       worker_session_id: null,
-      transition_targets: entry.transitions.map((transition) => transition.to),
+      duration_ms: null,
+      num_turns: null,
+      cost_usd: null,
+      error: null,
+    });
+    await writeTelemetry({
+      ...baseEvent,
+      event_id: crypto.randomUUID(),
+      event_type: "dispatch_prepare",
+      timestamp: new Date(startedAt).toISOString(),
+      worker_session_id: null,
       duration_ms: null,
       num_turns: null,
       cost_usd: null,
@@ -380,7 +352,7 @@ export async function dispatch(
     for await (const message of query({
       prompt,
       options: {
-        cwd: config.systemRoot,
+        cwd: prepared.worktreePath,
         model: agent.model ?? "sonnet",
         allowedTools: tools,
         ...(subAgents ? { agents: subAgents } : {}),
@@ -423,35 +395,6 @@ export async function dispatch(
       ? resultSummary.subtype === "success"
       : true;
 
-    await writeTelemetry({
-      schema: DISPATCH_TELEMETRY_SCHEMA,
-      event_id: crypto.randomUUID(),
-      event_type: dispatchSucceeded ? "dispatch_finish" : "dispatch_failure",
-      timestamp: new Date().toISOString(),
-      dispatcher_name: config.delamainName,
-      module_id: config.moduleId,
-      item_id: itemId,
-      item_file: itemFile,
-      state: entry.state,
-      agent_name: entry.agentName,
-      sub_agent_name: entry.subAgentName ?? null,
-      delegated: entry.delegated,
-      resumable: entry.resumable,
-      resume_requested: sessionState.resume === "yes",
-      session_field: entry.sessionField ?? null,
-      runtime_session_id: sessionState.runtimeSessionId ?? null,
-      resume_session_id: sessionState.resumeSessionId ?? null,
-      worker_session_id: sessionId ?? null,
-      transition_targets: entry.transitions.map((transition) => transition.to),
-      duration_ms: resultSummary?.durationMs ?? Date.now() - startedAt,
-      num_turns: resultSummary?.numTurns ?? null,
-      cost_usd: resultSummary?.totalCostUsd ?? null,
-      error:
-        dispatchSucceeded
-          ? null
-          : `result:${resultSummary?.subtype ?? "unknown"}`,
-    });
-
     if (
       !entry.delegated
       && entry.resumable
@@ -465,7 +408,11 @@ export async function dispatch(
     }
 
     if (shouldPersistDispatcherSession(entry, sessionId, sessionState)) {
-      const persisted = await setFrontmatterField(itemFile, entry.sessionField!, sessionId!);
+      const persisted = await setFrontmatterField(
+        isolatedItemFile,
+        entry.sessionField!,
+        sessionId!,
+      );
       if (persisted) {
         console.log(
           `[dispatcher] ${itemId} session persisted → ${entry.sessionField}`,
@@ -473,38 +420,130 @@ export async function dispatch(
       }
     }
 
-    return { success: dispatchSucceeded, sessionId };
-  } catch (error) {
+    const finalized = await runtime.finalizeDispatch({
+      prepared,
+      entry,
+      sessionId: sessionId ?? null,
+      durationMs: resultSummary?.durationMs ?? Date.now() - startedAt,
+      numTurns: resultSummary?.numTurns ?? null,
+      costUsd: resultSummary?.totalCostUsd ?? null,
+      success: dispatchSucceeded,
+    });
+
+    if (finalized.mergeOutcome === "merged") {
+      await writeTelemetry({
+        ...baseEvent,
+        event_id: crypto.randomUUID(),
+        event_type: "dispatch_merge_success",
+        timestamp: new Date().toISOString(),
+        worker_session_id: sessionId ?? null,
+        worktree_commit: finalized.worktreeCommit,
+        integrated_commit: finalized.integratedCommit,
+        merge_outcome: finalized.mergeOutcome,
+        incident_kind: null,
+        duration_ms: resultSummary?.durationMs ?? Date.now() - startedAt,
+        num_turns: resultSummary?.numTurns ?? null,
+        cost_usd: resultSummary?.totalCostUsd ?? null,
+        error: null,
+      });
+    } else if (finalized.blocked) {
+      await writeTelemetry({
+        ...baseEvent,
+        event_id: crypto.randomUUID(),
+        event_type: "dispatch_merge_blocked",
+        timestamp: new Date().toISOString(),
+        worker_session_id: sessionId ?? null,
+        worktree_commit: finalized.worktreeCommit,
+        integrated_commit: finalized.integratedCommit,
+        merge_outcome: finalized.mergeOutcome,
+        incident_kind: finalized.incidentKind,
+        duration_ms: resultSummary?.durationMs ?? Date.now() - startedAt,
+        num_turns: resultSummary?.numTurns ?? null,
+        cost_usd: resultSummary?.totalCostUsd ?? null,
+        error: finalized.incidentMessage,
+      });
+    }
+
+    if (!finalized.blocked) {
+      await writeTelemetry({
+        ...baseEvent,
+        event_id: crypto.randomUUID(),
+        event_type: "dispatch_cleanup",
+        timestamp: new Date().toISOString(),
+        worker_session_id: sessionId ?? null,
+        worktree_commit: finalized.worktreeCommit,
+        integrated_commit: finalized.integratedCommit,
+        merge_outcome: finalized.mergeOutcome,
+        incident_kind: null,
+        duration_ms: resultSummary?.durationMs ?? Date.now() - startedAt,
+        num_turns: resultSummary?.numTurns ?? null,
+        cost_usd: resultSummary?.totalCostUsd ?? null,
+        error: null,
+      });
+    }
+
+    const overallSuccess = dispatchSucceeded && !finalized.blocked;
     await writeTelemetry({
-      schema: DISPATCH_TELEMETRY_SCHEMA,
+      ...baseEvent,
+      event_id: crypto.randomUUID(),
+      event_type: overallSuccess ? "dispatch_finish" : "dispatch_failure",
+      timestamp: new Date().toISOString(),
+      worker_session_id: sessionId ?? null,
+      worktree_commit: finalized.worktreeCommit,
+      integrated_commit: finalized.integratedCommit,
+      merge_outcome: finalized.mergeOutcome,
+      incident_kind: finalized.incidentKind,
+      duration_ms: resultSummary?.durationMs ?? Date.now() - startedAt,
+      num_turns: resultSummary?.numTurns ?? null,
+      cost_usd: resultSummary?.totalCostUsd ?? null,
+      error:
+        finalized.incidentMessage
+        ?? (dispatchSucceeded ? null : `result:${resultSummary?.subtype ?? "unknown"}`),
+    });
+
+    return {
+      success: overallSuccess,
+      blocked: finalized.blocked,
+      sessionId,
+      dispatchId: prepared.dispatchId,
+    };
+  } catch (error) {
+    const finalized = await runtime.finalizeDispatch({
+      prepared,
+      entry,
+      sessionId: sessionId ?? null,
+      durationMs: Date.now() - startedAt,
+      numTurns: resultSummary?.numTurns ?? null,
+      costUsd: resultSummary?.totalCostUsd ?? null,
+      success: false,
+    });
+
+    await writeTelemetry({
+      ...baseEvent,
       event_id: crypto.randomUUID(),
       event_type: "dispatch_failure",
       timestamp: new Date().toISOString(),
-      dispatcher_name: config.delamainName,
-      module_id: config.moduleId,
-      item_id: itemId,
-      item_file: itemFile,
-      state: entry.state,
-      agent_name: entry.agentName,
-      sub_agent_name: entry.subAgentName ?? null,
-      delegated: entry.delegated,
-      resumable: entry.resumable,
-      resume_requested: sessionState.resume === "yes",
-      session_field: entry.sessionField ?? null,
-      runtime_session_id: sessionState.runtimeSessionId ?? null,
-      resume_session_id: sessionState.resumeSessionId ?? null,
       worker_session_id: sessionId ?? null,
-      transition_targets: entry.transitions.map((transition) => transition.to),
+      worktree_commit: finalized.worktreeCommit,
+      integrated_commit: finalized.integratedCommit,
+      merge_outcome: finalized.mergeOutcome,
+      incident_kind: finalized.incidentKind,
       duration_ms: Date.now() - startedAt,
       num_turns: resultSummary?.numTurns ?? null,
       cost_usd: resultSummary?.totalCostUsd ?? null,
-      error: error instanceof Error ? error.message : String(error),
+      error: finalized.incidentMessage ?? (error instanceof Error ? error.message : String(error)),
     });
     console.error(
       `[dispatcher] ${itemId} failed:`,
       error instanceof Error ? error.message : error,
     );
-    return { success: false };
+    return {
+      success: false,
+      blocked: finalized.blocked,
+      dispatchId: prepared.dispatchId,
+    };
+  } finally {
+    clearInterval(heartbeat);
   }
 
   async function writeTelemetry(event: DispatchTelemetryEvent): Promise<void> {

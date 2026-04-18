@@ -1,0 +1,15 @@
+# Delamain dispatcher runtime state (ephemeral, per-dispatch)
+reference-system/.claude/delamains/*/runtime/
+reference-system/.als/modules/*/delamains/*/runtime/
+.claude/delamains/*/runtime/
+.als/modules/*/delamains/*/runtime/
+
+# Dispatcher install artifacts (regenerated on deploy)
+reference-system/.claude/delamains/*/dispatcher/bun.lock
+reference-system/.claude/delamains/*/dispatcher/node_modules/
+.claude/delamains/*/dispatcher/bun.lock
+.claude/delamains/*/dispatcher/node_modules/
+
+# Dispatcher status heartbeats (ephemeral)
+reference-system/.claude/delamains/*/status.json
+.claude/delamains/*/status.json

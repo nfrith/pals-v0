@@ -73,6 +73,37 @@ test("runtime merges clean dispatch edits back into the integration checkout", a
   });
 });
 
+test("runtime squashes agent-authored worktree commits into the audited merge commit", async () => {
+  await withWorktreeSandbox("merge-authored-commit", async ({ runtime, systemRoot, itemFile }) => {
+    const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
+    expect(prepared).not.toBeNull();
+
+    await replaceStatus(prepared!.isolatedItemFile, "in-review");
+    await appendBody(prepared!.isolatedItemFile, "Agent-authored note.");
+    await gitCommit(prepared!.worktreePath, "agent: authored commit");
+
+    const result = await runtime.finalizeDispatch({
+      prepared: prepared!,
+      entry: ENTRY,
+      sessionId: "22222222-2222-4222-8222-222222222222",
+      durationMs: 7_500,
+      numTurns: 9,
+      costUsd: 1.25,
+      success: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.mergeOutcome).toBe("merged");
+    expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
+    expect(await readFile(itemFile, "utf-8")).toContain("Agent-authored note.");
+
+    const lastCommitMessage = await runGit(systemRoot, ["log", "-1", "--pretty=%B"]);
+    expect(lastCommitMessage).toContain("delamain: ALS-001 in-dev → in-review [factory-jobs]");
+    expect(lastCommitMessage).not.toContain("agent: authored commit");
+  });
+});
+
 test("runtime preserves blocked worktrees when integration hits a conflict", async () => {
   await withWorktreeSandbox("merge-conflict", async ({ runtime, systemRoot, itemFile }) => {
     const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
@@ -101,6 +132,36 @@ test("runtime preserves blocked worktrees when integration hits a conflict", asy
     const state = await readRuntimeState(join(systemRoot, "..", ".claude", "delamains", "factory-jobs"));
     expect(state.records[0]?.status).toBe("blocked");
     expect(state.records[0]?.incident?.kind).toBe("merge_conflict");
+  });
+});
+
+test("orphan sweeper preserves pristine records when cleanup fails", async () => {
+  await withWorktreeSandbox("orphan-cleanup-failure", async ({ runtime, bundleRoot, itemFile }) => {
+    const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
+    expect(prepared).not.toBeNull();
+    await markRecordDead(bundleRoot, "ALS-001");
+
+    const isolation = Reflect.get(runtime as object, "isolation") as {
+      cleanupDispatch: (input: { worktreePath: string | null; branchName: string | null }) => Promise<void>;
+    };
+    const originalCleanup = isolation.cleanupDispatch.bind(isolation);
+    isolation.cleanupDispatch = async () => {
+      throw new Error("simulated cleanup failure");
+    };
+
+    try {
+      const summary = await runtime.sweepOrphans();
+      expect(summary.pristineOrphansPruned).toBe(0);
+      expect(await runtime.hasOpenRecord("ALS-001")).toBe(true);
+
+      const state = await readRuntimeState(bundleRoot);
+      expect(state.records[0]?.status).toBe("orphaned");
+      expect(state.records[0]?.incident?.kind).toBe("orphan_cleanup_failed");
+      expect(state.records[0]?.latest_error).toBe("simulated cleanup failure");
+      expect(existsSync(prepared!.worktreePath)).toBe(true);
+    } finally {
+      isolation.cleanupDispatch = originalCleanup;
+    }
   });
 });
 
@@ -154,6 +215,26 @@ test("repo mutation lease sweeps stale locks left by dead owners", async () => {
     const summary = await lock.sweepStaleLease(new Date("2026-04-18T00:10:00.000Z"));
     expect(summary.released).toBe(true);
     expect(summary.stale).toBe(true);
+    expect(existsSync(lockDir)).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("repo mutation lease sweeps stale metadata-less lock directories", async () => {
+  const root = await mkdtemp(join(tmpdir(), "als-delamain-lock-metadata-less-"));
+  const systemRoot = join(root, "system");
+  await mkdir(systemRoot, { recursive: true });
+
+  const lock = new RepoMutationLock(systemRoot, { staleMs: 1 });
+  const lockDir = join(systemRoot, ".claude", "delamains", ".runtime", "repo-mutation.lock");
+  await mkdir(lockDir, { recursive: true });
+
+  try {
+    const summary = await lock.sweepStaleLease(new Date(Date.now() + 10_000));
+    expect(summary.released).toBe(true);
+    expect(summary.stale).toBe(true);
+    expect(summary.metadata).toBeNull();
     expect(existsSync(lockDir)).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -240,6 +321,11 @@ async function replaceStatus(filePath: string, status: string): Promise<void> {
     raw.replace(/^status:\s+.*$/m, `status: ${status}`),
     "utf-8",
   );
+}
+
+async function appendBody(filePath: string, line: string): Promise<void> {
+  const raw = await readFile(filePath, "utf-8");
+  await writeFile(filePath, raw + `${line}\n`, "utf-8");
 }
 
 async function readFrontmatterStatus(filePath: string): Promise<string | null> {

@@ -214,6 +214,7 @@ export class DispatcherRuntime {
     });
     const worktreeCommit = await this.isolation.commitDispatch(
       input.prepared.worktreePath,
+      input.prepared.baseCommit,
       commitMessage,
     );
 

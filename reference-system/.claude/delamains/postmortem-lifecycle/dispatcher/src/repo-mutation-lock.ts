@@ -56,11 +56,35 @@ export class RepoMutationLock {
   }
 
   async sweepStaleLease(now = new Date()): Promise<RepoMutationLockSweepResult> {
-    const metadata = await this.readMetadata();
-    if (!metadata) {
+    const lockInfo = await stat(this.lockDirectoryPath()).catch((error) => {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    });
+    if (!lockInfo) {
       return {
         released: false,
         stale: false,
+        metadata: null,
+      };
+    }
+
+    const metadata = await this.readMetadata();
+    if (!metadata) {
+      const metadataLessLockIsStale = now.getTime() - lockInfo.mtime.getTime() > this.staleMs;
+      if (!metadataLessLockIsStale) {
+        return {
+          released: false,
+          stale: false,
+          metadata: null,
+        };
+      }
+
+      await rm(this.lockDirectoryPath(), { recursive: true, force: true });
+      return {
+        released: true,
+        stale: true,
         metadata: null,
       };
     }
@@ -104,11 +128,16 @@ export class RepoMutationLock {
           acquired_at: new Date().toISOString(),
           owner_pid: process.pid,
         };
-        await writeFile(
-          this.metadataFilePath(),
-          JSON.stringify(record, null, 2) + "\n",
-          "utf-8",
-        );
+        try {
+          await writeFile(
+            this.metadataFilePath(),
+            JSON.stringify(record, null, 2) + "\n",
+            "utf-8",
+          );
+        } catch (error) {
+          await rm(this.lockDirectoryPath(), { recursive: true, force: true });
+          throw error;
+        }
 
         return async () => {
           await rm(this.lockDirectoryPath(), { recursive: true, force: true });

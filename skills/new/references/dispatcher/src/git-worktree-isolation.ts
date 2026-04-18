@@ -115,13 +115,30 @@ export class GitWorktreeIsolationStrategy {
     };
   }
 
-  async commitDispatch(worktreePath: string, message: string): Promise<string | null> {
-    const status = await runGit(worktreePath, ["status", "--porcelain"]);
-    if (status.length === 0) {
+  async commitDispatch(
+    worktreePath: string,
+    baseCommit: string,
+    message: string,
+  ): Promise<string | null> {
+    const [status, headCommit] = await Promise.all([
+      runGit(worktreePath, ["status", "--porcelain"]),
+      gitHeadCommit(worktreePath),
+    ]);
+    if (status.length === 0 && headCommit === baseCommit) {
       return null;
     }
 
+    if (headCommit !== baseCommit) {
+      // Squash any agent-authored branch history back onto the dispatch base so a
+      // single audit commit carries the full isolated snapshot into integration.
+      await runGit(worktreePath, ["reset", "--soft", baseCommit]);
+    }
+
     await runGit(worktreePath, ["add", "-A"]);
+    const staged = await runGit(worktreePath, ["status", "--porcelain"]);
+    if (staged.length === 0) {
+      return null;
+    }
     await runGit(
       worktreePath,
       [

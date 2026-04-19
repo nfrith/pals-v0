@@ -20,6 +20,7 @@ All notable changes to ALS preview releases should be recorded here.
   - bound Delamain bundles now project to `.claude/delamains/`
   - deploy now reports Delamain target collisions and flat-name conflicts
 - Added compiler and deploy test coverage for Delamain validation and Claude projection behavior.
+- Changed Delamain dispatcher status polling to read committed `HEAD` state only, so unstaged and staged status edits no longer trigger dispatch; every operator transition must land in its own `delamain: <id> <from> → <to> [operator]` commit, and the dispatcher now warns when it detects a working-tree-only transition.
 
 ## 0.1.0-beta.1 - 2026-03-29
 

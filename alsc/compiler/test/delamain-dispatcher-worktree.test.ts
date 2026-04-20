@@ -66,11 +66,43 @@ test("runtime merges clean dispatch edits back into the integration checkout", a
     expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
     expect(existsSync(prepared!.worktreePath)).toBe(false);
     expect(await runtime.hasOpenRecord("ALS-001")).toBe(false);
+    expect(await runGit(systemRoot, ["log", "-1", "--pretty=%P"])).toBe(prepared!.baseCommit);
 
     const lastCommitMessage = await runGit(systemRoot, ["log", "-1", "--pretty=%B"]);
     expect(lastCommitMessage).toContain("delamain: ALS-001 in-dev → in-review [factory-jobs]");
     expect(lastCommitMessage).toContain("Dispatch-Id:");
     expect(lastCommitMessage).toContain("Cost-Usd: 0.4200");
+  });
+});
+
+test("runtime refreshes stale host bases onto an intervening main commit before merge-back", async () => {
+  await withWorktreeSandbox("merge-refresh-host", async ({ runtime, systemRoot, itemFile }) => {
+    const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
+    expect(prepared).not.toBeNull();
+
+    await replaceStatus(prepared!.isolatedItemFile, "in-review");
+    await appendBody(itemFile, "Operator note.");
+    await gitCommit(systemRoot, "operator: intervening main edit");
+    const operatorHead = await runGit(systemRoot, ["rev-parse", "HEAD"]);
+
+    const result = await runtime.finalizeDispatch({
+      prepared: prepared!,
+      entry: ENTRY,
+      sessionId: "44444444-4444-4444-8444-444444444444",
+      durationMs: 3_100,
+      numTurns: 4,
+      costUsd: 0.16,
+      success: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.mergeOutcome).toBe("merged");
+    expect(result.integratedCommit).not.toBeNull();
+    expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
+    expect(await readFile(itemFile, "utf-8")).toContain("Operator note.");
+    expect(await runGit(systemRoot, ["log", "-1", "--pretty=%P"])).toBe(operatorHead);
+    expect(existsSync(prepared!.worktreePath)).toBe(false);
   });
 });
 
@@ -246,7 +278,7 @@ test("runtime squashes agent-authored worktree commits into the audited merge co
   });
 });
 
-test("runtime preserves blocked worktrees when integration hits a conflict", async () => {
+test("runtime preserves blocked worktrees when stale-base refresh hits a conflict", async () => {
   await withWorktreeSandbox("merge-conflict", async ({ runtime, systemRoot, itemFile }) => {
     const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
     expect(prepared).not.toBeNull();
@@ -254,6 +286,7 @@ test("runtime preserves blocked worktrees when integration hits a conflict", asy
     await replaceStatus(prepared!.isolatedItemFile, "in-review");
     await replaceStatus(itemFile, "operator-edit");
     await gitCommit(systemRoot, "operator: conflict edit");
+    const operatorHead = await runGit(systemRoot, ["rev-parse", "HEAD"]);
 
     const result = await runtime.finalizeDispatch({
       prepared: prepared!,
@@ -267,13 +300,52 @@ test("runtime preserves blocked worktrees when integration hits a conflict", asy
 
     expect(result.success).toBe(false);
     expect(result.blocked).toBe(true);
-    expect(result.incidentKind).toBe("merge_conflict");
+    expect(result.incidentKind).toBe("stale_base_conflict");
     expect(existsSync(prepared!.worktreePath)).toBe(true);
     expect(await readFrontmatterStatus(itemFile)).toBe("operator-edit");
+    expect(prepared!.baseCommit).toBe(operatorHead);
 
     const state = await readRuntimeState(join(systemRoot, "..", ".claude", "delamains", "factory-jobs"));
     expect(state.records[0]?.status).toBe("blocked");
-    expect(state.records[0]?.incident?.kind).toBe("merge_conflict");
+    expect(state.records[0]?.incident?.kind).toBe("stale_base_conflict");
+    expect(state.records[0]?.base_commit).toBe(operatorHead);
+    expect(state.records[0]?.worktree_commit).not.toBeNull();
+  });
+});
+
+test("runtime blocks stale-base refresh when main moves below the recorded base", async () => {
+  await withWorktreeSandbox("merge-force-push-below-base", async ({ runtime, systemRoot, itemFile }) => {
+    await appendBody(itemFile, "Pre-dispatch baseline.");
+    await gitCommit(systemRoot, "operator: pre-dispatch baseline");
+    const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
+    expect(prepared).not.toBeNull();
+    const baseCommit = prepared!.baseCommit;
+    const resetTarget = await runGit(systemRoot, ["rev-parse", `${baseCommit}^`]);
+
+    await replaceStatus(prepared!.isolatedItemFile, "in-review");
+    await runGit(systemRoot, ["reset", "--hard", resetTarget]);
+
+    const result = await runtime.finalizeDispatch({
+      prepared: prepared!,
+      entry: ENTRY,
+      sessionId: null,
+      durationMs: 1_900,
+      numTurns: 2,
+      costUsd: 0.08,
+      success: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.blocked).toBe(true);
+    expect(result.incidentKind).toBe("stale_base_conflict");
+    expect(await runGit(systemRoot, ["rev-parse", "HEAD"])).toBe(resetTarget);
+    expect(await readFrontmatterStatus(itemFile)).toBe("in-dev");
+    expect(existsSync(prepared!.worktreePath)).toBe(true);
+
+    const state = await readRuntimeState(join(systemRoot, "..", ".claude", "delamains", "factory-jobs"));
+    expect(state.records[0]?.status).toBe("blocked");
+    expect(state.records[0]?.incident?.kind).toBe("stale_base_conflict");
+    expect(state.records[0]?.base_commit).toBe(resetTarget);
   });
 });
 

@@ -109,7 +109,8 @@ Git-backed isolation strategy.
 - Creates host worktrees under `~/.worktrees/delamain/<dispatcher>/<item>/<dispatch-id>/`
 - Mounts any declared `runtime-manifest.json.submodules` as nested git worktrees at the same repo-relative paths inside that host worktree
 - Rewrites bound item paths into the isolated workspace
-- Auto-commits mounted submodule worktrees first, cherry-picks them into their primary clones, repoints the mounted checkout to the integrated SHA, then commits and cherry-picks the host worktree
+- Auto-commits isolated worktrees into provisional single-commit snapshots, refreshes each mounted submodule and the host worktree onto the current primary `HEAD`, fast-forwards mounted primaries first, repoints the mounted checkout to the integrated SHA, then re-squashes and fast-forwards the host worktree
+- Blocks concurrent-overlap refresh failures as `stale_base_conflict`, preserving the host and mounted worktrees for operator or agent-assist follow-up
 - Rolls back already-integrated primary clones if a later repo in the merge transaction fails, leaving the host worktree and mounted submodule worktrees preserved for inspection
 
 ### `src/repo-mutation-lock.ts`

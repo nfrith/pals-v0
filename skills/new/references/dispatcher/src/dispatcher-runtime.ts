@@ -246,14 +246,19 @@ export class DispatcherRuntime {
         entry.baseCommit,
         commitMessage,
       );
-      if (worktreeCommit) {
-        mountedSubmoduleCommits.push({
-          repoPath: entry.repoPath,
-          worktreeCommit,
-        });
-      }
+      mountedSubmoduleCommits.push({
+        repoPath: entry.repoPath,
+        worktreeCommit,
+        integratedCommit: null,
+      });
     }
 
+    let hostWorktreeCommit = await this.isolation.commitDispatch(
+      input.prepared.worktreePath,
+      input.prepared.baseCommit,
+      commitMessage,
+    );
+    let refreshedMountedSubmodules = mountedSubmoduleCommits;
     const mergeResult = await this.repoMutationLock.withLease(
       {
         dispatch_id: input.prepared.dispatchId,
@@ -261,11 +266,56 @@ export class DispatcherRuntime {
         item_id: input.prepared.itemId,
         worktree_path: input.prepared.worktreePath,
       },
-      () => this.isolation.mergeBack({
-        prepared: input.prepared,
-        hostCommitMessage: commitMessage,
-        mountedSubmoduleCommits,
-      }),
+      async () => {
+        const refreshResult = await this.isolation.refreshMergeBack({
+          prepared: input.prepared,
+          hostWorktreeCommit,
+          mountedSubmodules: refreshedMountedSubmodules,
+        });
+        hostWorktreeCommit = refreshResult.hostWorktreeCommit;
+        refreshedMountedSubmodules = refreshResult.mountedSubmodules;
+
+        const refreshedMetadata = mergeMountedSubmoduleMetadata(
+          input.prepared.mountedSubmodules,
+          refreshedMountedSubmodules,
+        );
+        try {
+          await this.registry.updateByItemId(input.prepared.itemId, (record) => ({
+            ...record,
+            updated_at: new Date().toISOString(),
+            base_commit: input.prepared.baseCommit,
+            worktree_commit: hostWorktreeCommit,
+            mounted_submodules: refreshedMetadata,
+            merge_message: commitMessage,
+          }));
+        } catch (error) {
+          return {
+            status: "blocked",
+            worktreeCommit: hostWorktreeCommit,
+            integratedCommit: null,
+            mountedSubmodules: refreshedMountedSubmodules,
+            error: error instanceof Error ? error.message : String(error),
+            incidentKind: "merge_back_failed",
+          };
+        }
+
+        if (refreshResult.status !== "ready") {
+          return {
+            status: "blocked",
+            worktreeCommit: hostWorktreeCommit,
+            integratedCommit: null,
+            mountedSubmodules: refreshedMountedSubmodules,
+            error: refreshResult.error,
+            incidentKind: refreshResult.incidentKind,
+          };
+        }
+
+        return this.isolation.mergeBack({
+          prepared: input.prepared,
+          hostCommitMessage: commitMessage,
+          mountedSubmodules: refreshedMountedSubmodules,
+        });
+      },
     );
 
     const mergedMountedSubmodules = mergeMountedSubmoduleMetadata(

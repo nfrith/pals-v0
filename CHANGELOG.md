@@ -4,6 +4,7 @@ All notable changes to ALS preview releases should be recorded here.
 
 ## Unreleased
 
+- Refreshed Delamain merge-back worktrees onto the current primary `HEAD` before integration, replaced cherry-pick replay with rebase plus `merge --ff-only`, and introduced preserved `stale_base_conflict` incidents for stale-base overlaps and force-push-below-base blocks.
 - Added manifest-driven mounted submodule worktrees to the Delamain dispatcher runtime, including dual-repo audit trailers and atomic rollback on multi-repo merge-back failure.
 - Added a new `/foundry` skill plus an empty `foundry/` ALS mini-system as the curated bundled source for end-user module installs.
 - Retargeted `/install` to hand first-touch operators to `/foundry`.

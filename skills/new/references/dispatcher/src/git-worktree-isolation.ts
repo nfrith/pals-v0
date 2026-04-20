@@ -9,6 +9,7 @@ import {
   gitHeadCommit,
   gitIsAncestor,
   gitIsClean,
+  gitIsCleanIgnoreSubmodules,
   gitMergeFastForward,
   gitRebase,
   runCommand,
@@ -586,7 +587,7 @@ export class GitWorktreeIsolationStrategy {
   private async findDirtyIntegrationRepo(
     mountedSubmodules: ReadonlyArray<MountedSubmoduleWorktree>,
   ): Promise<string | null> {
-    if (!(await gitIsClean(this.systemRoot))) {
+    if (!(await gitIsCleanIgnoreSubmodules(this.systemRoot))) {
       return ".";
     }
 

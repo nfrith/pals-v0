@@ -3,10 +3,15 @@ import { mkdir, rm } from "fs/promises";
 import { homedir } from "os";
 import { dirname, join, relative, resolve } from "path";
 import {
+  gitAbortRebase,
   gitCurrentBranch,
   gitHasChanges,
   gitHeadCommit,
+  gitIsAncestor,
   gitIsClean,
+  gitIsCleanIgnoreSubmodules,
+  gitMergeFastForward,
+  gitRebase,
   runCommand,
   runGit,
 } from "./git.js";
@@ -59,24 +64,30 @@ export interface MergeBackResult {
   status: "merged" | "blocked";
   worktreeCommit: string | null;
   integratedCommit: string | null;
-  mountedSubmodules: Array<{
-    repoPath: string;
-    worktreeCommit: string | null;
-    integratedCommit: string | null;
-  }>;
+  mountedSubmodules: MountedSubmoduleMergeState[];
   error: string | null;
   incidentKind: string | null;
 }
 
-interface MountedSubmoduleCommit {
-  repoPath: string;
-  worktreeCommit: string;
+export interface RefreshMergeBackResult {
+  status: "ready" | "blocked";
+  hostWorktreeCommit: string | null;
+  mountedSubmodules: MountedSubmoduleMergeState[];
+  error: string | null;
+  incidentKind: string | null;
 }
 
-interface IntegratedSubmoduleCommit extends MountedSubmoduleCommit {
+interface MountedSubmoduleMergeState {
+  repoPath: string;
+  worktreeCommit: string | null;
+  integratedCommit: string | null;
+}
+
+interface IntegratedSubmoduleCommit extends MountedSubmoduleMergeState {
   primaryRepoPath: string;
   worktreePath: string;
   branchName: string;
+  worktreeCommit: string;
   integratedCommit: string;
   preIntegrationHead: string;
 }
@@ -236,22 +247,116 @@ export class GitWorktreeIsolationStrategy {
     return gitHeadCommit(worktreePath);
   }
 
+  async refreshMergeBack(input: {
+    prepared: Pick<IsolatedDispatch, "worktreePath" | "baseCommit" | "mountedSubmodules">;
+    hostWorktreeCommit: string | null;
+    mountedSubmodules: MountedSubmoduleMergeState[];
+  }): Promise<RefreshMergeBackResult> {
+    const dirtyRepo = await this.findDirtyIntegrationRepo(input.prepared.mountedSubmodules);
+    if (dirtyRepo) {
+      return {
+        status: "blocked",
+        hostWorktreeCommit: input.hostWorktreeCommit,
+        mountedSubmodules: buildMountedSubmoduleResults(
+          input.prepared.mountedSubmodules,
+          input.mountedSubmodules,
+        ),
+        error: `Integration checkout is dirty: ${dirtyRepo}`,
+        incidentKind: "dirty_integration_checkout",
+      };
+    }
+
+    const mountedSubmodules = buildMountedSubmoduleResults(
+      input.prepared.mountedSubmodules,
+      input.mountedSubmodules,
+    );
+    const mountedByPath = new Map(mountedSubmodules.map((entry) => [entry.repoPath, entry] as const));
+
+    try {
+      for (const mounted of input.prepared.mountedSubmodules) {
+        const currentHead = await gitHeadCommit(mounted.primaryRepoPath);
+        const current = mountedByPath.get(mounted.repoPath) ?? {
+          repoPath: mounted.repoPath,
+          worktreeCommit: null,
+          integratedCommit: null,
+        };
+        const refresh = await this.refreshWorktreeBase({
+          repoPath: mounted.repoPath,
+          worktreePath: mounted.worktreePath,
+          baseCommit: mounted.baseCommit,
+          currentHead,
+          worktreeCommit: current.worktreeCommit,
+        });
+
+        mounted.baseCommit = refresh.baseCommit;
+        current.worktreeCommit = refresh.worktreeCommit;
+        current.integratedCommit = null;
+
+        if (refresh.status !== "ready") {
+          return {
+            status: "blocked",
+            hostWorktreeCommit: input.hostWorktreeCommit,
+            mountedSubmodules,
+            error: refresh.error,
+            incidentKind: refresh.incidentKind,
+          };
+        }
+      }
+
+      const hostCurrentHead = await gitHeadCommit(this.systemRoot);
+      const hostRefresh = await this.refreshWorktreeBase({
+        repoPath: ".",
+        worktreePath: input.prepared.worktreePath,
+        baseCommit: input.prepared.baseCommit,
+        currentHead: hostCurrentHead,
+        worktreeCommit: input.hostWorktreeCommit,
+      });
+      input.prepared.baseCommit = hostRefresh.baseCommit;
+
+      if (hostRefresh.status !== "ready") {
+        return {
+          status: "blocked",
+          hostWorktreeCommit: hostRefresh.worktreeCommit,
+          mountedSubmodules,
+          error: hostRefresh.error,
+          incidentKind: hostRefresh.incidentKind,
+        };
+      }
+
+      return {
+        status: "ready",
+        hostWorktreeCommit: hostRefresh.worktreeCommit,
+        mountedSubmodules,
+        error: null,
+        incidentKind: null,
+      };
+    } catch (error) {
+      await this.abortRefreshRebases(input.prepared).catch(() => undefined);
+      return {
+        status: "blocked",
+        hostWorktreeCommit: input.hostWorktreeCommit,
+        mountedSubmodules,
+        error: error instanceof Error ? error.message : String(error),
+        incidentKind: "merge_back_failed",
+      };
+    }
+  }
+
   async mergeBack(input: {
     prepared: Pick<IsolatedDispatch, "worktreePath" | "baseCommit" | "mountedSubmodules">;
     hostCommitMessage: string;
-    mountedSubmoduleCommits: MountedSubmoduleCommit[];
+    mountedSubmodules: MountedSubmoduleMergeState[];
   }): Promise<MergeBackResult> {
     const dirtyRepo = await this.findDirtyIntegrationRepo(input.prepared.mountedSubmodules);
     if (dirtyRepo) {
       return {
         status: "blocked",
-        worktreeCommit: null,
+        worktreeCommit: await gitHeadCommit(input.prepared.worktreePath).catch(() => null),
         integratedCommit: null,
-        mountedSubmodules: input.prepared.mountedSubmodules.map((entry) => ({
-          repoPath: entry.repoPath,
-          worktreeCommit: null,
-          integratedCommit: null,
-        })),
+        mountedSubmodules: buildMountedSubmoduleResults(
+          input.prepared.mountedSubmodules,
+          input.mountedSubmodules,
+        ),
         error: `Integration checkout is dirty: ${dirtyRepo}`,
         incidentKind: "dirty_integration_checkout",
       };
@@ -262,59 +367,60 @@ export class GitWorktreeIsolationStrategy {
     );
     const integratedSubmodules: IntegratedSubmoduleCommit[] = [];
     const detachedWorktrees: IntegratedSubmoduleCommit[] = [];
+    let hostPreIntegrationHead: string | null = null;
+    let hostIntegrated = false;
 
     try {
-      for (const submoduleCommit of input.mountedSubmoduleCommits) {
-        const mounted = mountedByPath.get(submoduleCommit.repoPath);
+      for (const submoduleState of input.mountedSubmodules) {
+        if (!submoduleState.worktreeCommit) continue;
+
+        const mounted = mountedByPath.get(submoduleState.repoPath);
         if (!mounted) {
           return {
             status: "blocked",
-            worktreeCommit: null,
+            worktreeCommit: await gitHeadCommit(input.prepared.worktreePath).catch(() => null),
             integratedCommit: null,
-            mountedSubmodules: input.prepared.mountedSubmodules.map((entry) => ({
-              repoPath: entry.repoPath,
-              worktreeCommit: entry.repoPath === submoduleCommit.repoPath ? submoduleCommit.worktreeCommit : null,
-              integratedCommit: null,
-            })),
-            error: `Mounted submodule metadata missing for '${submoduleCommit.repoPath}'`,
+            mountedSubmodules: buildMountedSubmoduleResults(
+              input.prepared.mountedSubmodules,
+              input.mountedSubmodules,
+            ),
+            error: `Mounted submodule metadata missing for '${submoduleState.repoPath}'`,
             incidentKind: "merge_back_failed",
           };
         }
 
         const preIntegrationHead = await gitHeadCommit(mounted.primaryRepoPath);
-        const cherryPick = await runCommand(
-          ["git", "cherry-pick", submoduleCommit.worktreeCommit],
-          { cwd: mounted.primaryRepoPath },
-        );
-        if (cherryPick.exitCode !== 0) {
-          await this.abortCherryPick(mounted.primaryRepoPath);
+        const merge = await gitMergeFastForward(mounted.primaryRepoPath, submoduleState.worktreeCommit);
+        if (merge.exitCode !== 0) {
           await this.rollbackIntegratedRepos(integratedSubmodules);
           return {
             status: "blocked",
-            worktreeCommit: null,
+            worktreeCommit: await gitHeadCommit(input.prepared.worktreePath).catch(() => null),
             integratedCommit: null,
-            mountedSubmodules: buildBlockedMountedSubmoduleResults(
+            mountedSubmodules: buildMountedSubmoduleResults(
               input.prepared.mountedSubmodules,
-              input.mountedSubmoduleCommits,
+              input.mountedSubmodules,
             ),
-            error: formatRepoScopedError(
+            error: formatRepoScopedIntegrationError(
               mounted.repoPath,
-              cherryPick.stderr.trim() || cherryPick.stdout.trim() || "Cherry-pick failed",
-              submoduleCommit.worktreeCommit,
+              merge.stderr.trim() || merge.stdout.trim() || "Fast-forward merge failed",
+              submoduleState.worktreeCommit,
             ),
             incidentKind: "merge_conflict",
           };
         }
 
-        integratedSubmodules.push({
+        const integratedCommit = await gitHeadCommit(mounted.primaryRepoPath);
+        const integrated = {
           repoPath: mounted.repoPath,
           primaryRepoPath: mounted.primaryRepoPath,
           worktreePath: mounted.worktreePath,
           branchName: mounted.branchName,
-          worktreeCommit: submoduleCommit.worktreeCommit,
-          integratedCommit: await gitHeadCommit(mounted.primaryRepoPath),
+          worktreeCommit: submoduleState.worktreeCommit,
+          integratedCommit,
           preIntegrationHead,
-        });
+        } satisfies IntegratedSubmoduleCommit;
+        integratedSubmodules.push(integrated);
       }
 
       for (const submodule of integratedSubmodules) {
@@ -343,12 +449,9 @@ export class GitWorktreeIsolationStrategy {
         };
       }
 
-      const hostCherryPick = await runCommand(
-        ["git", "cherry-pick", hostWorktreeCommit],
-        { cwd: this.systemRoot },
-      );
-      if (hostCherryPick.exitCode !== 0) {
-        await this.abortCherryPick(this.systemRoot);
+      hostPreIntegrationHead = await gitHeadCommit(this.systemRoot);
+      const hostMerge = await gitMergeFastForward(this.systemRoot, hostWorktreeCommit);
+      if (hostMerge.exitCode !== 0) {
         await this.restoreDetachedMountedWorktrees(detachedWorktrees);
         await this.rollbackIntegratedRepos(integratedSubmodules);
         return {
@@ -360,14 +463,15 @@ export class GitWorktreeIsolationStrategy {
             worktreeCommit: entry.worktreeCommit,
             integratedCommit: null,
           })),
-          error: formatRepoScopedError(
+          error: formatRepoScopedIntegrationError(
             ".",
-            hostCherryPick.stderr.trim() || hostCherryPick.stdout.trim() || "Cherry-pick failed",
+            hostMerge.stderr.trim() || hostMerge.stdout.trim() || "Fast-forward merge failed",
             hostWorktreeCommit,
           ),
           incidentKind: "merge_conflict",
         };
       }
+      hostIntegrated = true;
 
       return {
         status: "merged",
@@ -382,16 +486,18 @@ export class GitWorktreeIsolationStrategy {
         incidentKind: null,
       };
     } catch (error) {
-      await this.abortCherryPick(this.systemRoot);
       await this.restoreDetachedMountedWorktrees(detachedWorktrees);
       await this.rollbackIntegratedRepos(integratedSubmodules);
+      if (hostIntegrated && hostPreIntegrationHead) {
+        await this.rollbackHostIntegration(hostPreIntegrationHead);
+      }
       return {
         status: "blocked",
         worktreeCommit: null,
         integratedCommit: null,
-        mountedSubmodules: buildBlockedMountedSubmoduleResults(
+        mountedSubmodules: buildMountedSubmoduleResults(
           input.prepared.mountedSubmodules,
-          input.mountedSubmoduleCommits,
+          input.mountedSubmodules,
         ),
         error: error instanceof Error ? error.message : String(error),
         incidentKind: "merge_back_failed",
@@ -481,7 +587,7 @@ export class GitWorktreeIsolationStrategy {
   private async findDirtyIntegrationRepo(
     mountedSubmodules: ReadonlyArray<MountedSubmoduleWorktree>,
   ): Promise<string | null> {
-    if (!(await gitIsClean(this.systemRoot))) {
+    if (!(await gitIsCleanIgnoreSubmodules(this.systemRoot))) {
       return ".";
     }
 
@@ -492,6 +598,81 @@ export class GitWorktreeIsolationStrategy {
     }
 
     return null;
+  }
+
+  private async refreshWorktreeBase(input: {
+    repoPath: string;
+    worktreePath: string;
+    baseCommit: string;
+    currentHead: string;
+    worktreeCommit: string | null;
+  }): Promise<{
+    status: "ready" | "blocked";
+    baseCommit: string;
+    worktreeCommit: string | null;
+    error: string | null;
+    incidentKind: string | null;
+  }> {
+    if (input.currentHead === input.baseCommit) {
+      return {
+        status: "ready",
+        baseCommit: input.currentHead,
+        worktreeCommit: input.worktreeCommit,
+        error: null,
+        incidentKind: null,
+      };
+    }
+
+    const baseStillReachable = await gitIsAncestor(
+      input.worktreePath,
+      input.baseCommit,
+      input.currentHead,
+    );
+    if (!baseStillReachable) {
+      return {
+        status: "blocked",
+        baseCommit: input.currentHead,
+        worktreeCommit: input.worktreeCommit,
+        error: formatRepoScopedRefreshError(
+          input.repoPath,
+          `recorded base ${input.baseCommit} is not an ancestor of current HEAD ${input.currentHead}`,
+        ),
+        incidentKind: "stale_base_conflict",
+      };
+    }
+
+    if (!input.worktreeCommit) {
+      await runGit(input.worktreePath, ["reset", "--hard", input.currentHead]);
+      return {
+        status: "ready",
+        baseCommit: input.currentHead,
+        worktreeCommit: null,
+        error: null,
+        incidentKind: null,
+      };
+    }
+
+    const rebase = await gitRebase(input.worktreePath, input.currentHead);
+    if (rebase.exitCode !== 0) {
+      return {
+        status: "blocked",
+        baseCommit: input.currentHead,
+        worktreeCommit: input.worktreeCommit,
+        error: formatRepoScopedRefreshError(
+          input.repoPath,
+          rebase.stderr.trim() || rebase.stdout.trim() || `rebase onto ${input.currentHead} failed`,
+        ),
+        incidentKind: "stale_base_conflict",
+      };
+    }
+
+    return {
+      status: "ready",
+      baseCommit: input.currentHead,
+      worktreeCommit: await gitHeadCommit(input.worktreePath),
+      error: null,
+      incidentKind: null,
+    };
   }
 
   private async rollbackIntegratedRepos(
@@ -522,15 +703,32 @@ export class GitWorktreeIsolationStrategy {
     }
   }
 
-  private async abortCherryPick(cwd: string): Promise<void> {
-    const result = await runCommand(
-      ["git", "cherry-pick", "--abort"],
-      { cwd },
-    );
-    if (result.exitCode !== 0 && !result.stderr.includes("no cherry-pick")) {
+  private async rollbackHostIntegration(preIntegrationHead: string): Promise<void> {
+    try {
+      await runGit(this.systemRoot, ["reset", "--hard", preIntegrationHead]);
+    } catch (error) {
       console.warn(
-        `[dispatcher] cherry-pick abort failed in '${cwd}': ${result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`}`,
+        `[dispatcher] host rollback failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  private async abortRefreshRebases(
+    prepared: Pick<IsolatedDispatch, "worktreePath" | "mountedSubmodules">,
+  ): Promise<void> {
+    const worktrees = [
+      prepared.worktreePath,
+      ...prepared.mountedSubmodules.map((entry) => entry.worktreePath),
+    ];
+
+    for (const worktreePath of worktrees) {
+      try {
+        await gitAbortRebase(worktreePath);
+      } catch (error) {
+        console.warn(
+          `[dispatcher] rebase abort failed in '${worktreePath}': ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 }
@@ -566,21 +764,29 @@ async function inspectRepoWorkspace(
   };
 }
 
-function buildBlockedMountedSubmoduleResults(
+function buildMountedSubmoduleResults(
   mountedSubmodules: ReadonlyArray<MountedSubmoduleWorktree>,
-  mountedSubmoduleCommits: ReadonlyArray<MountedSubmoduleCommit>,
-): Array<{ repoPath: string; worktreeCommit: string | null; integratedCommit: null }> {
-  const commitsByRepo = new Map(mountedSubmoduleCommits.map((entry) => [entry.repoPath, entry.worktreeCommit]));
-  return mountedSubmodules.map((entry) => ({
-    repoPath: entry.repoPath,
-    worktreeCommit: commitsByRepo.get(entry.repoPath) ?? null,
-    integratedCommit: null,
-  }));
+  updates: ReadonlyArray<MountedSubmoduleMergeState>,
+): MountedSubmoduleMergeState[] {
+  const updatesByRepo = new Map(updates.map((entry) => [entry.repoPath, entry]));
+  return mountedSubmodules.map((entry) => {
+    const update = updatesByRepo.get(entry.repoPath);
+    return {
+      repoPath: entry.repoPath,
+      worktreeCommit: update?.worktreeCommit ?? null,
+      integratedCommit: update?.integratedCommit ?? null,
+    } satisfies MountedSubmoduleMergeState;
+  });
 }
 
-function formatRepoScopedError(repoPath: string, message: string, commit: string): string {
+function formatRepoScopedRefreshError(repoPath: string, message: string): string {
   const scope = repoPath === "." ? "host repo" : `repo '${repoPath}'`;
-  return `${scope} cherry-pick ${commit} failed: ${message}`;
+  return `${scope} stale-base refresh failed: ${message}`;
+}
+
+function formatRepoScopedIntegrationError(repoPath: string, message: string, commit: string): string {
+  const scope = repoPath === "." ? "host repo" : `repo '${repoPath}'`;
+  return `${scope} fast-forward merge ${commit} failed: ${message}`;
 }
 
 function buildWorktreeBranchName(

@@ -76,6 +76,17 @@ export async function gitStatusPorcelainNoUntracked(cwd: string): Promise<string
   return runGit(cwd, ["status", "--porcelain", "--untracked-files=no"]);
 }
 
+export async function gitStatusPorcelainNoUntrackedIgnoreSubmodules(
+  cwd: string,
+): Promise<string> {
+  return runGit(cwd, [
+    "status",
+    "--porcelain",
+    "--untracked-files=no",
+    "--ignore-submodules=all",
+  ]);
+}
+
 export async function gitListTrackedFilesAtHead(
   cwd: string,
   pathspec?: string,
@@ -141,6 +152,54 @@ export async function gitHasChanges(cwd: string, baseCommit: string): Promise<bo
 
 export async function gitIsClean(cwd: string): Promise<boolean> {
   return (await gitStatusPorcelainNoUntracked(cwd)).length === 0;
+}
+
+export async function gitIsCleanIgnoreSubmodules(cwd: string): Promise<boolean> {
+  return (await gitStatusPorcelainNoUntrackedIgnoreSubmodules(cwd)).length === 0;
+}
+
+export async function gitIsAncestor(
+  cwd: string,
+  ancestor: string,
+  descendant: string,
+): Promise<boolean> {
+  const result = await runCommand(
+    ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+    { cwd },
+  );
+
+  if (result.exitCode === 0) return true;
+  if (result.exitCode === 1) return false;
+
+  throw new Error(
+    `git merge-base --is-ancestor ${ancestor} ${descendant} failed in '${cwd}': ${
+      result.stderr || result.stdout || `exit ${result.exitCode}`
+    }`,
+  );
+}
+
+export async function gitMergeFastForward(
+  cwd: string,
+  commit: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return runCommand(["git", "merge", "--ff-only", commit], { cwd });
+}
+
+export async function gitRebase(
+  cwd: string,
+  onto: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return runCommand(["git", "rebase", onto], { cwd });
+}
+
+export async function gitAbortRebase(cwd: string): Promise<void> {
+  const result = await runCommand(["git", "rebase", "--abort"], { cwd });
+  const stderr = result.stderr.toLowerCase();
+  if (result.exitCode !== 0 && !stderr.includes("no rebase in progress")) {
+    throw new Error(
+      `git rebase --abort failed in '${cwd}': ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
+    );
+  }
 }
 
 export function isProcessAlive(pid: number | null): boolean {

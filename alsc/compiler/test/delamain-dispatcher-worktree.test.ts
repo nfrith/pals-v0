@@ -158,6 +158,51 @@ test("runtime mounts declared submodule worktrees and merges dual-repo dispatch 
   });
 });
 
+test("runtime refreshes mounted submodule base onto an intervening submodule-primary commit", async () => {
+  await withSubmoduleWorktreeSandbox("submodule-refresh-drift", async ({
+    runtime,
+    systemRoot,
+    itemFile,
+    primarySubmoduleRoot,
+  }) => {
+    const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
+    expect(prepared).not.toBeNull();
+    expect(prepared?.mountedSubmodules).toHaveLength(1);
+    const mounted = prepared!.mountedSubmodules[0]!;
+    const originalSubmoduleBase = mounted.baseCommit;
+
+    await replaceStatus(prepared!.isolatedItemFile, "in-review");
+    await appendBody(join(mounted.worktreePath, "CHANGELOG.md"), "Mounted submodule note.");
+
+    await writeFile(join(primarySubmoduleRoot, ".gitignore"), "scratch\n", "utf-8");
+    await gitCommit(primarySubmoduleRoot, "operator: disjoint submodule primary edit");
+    const operatorSubmoduleHead = await runGit(primarySubmoduleRoot, ["rev-parse", "HEAD"]);
+    expect(operatorSubmoduleHead).not.toBe(originalSubmoduleBase);
+
+    const result = await runtime.finalizeDispatch({
+      prepared: prepared!,
+      entry: ENTRY,
+      sessionId: "77777777-7777-4777-8777-777777777777",
+      durationMs: 3_400,
+      numTurns: 6,
+      costUsd: 0.22,
+      success: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.mergeOutcome).toBe("merged");
+    expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
+    expect(await runGit(primarySubmoduleRoot, ["log", "-1", "--pretty=%P"])).toBe(
+      operatorSubmoduleHead,
+    );
+    expect(await runGit(systemRoot, ["rev-parse", "HEAD:nfrith-repos/als"])).toBe(
+      await runGit(primarySubmoduleRoot, ["rev-parse", "HEAD"]),
+    );
+    expect(existsSync(prepared!.worktreePath)).toBe(false);
+  });
+});
+
 test("runtime blocks submodule dispatch merge-back when the primary clone is dirty", async () => {
   await withSubmoduleWorktreeSandbox("submodule-dirty-primary", async ({
     runtime,

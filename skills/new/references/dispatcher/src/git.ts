@@ -76,6 +76,17 @@ export async function gitStatusPorcelainNoUntracked(cwd: string): Promise<string
   return runGit(cwd, ["status", "--porcelain", "--untracked-files=no"]);
 }
 
+export async function gitStatusPorcelainNoUntrackedIgnoreSubmodules(
+  cwd: string,
+): Promise<string> {
+  return runGit(cwd, [
+    "status",
+    "--porcelain",
+    "--untracked-files=no",
+    "--ignore-submodules=all",
+  ]);
+}
+
 export async function gitListTrackedFilesAtHead(
   cwd: string,
   pathspec?: string,
@@ -141,6 +152,10 @@ export async function gitHasChanges(cwd: string, baseCommit: string): Promise<bo
 
 export async function gitIsClean(cwd: string): Promise<boolean> {
   return (await gitStatusPorcelainNoUntracked(cwd)).length === 0;
+}
+
+export async function gitIsCleanIgnoreSubmodules(cwd: string): Promise<boolean> {
+  return (await gitStatusPorcelainNoUntrackedIgnoreSubmodules(cwd)).length === 0;
 }
 
 export async function gitIsAncestor(

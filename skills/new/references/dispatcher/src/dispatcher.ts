@@ -11,6 +11,7 @@ import { DispatcherRuntime } from "./dispatcher-runtime.js";
 import { parseMd, readFrontmatterField, setFrontmatterField } from "./frontmatter.js";
 import type { AgentProvider } from "./provider.js";
 import { buildSessionRuntimeState, shouldPersistDispatcherSession } from "./session-runtime.js";
+import { recoverFreshDispatchAfterMissingResumeSession } from "./resume-recovery.js";
 import { loadRuntimeManifest } from "./runtime-manifest.js";
 import {
   appendTelemetryEvent,
@@ -237,7 +238,7 @@ export async function dispatch(
     }
   }
 
-  const sessionState = buildSessionRuntimeState(entry, storedSessionId);
+  let sessionState = buildSessionRuntimeState(entry, storedSessionId);
   if (sessionState.ignoredInvalidSessionId) {
     console.log(
       `[dispatcher] ${itemId} ignoring invalid session ID: ${sessionState.ignoredInvalidSessionId}`,
@@ -368,23 +369,19 @@ export async function dispatch(
       error: null,
     });
 
-    resultSummary = await getAgentProvider(entry.provider).dispatch({
+    resultSummary = await runProviderDispatch(sessionState);
+    const recoveredState = await recoverFreshDispatchAfterMissingResumeSession({
       itemId,
-      prompt,
-      cwd: prepared.worktreePath,
-      agent: {
-        ...agent,
-        ...(entry.provider === "anthropic" ? { tools } : {}),
-      },
-      maxTurns: config.maxTurns,
-      maxBudgetUsd: config.maxBudgetUsd,
-      resumeSessionId: sessionState.resumeSessionId,
-      env: sdkEnv,
-      ...(subAgents ? { subAgents } : {}),
-      onToolUse: (detail) => {
-        console.log(`[dispatcher]   ${itemId} provider=${entry.provider} | ${detail}`);
-      },
+      isolatedItemFile,
+      entry,
+      sessionState,
+      resultSummary,
+      log: console.log,
     });
+    if (recoveredState !== sessionState) {
+      sessionState = recoveredState;
+      resultSummary = await runProviderDispatch(sessionState);
+    }
     sessionId = resultSummary.sessionId;
 
     const cost = resultSummary.totalCostUsd === null
@@ -564,5 +561,27 @@ export async function dispatch(
         `[dispatcher] ${itemId} telemetry write failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  function runProviderDispatch(
+    state: typeof sessionState,
+  ): Promise<ProviderDispatchResult> {
+    return getAgentProvider(entry.provider).dispatch({
+      itemId,
+      prompt,
+      cwd: prepared.worktreePath,
+      agent: {
+        ...agent,
+        ...(entry.provider === "anthropic" ? { tools } : {}),
+      },
+      maxTurns: config.maxTurns,
+      maxBudgetUsd: config.maxBudgetUsd,
+      resumeSessionId: state.resumeSessionId,
+      env: sdkEnv,
+      ...(subAgents ? { subAgents } : {}),
+      onToolUse: (detail) => {
+        console.log(`[dispatcher]   ${itemId} provider=${entry.provider} | ${detail}`);
+      },
+    });
   }
 }

@@ -85,6 +85,10 @@ export interface ProviderDispatchResult {
   totalCostUsd: number | null;
   durationMs: number;
   numTurns: number;
+  resumeRecovery?: {
+    reason: "session_missing";
+    logMessage: string;
+  };
 }
 
 export interface AgentProviderAdapter {
@@ -100,10 +104,27 @@ export interface OpenAIUsage {
 const providers: Record<AgentProvider, AgentProviderAdapter> = {
   anthropic: {
     async dispatch(input) {
-      const { query } = await loadAnthropicSdk();
+      const { getSessionInfo, query } = await loadAnthropicSdk();
       let sessionId = input.resumeSessionId;
       let resultSummary: ProviderDispatchResult | null = null;
       const startedAt = Date.now();
+
+      if (input.resumeSessionId) {
+        const sessionInfo = await getSessionInfo(input.resumeSessionId);
+        if (!sessionInfo) {
+          return {
+            sessionId,
+            subtype: "resume_session_missing",
+            totalCostUsd: null,
+            durationMs: Date.now() - startedAt,
+            numTurns: 0,
+            resumeRecovery: {
+              reason: "session_missing",
+              logMessage: "resume failed (session expired), spawning fresh",
+            },
+          };
+        }
+      }
 
       for await (const message of query({
         prompt: input.prompt,
@@ -132,6 +153,7 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
         }
 
         if (message.type === "result") {
+          const errors = extractAnthropicResultErrors(message);
           resultSummary = {
             sessionId,
             subtype: message.subtype,
@@ -139,6 +161,14 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
               typeof message.total_cost_usd === "number" ? message.total_cost_usd : null,
             durationMs: message.duration_ms,
             numTurns: message.num_turns,
+            ...(input.resumeSessionId && isAnthropicMissingSessionError(errors)
+              ? {
+                resumeRecovery: {
+                  reason: "session_missing" as const,
+                  logMessage: "resume failed (session expired), spawning fresh",
+                },
+              }
+              : {}),
           };
         }
       }
@@ -164,6 +194,7 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
       let numTurns = 0;
       let totalCostUsd = 0;
       let failureSubtype = "success";
+      let resumeRecovery: ProviderDispatchResult["resumeRecovery"];
       const model = input.agent.model ?? "gpt-5.4";
       if (!resolveOpenAIModelPricing(model)) {
         throw new Error(
@@ -235,6 +266,14 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
 
           if (type === "turn.failed" || type === "error") {
             failureSubtype = "error";
+            if (type === "turn.failed" && input.resumeSessionId) {
+              resumeRecovery = {
+                reason: "session_missing",
+                logMessage:
+                  "codex resume turn.failed -> assuming session-gone, falling back fresh",
+              };
+              break;
+            }
             continue;
           }
 
@@ -252,6 +291,7 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
           totalCostUsd,
           durationMs: Date.now() - startedAt,
           numTurns,
+          resumeRecovery,
         };
       }
 
@@ -261,6 +301,7 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
         totalCostUsd,
         durationMs: Date.now() - startedAt,
         numTurns,
+        resumeRecovery,
       };
     },
   },
@@ -331,7 +372,7 @@ function normalizeAdditionalDirectory(cwd: string, value: string): string {
 
 async function loadCodexSdk(): Promise<{ Codex: new (options: Record<string, unknown>) => any }> {
   try {
-    return await import("@openai/codex-sdk");
+    return await codexSdkLoader();
   } catch (error) {
     throw new Error(
       `OpenAI dispatcher integration requires '@openai/codex-sdk': ${error instanceof Error ? error.message : String(error)}`,
@@ -340,15 +381,36 @@ async function loadCodexSdk(): Promise<{ Codex: new (options: Record<string, unk
 }
 
 async function loadAnthropicSdk(): Promise<{
+  getSessionInfo: (sessionId: string) => Promise<unknown>;
   query: (input: { prompt: string; options: Record<string, unknown> }) => AsyncIterable<any>;
 }> {
   try {
-    return await import("@anthropic-ai/claude-agent-sdk");
+    return await anthropicSdkLoader();
   } catch (error) {
     throw new Error(
       `Anthropic dispatcher integration requires '@anthropic-ai/claude-agent-sdk': ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+let codexSdkLoader = () => import("@openai/codex-sdk");
+let anthropicSdkLoader = () => import("@anthropic-ai/claude-agent-sdk");
+
+export function setCodexSdkLoaderForTests(
+  loader: typeof codexSdkLoader,
+): void {
+  codexSdkLoader = loader;
+}
+
+export function setAnthropicSdkLoaderForTests(
+  loader: typeof anthropicSdkLoader,
+): void {
+  anthropicSdkLoader = loader;
+}
+
+export function resetProviderSdkLoadersForTests(): void {
+  codexSdkLoader = () => import("@openai/codex-sdk");
+  anthropicSdkLoader = () => import("@anthropic-ai/claude-agent-sdk");
 }
 
 function extractCodexEventType(event: unknown): string | null {
@@ -358,6 +420,16 @@ function extractCodexEventType(event: unknown): string | null {
 
   const value = event as Record<string, unknown>;
   return asString(value["type"]) ?? asString(value["event"]) ?? null;
+}
+
+function extractAnthropicResultErrors(message: unknown): string[] {
+  const value = asRecord(message);
+  const errors = value ? value["errors"] : null;
+  if (!Array.isArray(errors)) {
+    return [];
+  }
+
+  return errors.filter((entry): entry is string => typeof entry === "string");
 }
 
 function extractCodexUsage(event: unknown): OpenAIUsage | null {
@@ -444,4 +516,13 @@ function resolveOpenAIModelPricing(model: string): OpenAIModelPricing | null {
   }
 
   return null;
+}
+
+function isAnthropicMissingSessionError(errors: string[]): boolean {
+  return errors.some((error) => {
+    const normalized = error.trim().toLowerCase();
+    return normalized.includes("no conversation found")
+      || normalized.includes("session id")
+      || normalized.includes("conversation no longer exists");
+  });
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded
 
 ## Context
 
@@ -70,3 +70,7 @@ Accepted
 - Rejected because the immediate need is a narrow host-behavior flag on already-existing state definitions.
 - Reuse `resumable` or `session-field` semantics to imply delegation.
 - Rejected because direct SDK-resumable states and delegated externally managed states are distinct runtime behaviors.
+
+## Superseded By
+
+- `028-agent-providers.md`

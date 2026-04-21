@@ -255,10 +255,10 @@ test("dispatcher scan ignores unstaged status transitions until they are committ
     expect(firstCapture.result).toHaveLength(1);
     expect(firstCapture.result[0]?.status).toBe("in-dev");
     expect(firstCapture.logs).toEqual([
-      "[dispatcher] ALS-018: ALS-001 has an uncommitted status transition in-dev -> in-review in the working tree; continuing to read HEAD state",
+      "[dispatcher] status-drift: ALS-001 has an uncommitted status transition in-dev -> in-review in the working tree; continuing to read HEAD state",
     ]);
     expect(firstCapture.warnings).toEqual([
-      "[dispatcher] ALS-018: status transition is not committed; dispatcher only reads HEAD — commit the transition to proceed (ALS-001: in-dev -> in-review)",
+      "[dispatcher] status-drift: status transition is not committed; dispatcher only reads HEAD — commit the transition to proceed (ALS-001: in-dev -> in-review)",
     ]);
 
     await gitCommit(systemRoot, "operator: commit status transition");
@@ -284,10 +284,10 @@ test("dispatcher scan ignores staged status transitions until they are committed
     expect(capture.result).toHaveLength(1);
     expect(capture.result[0]?.status).toBe("in-dev");
     expect(capture.logs).toEqual([
-      "[dispatcher] ALS-018: ALS-001 has an uncommitted status transition in-dev -> in-review in the working tree; continuing to read HEAD state",
+      "[dispatcher] status-drift: ALS-001 has an uncommitted status transition in-dev -> in-review in the working tree; continuing to read HEAD state",
     ]);
     expect(capture.warnings).toEqual([
-      "[dispatcher] ALS-018: status transition is not committed; dispatcher only reads HEAD — commit the transition to proceed (ALS-001: in-dev -> in-review)",
+      "[dispatcher] status-drift: status transition is not committed; dispatcher only reads HEAD — commit the transition to proceed (ALS-001: in-dev -> in-review)",
     ]);
   });
 });

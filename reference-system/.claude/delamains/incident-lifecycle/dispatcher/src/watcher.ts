@@ -171,10 +171,10 @@ function warnOnUncommittedTransition(
   }
 
   console.log(
-    `[dispatcher] ALS-018: ${itemId} has an uncommitted status transition ${headStatus} -> ${pendingStatus} in the ${source}; continuing to read HEAD state`,
+    `[dispatcher] status-drift: ${itemId} has an uncommitted status transition ${headStatus} -> ${pendingStatus} in the ${source}; continuing to read HEAD state`,
   );
   console.warn(
-    `[dispatcher] ALS-018: status transition is not committed; dispatcher only reads HEAD — commit the transition to proceed (${itemId}: ${headStatus} -> ${pendingStatus})`,
+    `[dispatcher] status-drift: status transition is not committed; dispatcher only reads HEAD — commit the transition to proceed (${itemId}: ${headStatus} -> ${pendingStatus})`,
   );
   warnedUncommittedTransitions.set(filePath, signature);
 }

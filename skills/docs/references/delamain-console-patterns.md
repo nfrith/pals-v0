@@ -62,7 +62,20 @@ The dispatcher only reads committed `HEAD` state. Unstaged or staged status edit
 
 ### Review
 
-"Review" means presenting the full entity record to the operator for reading before they make a decision. The implementation is platform-specific — a tmux popup, a file preview, a web view. The pattern is platform-agnostic: the operator can always read before acting.
+"Review" means presenting the full entity record to the operator for reading before they make a decision.
+
+The pattern is **platform-aware**: every console skill must detect the operator's platform via `$CLAUDE_CODE_ENTRYPOINT` (see [`platforms.md`](platforms.md)) and route to a platform-appropriate viewer. The console decides *how* to present; the contract is that the operator can always read the entity before acting.
+
+| Platform | Entrypoint | Viewer pattern |
+|----------|------------|----------------|
+| [`ALS-PLAT-CCLI`](platforms.md) | `cli` | Terminal-native: tmux popup, `$PAGER`, or inline Read |
+| [`ALS-PLAT-CDSK`](platforms.md) | `claude-desktop` | Ask the operator (via AskUserQuestion) whether they want to review in a browser. If yes, open the entity using whichever browser/preview MCP the operator has connected (e.g. Claude Preview, Claude in Chrome, or any successor). If no, present inline via Read. |
+| [`ALS-PLAT-CWEB`](platforms.md) | `remote` | Ask as with CDSK; fall back to inline Read |
+| [`ALS-PLAT-CCWK`](platforms.md) | *(unknown)* | Cowork-native viewer when implementation lands; fall back to inline Read until then |
+
+When a preference question is appropriate (CDSK, CWEB), only ask once per review — if the operator already answered earlier in the same action flow, respect that choice for the rest of the flow.
+
+The universal pattern does not prescribe a specific tool — neither a specific terminal viewer (`tmux-review`, `less`, `glow`, etc.) nor a specific browser MCP (Claude Preview, Claude in Chrome, or any successor). Each console skill chooses the concrete implementation based on what ships with the factory or system it belongs to. Factories intended for distribution outside their authoring repo must bundle or gracefully degrade so their Review action works without external dependencies. Do not hard-code specific MCP tool names in the pattern — tool naming on the browser side is expected to drift as Anthropic evolves the surface; rely on whichever browser/preview tool the operator has connected at run time.
 
 ## The Attention Queue
 

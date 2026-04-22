@@ -6,6 +6,20 @@ Reference for building operator console skills that work with any delamain. The 
 
 ALS Developer, ALS Architect.
 
+## Dependencies
+
+Every console skill declares its dependencies in a `# Dependencies` section at the top of its SKILL.md, above the skill's title H1 and before the attention-queue scan section. Dependencies are split into two required sub-sections:
+
+### Scanner results
+
+Pre-processor block(s) that run at skill load time using the `!` technique available to SKILL.md files — `` !`bash-command` `` on its own line. Each check emits a clear token so downstream logic and the operator-agent can branch on it: e.g. `TOKEN_NAME: OK` on success, `MISSING_TOKEN: <actionable hint>` on failure. Use this for every environment-level prerequisite that can be verified statically — credential files present and populated, required binaries on PATH, external services reachable, script-local state files initialised.
+
+### LLM Operations
+
+Runtime dependency checks the operator-agent (Claude, inside the console session) performs before proceeding with any action. Use this for checks that require judgment or agent tools: dispatcher health (is a status file present and fresh?), write-access verification against factory directories, decisions about soft dependencies, and structured reactions to `MISSING_*` tokens emitted by Scanner results.
+
+A console skill with failing Scanner results (any `MISSING_*` token) should refuse to proceed and surface the miss to the operator with a remediation hint. LLM Operations checks run every time the console is invoked, before the attention queue scan. Keep both sub-sections present even when empty — state "none" explicitly rather than omitting the sub-section.
+
 ## The Universal Operator Action Pattern
 
 Every operator state in a delamain means the same thing: the system is waiting for operator input. The console actions are universal across all operator states.

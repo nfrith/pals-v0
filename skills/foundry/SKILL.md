@@ -174,6 +174,10 @@ The operator does not request this step. New modules are useless until projected
 
 Installed modules may include delamains — autonomous dispatchers that watch for pipeline work and act on it. Delamains are inert until their dispatchers are running, which the `/bootup` skill handles. Ask the operator before invoking it.
 
+Read `$CLAUDE_CODE_ENTRYPOINT` and branch on the current platform per [`platforms.md`](../docs/references/platforms.md).
+
+### On Claude Code CLI ([`ALS-PLAT-CCLI`](../docs/references/platforms.md)) — default
+
 Use a single AskUserQuestion:
 
 - **Header**: `Bootup`
@@ -191,6 +195,30 @@ Use a single AskUserQuestion:
 | Other | Interpret. If it maps to starting dispatchers, invoke `als:bootup`. Otherwise proceed to Phase 9. |
 
 Do not read `/bootup`'s SKILL.md before invoking — the Skill tool loads it. Do not narrate what it will do — the operator sees its output directly.
+
+### On Claude Code Desktop ([`ALS-PLAT-CDSK`](../docs/references/platforms.md))
+
+Known Desktop behavior (as of 2026-04-23): freshly deployed skills are not discovered by the current session — a session restart is required before `/bootup` (or any newly installed skill) will resolve. We therefore do **not** invoke `als:bootup` from this session; the operator restarts and runs it in a fresh session.
+
+Use a single AskUserQuestion:
+
+- **Header**: `Bootup`
+- **Question**: "Start the delamain dispatchers now? Delamains are background processes that keep the system's pipelines alive — without them, modules are installed but nothing watches for or acts on pipeline work. Claude Code Desktop requires a session restart to use the newly deployed skills. To continue, please start a new session and run `/bootup` there."
+- **Options**:
+  1. `Yes — I'll restart a new session with /bootup` — description: `Acknowledge. I'll skip invoking bootup here.`
+  2. `No — I'll do it another time` — description: `Leave dispatchers stopped. You can restart and run /bootup later.`
+
+**Hand off:**
+
+| Choice | Action |
+|--------|--------|
+| Yes — I'll restart a new session with /bootup | Do **not** invoke `als:bootup` from this session. Proceed to Phase 9. |
+| No — I'll do it another time | Skip. Proceed to Phase 9. |
+| Other | Interpret. If it maps to acknowledging the restart-and-bootup path, proceed to Phase 9. Do not invoke `als:bootup` from this session regardless — the skill will not resolve until the next session. |
+
+### On other platforms (`remote`, unobserved)
+
+Default to the CLI flow above unless Desktop's deploy-discovery quirk is confirmed on that platform too.
 
 Proceed to Phase 9 after the invoked skill (if any) returns.
 

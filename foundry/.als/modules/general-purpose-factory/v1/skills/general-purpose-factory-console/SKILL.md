@@ -2,7 +2,7 @@
 name: general-purpose-factory-console
 description: Operator console for general-purpose factory jobs. Create jobs, surface operator-owned states, and route work into or out of the RPI pipeline.
 model: sonnet
-allowed-tools: Bash(bash *)
+allowed-tools: AskUserQuestion, Read, Write, Edit, Bash(bash *)
 ---
 
 # Dependencies
@@ -44,14 +44,16 @@ Use this skill when the operator wants to:
 
 1. Read all job records under the mounted jobs path.
 2. Filter to records whose `status` is `drafted` or `blocked`.
-3. Present a queue with:
+3. Present the queue to the operator **via `AskUserQuestion`** with:
    - `Create new job` as the first option, always.
    - One option per attention item using the label format `[STATUS] {id}  {title}`.
-4. After every completed action, re-scan and re-present the queue until the operator exits.
+   - `Exit` as the final option.
+   Do not present the queue as a plain markdown list — the operator must pick through the AskUserQuestion UI.
+4. After every completed action, re-scan and re-present the queue (again via `AskUserQuestion`) until the operator chooses `Exit`.
 
 ### 3. Create a new job
 
-1. Collect `title`, `description`, `type`, and optional tags from the operator.
+1. Collect `title`, `description`, `type`, and optional tags from the operator — ask for each via `AskUserQuestion` (one field per question, free-form text where no enum applies, enum options for `type`).
 2. Allocate the next `GPF-NNN` id by scanning existing jobs.
 3. Write a new record at `general-purpose-factory/jobs/{id}.md` with:
    - frontmatter fields in the authored order
@@ -65,7 +67,7 @@ Use this skill when the operator wants to:
 
 ### 4. Universal action menu
 
-When the operator selects a job in an operator-owned state, present:
+When the operator selects a job in an operator-owned state, present the action menu **via `AskUserQuestion`** with these options:
 
 - `Review` — show the full job record before any change.
 - `Respond` — do the state-specific work, then choose a legal transition.
@@ -75,8 +77,8 @@ When the operator selects a job in an operator-owned state, present:
 
 ### 5. Respond for `drafted`
 
-1. Confirm the operator is ready to start the pipeline and that `PURPOSE`, `CURRENT_STATE`, and `REQUIREMENTS` are sufficient to begin.
-2. Offer the single legal advance target: `research`.
+1. Confirm the operator is ready to start the pipeline and that `PURPOSE`, `CURRENT_STATE`, and `REQUIREMENTS` are sufficient to begin. Ask **via `AskUserQuestion`**.
+2. Offer the single legal advance target via `AskUserQuestion`: `research`.
 3. When chosen:
    - update `status` as the last edit
    - update `updated`
@@ -87,7 +89,7 @@ When the operator selects a job in an operator-owned state, present:
 
 1. Read the job sections that explain the blocker: `RESEARCH_QUESTIONS`, `PLAN_QUESTIONS`, `REVIEW`, `DEPLOYMENT`, and recent `ACTIVITY_LOG` entries.
 2. Guide the operator through the missing input or corrective edit directly in the job file.
-3. Offer the legal rework targets from the delamain:
+3. Offer the legal rework targets from the delamain **via `AskUserQuestion`**:
    - `research`
    - `planning`
    - `impl`
@@ -99,7 +101,7 @@ When the operator selects a job in an operator-owned state, present:
 
 ### 7. Terminal actions
 
-If the selected state allows exits, offer each legal terminal target separately. For this delamain that means:
+If the selected state allows exits, offer each legal terminal target **via `AskUserQuestion`**. For this delamain that means:
 
 - `shelved`
 - `cancelled`

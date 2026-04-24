@@ -18,6 +18,8 @@ Every dispatcher entrypoint begins with `import "./preflight.js";`. That sibling
 
 When a Delamain bundle is deployed to `.claude/delamains/<name>/`, later `alsc deploy claude` runs refresh `dispatcher/` from the canonical dispatcher template while preserving an existing `dispatcher/node_modules/` directory. Deploy itself does not install packages. If dependencies have never been installed in the deployed target, deploy warns and leaves installation as an explicit `bun install` step.
 
+Dispatcher runtime fixes in the canonical template are not live until the next `alsc deploy claude` refreshes the deployed bundle copy.
+
 The deployed bundle root also receives `runtime-manifest.json`. That manifest is the authoritative binding contract for the runtime:
 
 - which module mount path to scan
@@ -113,7 +115,8 @@ Git-backed isolation strategy.
 - Creates host worktrees under `~/.worktrees/delamain/<dispatcher>/<item>/<dispatch-id>/`
 - Mounts any declared `runtime-manifest.json.submodules` as nested git worktrees at the same repo-relative paths inside that host worktree
 - Rewrites bound item paths into the isolated workspace
-- Auto-commits isolated worktrees into provisional single-commit snapshots, refreshes each mounted submodule and the host worktree onto the current primary `HEAD`, fast-forwards mounted primaries first, pushes each mounted dispatch branch to the submodule `origin`, repoints the mounted checkout to the integrated SHA, then re-squashes and fast-forwards the host worktree
+- Auto-commits isolated worktrees into provisional single-commit snapshots, refreshes stale worktrees by merging current primary `HEAD` into the isolated checkout, fast-forwards mounted primaries first, pushes each mounted dispatch branch to the submodule `origin`, repoints the mounted checkout to the integrated SHA, then fast-forwards the host checkout to the refreshed worktree commit
+- If a host refresh stops on `UU <submodule>` conflicts only, performs a narrow mechanical reconciliation by merging the conflicting submodule SHA inside each mounted checkout, staging the resolved gitlink back into the host worktree, and sealing the outer merge with the dispatcher signature message
 - Blocks submodule-origin push failures as `submodule_push_failed`, preserving the host and mounted worktrees instead of landing an unreachable gitlink SHA
 - Blocks concurrent-overlap refresh failures as `stale_base_conflict`, preserving the host and mounted worktrees for operator or agent-assist follow-up
 - Rolls back already-integrated primary clones if a later repo in the merge transaction fails, leaving the host worktree and mounted submodule worktrees preserved for inspection

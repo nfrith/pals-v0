@@ -267,6 +267,7 @@ export class DispatcherRuntime {
           prepared: input.prepared,
           hostWorktreeCommit,
           mountedSubmodules: refreshedMountedSubmodules,
+          commitMessage,
         });
         hostWorktreeCommit = refreshResult.hostWorktreeCommit;
         refreshedMountedSubmodules = refreshResult.mountedSubmodules;
@@ -309,6 +310,7 @@ export class DispatcherRuntime {
         return this.isolation.mergeBack({
           prepared: input.prepared,
           hostCommitMessage: commitMessage,
+          hostWorktreeCommit,
           mountedSubmodules: refreshedMountedSubmodules,
         });
       },

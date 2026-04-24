@@ -101,7 +101,14 @@ test("runtime refreshes stale host bases onto an intervening main commit before 
     expect(result.integratedCommit).not.toBeNull();
     expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
     expect(await readFile(itemFile, "utf-8")).toContain("Operator note.");
-    expect(await runGit(systemRoot, ["log", "-1", "--pretty=%P"])).toBe(operatorHead);
+    const hostParents = (await runGit(systemRoot, ["log", "-1", "--pretty=%P"]))
+      .split(" ")
+      .filter(Boolean);
+    expect(hostParents).toHaveLength(2);
+    expect(hostParents).toContain(operatorHead);
+    const hostCommitMessage = await runGit(systemRoot, ["log", "-1", "--pretty=%B"]);
+    expect(hostCommitMessage).toContain("delamain: ALS-001 in-dev → in-review [factory-jobs]");
+    expect(hostCommitMessage).toContain("Dispatch-Id:");
     expect(existsSync(prepared!.worktreePath)).toBe(false);
   });
 });
@@ -244,12 +251,79 @@ test("runtime refreshes mounted submodule base onto an intervening submodule-pri
     expect(result.blocked).toBe(false);
     expect(result.mergeOutcome).toBe("merged");
     expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
-    expect(await runGit(primarySubmoduleRoot, ["log", "-1", "--pretty=%P"])).toBe(
-      operatorSubmoduleHead,
-    );
+    const submoduleParents = (await runGit(primarySubmoduleRoot, ["log", "-1", "--pretty=%P"]))
+      .split(" ")
+      .filter(Boolean);
+    expect(submoduleParents).toHaveLength(2);
+    expect(submoduleParents).toContain(operatorSubmoduleHead);
     expect(await runGit(systemRoot, ["rev-parse", "HEAD:nfrith-repos/als"])).toBe(
       await runGit(primarySubmoduleRoot, ["rev-parse", "HEAD"]),
     );
+    expect(existsSync(prepared!.worktreePath)).toBe(false);
+  });
+});
+
+test("runtime mechanically reconciles divergent host submodule pointer refresh", async () => {
+  await withSubmoduleWorktreeSandbox("submodule-pointer-reconcile", async ({
+    runtime,
+    systemRoot,
+    itemFile,
+    primarySubmoduleRoot,
+  }) => {
+    const prepared = await runtime.prepareDispatch("ALS-001", itemFile, ENTRY);
+    expect(prepared).not.toBeNull();
+    expect(prepared?.mountedSubmodules).toHaveLength(1);
+
+    const mounted = prepared!.mountedSubmodules[0]!;
+    await replaceStatus(prepared!.isolatedItemFile, "in-review");
+    await writeFile(join(mounted.worktreePath, "agent.txt"), "agent change\n", "utf-8");
+    await gitCommit(mounted.worktreePath, "agent: mounted submodule edit");
+
+    await writeFile(join(primarySubmoduleRoot, "operator.txt"), "operator change\n", "utf-8");
+    await gitCommit(primarySubmoduleRoot, "operator: primary submodule edit");
+    const operatorSubmoduleHead = await runGit(primarySubmoduleRoot, ["rev-parse", "HEAD"]);
+
+    await gitCommit(systemRoot, "operator: update host submodule pointer");
+    const operatorHostHead = await runGit(systemRoot, ["rev-parse", "HEAD"]);
+
+    const result = await runtime.finalizeDispatch({
+      prepared: prepared!,
+      entry: ENTRY,
+      sessionId: "88888888-8888-4888-8888-888888888888",
+      durationMs: 3_600,
+      numTurns: 6,
+      costUsd: 0.23,
+      success: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.mergeOutcome).toBe("merged");
+    expect(await readFrontmatterStatus(itemFile)).toBe("in-review");
+    expect(await readFile(join(primarySubmoduleRoot, "agent.txt"), "utf-8")).toBe("agent change\n");
+    expect(await readFile(join(primarySubmoduleRoot, "operator.txt"), "utf-8")).toBe(
+      "operator change\n",
+    );
+
+    const submoduleParents = (await runGit(primarySubmoduleRoot, ["log", "-1", "--pretty=%P"]))
+      .split(" ")
+      .filter(Boolean);
+    expect(submoduleParents).toHaveLength(2);
+    expect(submoduleParents).toContain(operatorSubmoduleHead);
+
+    const hostParents = (await runGit(systemRoot, ["log", "-1", "--pretty=%P"]))
+      .split(" ")
+      .filter(Boolean);
+    expect(hostParents).toHaveLength(2);
+    expect(hostParents).toContain(operatorHostHead);
+
+    expect(await runGit(systemRoot, ["rev-parse", "HEAD:nfrith-repos/als"])).toBe(
+      await runGit(primarySubmoduleRoot, ["rev-parse", "HEAD"]),
+    );
+
+    const hostCommitMessage = await runGit(systemRoot, ["log", "-1", "--pretty=%B"]);
+    expect(hostCommitMessage).toContain("delamain: ALS-001 in-dev → in-review [factory-jobs]");
+    expect(hostCommitMessage).toContain("Dispatch-Id:");
     expect(existsSync(prepared!.worktreePath)).toBe(false);
   });
 });

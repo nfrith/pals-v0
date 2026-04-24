@@ -208,6 +208,29 @@ export async function gitMergeFastForward(
   return runCommand(["git", "merge", "--ff-only", commit], { cwd });
 }
 
+export async function gitMerge(
+  cwd: string,
+  commit: string,
+  message: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return runCommand(
+    [
+      "git",
+      "-c",
+      "user.name=Delamain Dispatcher",
+      "-c",
+      "user.email=delamain@local",
+      "merge",
+      "--no-gpg-sign",
+      "--no-ff",
+      "-m",
+      message,
+      commit,
+    ],
+    { cwd },
+  );
+}
+
 export async function gitRebase(
   cwd: string,
   onto: string,
@@ -229,6 +252,21 @@ export async function gitAbortRebase(cwd: string): Promise<void> {
   if (result.exitCode !== 0 && !stderr.includes("no rebase in progress")) {
     throw new Error(
       `git rebase --abort failed in '${cwd}': ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
+    );
+  }
+}
+
+export async function gitAbortMerge(cwd: string): Promise<void> {
+  const result = await runCommand(["git", "merge", "--abort"], { cwd });
+  const stderr = result.stderr.toLowerCase();
+  if (
+    result.exitCode !== 0
+    && !stderr.includes("there is no merge to abort")
+    && !stderr.includes("merge_head missing")
+    && !stderr.includes("no merge to abort")
+  ) {
+    throw new Error(
+      `git merge --abort failed in '${cwd}': ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
     );
   }
 }

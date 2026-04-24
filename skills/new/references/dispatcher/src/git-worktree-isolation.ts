@@ -3,16 +3,16 @@ import { mkdir, rm } from "fs/promises";
 import { homedir } from "os";
 import { dirname, join, relative, resolve } from "path";
 import {
-  gitAbortRebase,
+  gitAbortMerge,
   gitCurrentBranch,
   gitHasChanges,
   gitHeadCommit,
   gitIsAncestor,
   gitIsClean,
   gitIsCleanIgnoreSubmodules,
+  gitMerge,
   gitMergeFastForward,
   gitPush,
-  gitRebase,
   runCommand,
   runGit,
 } from "./git.js";
@@ -91,6 +91,11 @@ interface IntegratedSubmoduleCommit extends MountedSubmoduleMergeState {
   worktreeCommit: string;
   integratedCommit: string;
   preIntegrationHead: string;
+}
+
+interface RefreshConflictEntry {
+  code: string;
+  path: string;
 }
 
 export class GitWorktreeIsolationStrategy {
@@ -252,6 +257,7 @@ export class GitWorktreeIsolationStrategy {
     prepared: Pick<IsolatedDispatch, "worktreePath" | "baseCommit" | "mountedSubmodules">;
     hostWorktreeCommit: string | null;
     mountedSubmodules: MountedSubmoduleMergeState[];
+    commitMessage: string;
   }): Promise<RefreshMergeBackResult> {
     const dirtyRepo = await this.findDirtyIntegrationRepo(input.prepared.mountedSubmodules);
     if (dirtyRepo) {
@@ -287,6 +293,7 @@ export class GitWorktreeIsolationStrategy {
           baseCommit: mounted.baseCommit,
           currentHead,
           worktreeCommit: current.worktreeCommit,
+          commitMessage: input.commitMessage,
         });
 
         mounted.baseCommit = refresh.baseCommit;
@@ -311,6 +318,8 @@ export class GitWorktreeIsolationStrategy {
         baseCommit: input.prepared.baseCommit,
         currentHead: hostCurrentHead,
         worktreeCommit: input.hostWorktreeCommit,
+        commitMessage: input.commitMessage,
+        mountedSubmodules: input.prepared.mountedSubmodules,
       });
       input.prepared.baseCommit = hostRefresh.baseCommit;
 
@@ -332,7 +341,7 @@ export class GitWorktreeIsolationStrategy {
         incidentKind: null,
       };
     } catch (error) {
-      await this.abortRefreshRebases(input.prepared).catch(() => undefined);
+      await this.abortRefreshMerges(input.prepared).catch(() => undefined);
       return {
         status: "blocked",
         hostWorktreeCommit: input.hostWorktreeCommit,
@@ -346,6 +355,7 @@ export class GitWorktreeIsolationStrategy {
   async mergeBack(input: {
     prepared: Pick<IsolatedDispatch, "worktreePath" | "baseCommit" | "mountedSubmodules">;
     hostCommitMessage: string;
+    hostWorktreeCommit: string | null;
     mountedSubmodules: MountedSubmoduleMergeState[];
   }): Promise<MergeBackResult> {
     const dirtyRepo = await this.findDirtyIntegrationRepo(input.prepared.mountedSubmodules);
@@ -456,11 +466,17 @@ export class GitWorktreeIsolationStrategy {
         detachedWorktrees.push(submodule);
       }
 
-      const hostWorktreeCommit = await this.commitDispatch(
-        input.prepared.worktreePath,
-        input.prepared.baseCommit,
-        input.hostCommitMessage,
-      );
+      let hostWorktreeCommit = input.hostWorktreeCommit;
+      if (
+        !hostWorktreeCommit
+        || !(await this.canReuseHostWorktreeCommit(input.prepared.worktreePath, hostWorktreeCommit))
+      ) {
+        hostWorktreeCommit = await this.commitDispatch(
+          input.prepared.worktreePath,
+          input.prepared.baseCommit,
+          input.hostCommitMessage,
+        );
+      }
 
       if (!hostWorktreeCommit) {
         return {
@@ -634,6 +650,8 @@ export class GitWorktreeIsolationStrategy {
     baseCommit: string;
     currentHead: string;
     worktreeCommit: string | null;
+    commitMessage: string;
+    mountedSubmodules?: ReadonlyArray<MountedSubmoduleWorktree>;
   }): Promise<{
     status: "ready" | "blocked";
     baseCommit: string;
@@ -680,15 +698,43 @@ export class GitWorktreeIsolationStrategy {
       };
     }
 
-    const rebase = await gitRebase(input.worktreePath, input.currentHead);
-    if (rebase.exitCode !== 0) {
+    const merge = await gitMerge(input.worktreePath, input.currentHead, input.commitMessage);
+    if (merge.exitCode !== 0) {
+      if (input.repoPath === ".") {
+        const reconciliation = await this.reconcileHostRefreshMerge({
+          worktreePath: input.worktreePath,
+          currentHead: input.currentHead,
+          commitMessage: input.commitMessage,
+          mountedSubmodules: input.mountedSubmodules ?? [],
+        });
+        if (reconciliation.status === "ready") {
+          return {
+            status: "ready",
+            baseCommit: input.currentHead,
+            worktreeCommit: await gitHeadCommit(input.worktreePath),
+            error: null,
+            incidentKind: null,
+          };
+        }
+        if (reconciliation.status === "blocked") {
+          return {
+            status: "blocked",
+            baseCommit: input.currentHead,
+            worktreeCommit: input.worktreeCommit,
+            error: reconciliation.error,
+            incidentKind: "stale_base_conflict",
+          };
+        }
+      }
+
+      await gitAbortMerge(input.worktreePath).catch(() => undefined);
       return {
         status: "blocked",
         baseCommit: input.currentHead,
         worktreeCommit: input.worktreeCommit,
         error: formatRepoScopedRefreshError(
           input.repoPath,
-          rebase.stderr.trim() || rebase.stdout.trim() || `rebase onto ${input.currentHead} failed`,
+          merge.stderr.trim() || merge.stdout.trim() || `merge ${input.currentHead} failed`,
         ),
         incidentKind: "stale_base_conflict",
       };
@@ -701,6 +747,161 @@ export class GitWorktreeIsolationStrategy {
       error: null,
       incidentKind: null,
     };
+  }
+
+  private async canReuseHostWorktreeCommit(
+    worktreePath: string,
+    worktreeCommit: string,
+  ): Promise<boolean> {
+    const [status, headCommit] = await Promise.all([
+      runGit(worktreePath, ["status", "--porcelain"]),
+      gitHeadCommit(worktreePath),
+    ]);
+    return status.length === 0 && headCommit === worktreeCommit;
+  }
+
+  private async reconcileHostRefreshMerge(input: {
+    worktreePath: string;
+    currentHead: string;
+    commitMessage: string;
+    mountedSubmodules: ReadonlyArray<MountedSubmoduleWorktree>;
+  }): Promise<
+    | { status: "ready" }
+    | { status: "not_applicable" }
+    | { status: "blocked"; error: string }
+  > {
+    const status = await runGit(input.worktreePath, ["status", "--porcelain"]);
+    const conflicts = parseRefreshConflictEntries(status);
+    if (conflicts.length === 0) {
+      return { status: "not_applicable" };
+    }
+    if (conflicts.some((entry) => entry.code !== "UU")) {
+      return { status: "not_applicable" };
+    }
+
+    const registeredSubmodules = await this.readRegisteredSubmodulePaths(input.worktreePath);
+    if (conflicts.some((entry) => !registeredSubmodules.has(entry.path))) {
+      return { status: "not_applicable" };
+    }
+
+    const mountedByPath = new Map(
+      input.mountedSubmodules.map((entry) => [entry.repoPath, entry] as const),
+    );
+
+    try {
+      for (const conflict of conflicts) {
+        const mounted = mountedByPath.get(conflict.path);
+        if (!mounted) {
+          await this.abortMergeStates([
+            input.worktreePath,
+            ...input.mountedSubmodules.map((entry) => entry.worktreePath),
+          ]);
+          return {
+            status: "blocked",
+            error: formatRepoScopedRefreshError(
+              ".",
+              `mounted submodule metadata missing for '${conflict.path}'`,
+            ),
+          };
+        }
+
+        const theirsCommit = await this.readSubmoduleTreeCommit(
+          input.worktreePath,
+          input.currentHead,
+          conflict.path,
+        );
+        const innerMerge = await gitMerge(mounted.worktreePath, theirsCommit, input.commitMessage);
+        if (innerMerge.exitCode !== 0) {
+          await this.abortMergeStates([
+            mounted.worktreePath,
+            input.worktreePath,
+          ]);
+          return {
+            status: "blocked",
+            error: formatRepoScopedRefreshError(
+              mounted.repoPath,
+              innerMerge.stderr.trim()
+                || innerMerge.stdout.trim()
+                || `merge ${theirsCommit} failed`,
+            ),
+          };
+        }
+
+        await runGit(input.worktreePath, ["add", conflict.path]);
+      }
+
+      await runGit(
+        input.worktreePath,
+        [
+          "-c",
+          "user.name=Delamain Dispatcher",
+          "-c",
+          "user.email=delamain@local",
+          "commit",
+          "--no-gpg-sign",
+          "-m",
+          input.commitMessage,
+        ],
+      );
+      return { status: "ready" };
+    } catch (error) {
+      await this.abortMergeStates([
+        input.worktreePath,
+        ...input.mountedSubmodules.map((entry) => entry.worktreePath),
+      ]);
+      return {
+        status: "blocked",
+        error: formatRepoScopedRefreshError(
+          ".",
+          error instanceof Error ? error.message : String(error),
+        ),
+      };
+    }
+  }
+
+  private async readRegisteredSubmodulePaths(worktreePath: string): Promise<Set<string>> {
+    const result = await runCommand(
+      ["git", "config", "--file", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"],
+      { cwd: worktreePath },
+    );
+    const stderr = result.stderr.toLowerCase();
+    if (
+      result.exitCode !== 0
+      && !stderr.includes("no such file or directory")
+      && !stderr.includes("bad config line")
+      && result.stdout.trim().length > 0
+    ) {
+      throw new Error(
+        `git config --file .gitmodules failed in '${worktreePath}': ${
+          result.stderr || result.stdout || `exit ${result.exitCode}`
+        }`,
+      );
+    }
+
+    if (result.exitCode !== 0 || result.stdout.trim().length === 0) {
+      return new Set();
+    }
+
+    return new Set(
+      result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => normalizeRepoPath(line.slice(line.indexOf(" ") + 1).trim()))
+        .filter(Boolean),
+    );
+  }
+
+  private async readSubmoduleTreeCommit(
+    worktreePath: string,
+    treeish: string,
+    repoPath: string,
+  ): Promise<string> {
+    const output = await runGit(worktreePath, ["ls-tree", treeish, "--", repoPath]);
+    const match = output.match(/^160000 commit ([0-9a-f]{40})\t/);
+    if (!match) {
+      throw new Error(`Expected gitlink for '${repoPath}' in ${treeish}`);
+    }
+    return match[1];
   }
 
   private async rollbackIntegratedRepos(
@@ -741,20 +942,22 @@ export class GitWorktreeIsolationStrategy {
     }
   }
 
-  private async abortRefreshRebases(
+  private async abortRefreshMerges(
     prepared: Pick<IsolatedDispatch, "worktreePath" | "mountedSubmodules">,
   ): Promise<void> {
-    const worktrees = [
+    await this.abortMergeStates([
       prepared.worktreePath,
       ...prepared.mountedSubmodules.map((entry) => entry.worktreePath),
-    ];
+    ]);
+  }
 
-    for (const worktreePath of worktrees) {
+  private async abortMergeStates(worktreePaths: ReadonlyArray<string>): Promise<void> {
+    for (const worktreePath of worktreePaths) {
       try {
-        await gitAbortRebase(worktreePath);
+        await gitAbortMerge(worktreePath);
       } catch (error) {
         console.warn(
-          `[dispatcher] rebase abort failed in '${worktreePath}': ${error instanceof Error ? error.message : String(error)}`,
+          `[dispatcher] merge abort failed in '${worktreePath}': ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -845,4 +1048,15 @@ function normalizeRepoPath(value: string): string {
 
 function sanitizePathSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
+}
+
+function parseRefreshConflictEntries(status: string): RefreshConflictEntry[] {
+  return status
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => ({
+      code: line.slice(0, 2),
+      path: normalizeRepoPath(line.slice(3)),
+    }));
 }

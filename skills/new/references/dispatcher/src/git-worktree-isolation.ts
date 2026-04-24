@@ -98,6 +98,11 @@ interface RefreshConflictEntry {
   path: string;
 }
 
+interface ReconciledMountedSubmodule {
+  mounted: MountedSubmoduleWorktree;
+  preMergeHead: string;
+}
+
 export class GitWorktreeIsolationStrategy {
   private readonly systemRoot: string;
   private readonly delamainName: string;
@@ -787,15 +792,17 @@ export class GitWorktreeIsolationStrategy {
     const mountedByPath = new Map(
       input.mountedSubmodules.map((entry) => [entry.repoPath, entry] as const),
     );
+    const reconciledMountedSubmodules: ReconciledMountedSubmodule[] = [];
 
     try {
       for (const conflict of conflicts) {
         const mounted = mountedByPath.get(conflict.path);
         if (!mounted) {
-          await this.abortMergeStates([
+          await this.rollbackReconciledHostRefreshMerge(
             input.worktreePath,
-            ...input.mountedSubmodules.map((entry) => entry.worktreePath),
-          ]);
+            reconciledMountedSubmodules,
+            input.mountedSubmodules.map((entry) => entry.worktreePath),
+          );
           return {
             status: "blocked",
             error: formatRepoScopedRefreshError(
@@ -810,12 +817,14 @@ export class GitWorktreeIsolationStrategy {
           input.currentHead,
           conflict.path,
         );
+        const preMergeHead = await gitHeadCommit(mounted.worktreePath);
         const innerMerge = await gitMerge(mounted.worktreePath, theirsCommit, input.commitMessage);
         if (innerMerge.exitCode !== 0) {
-          await this.abortMergeStates([
-            mounted.worktreePath,
+          await this.rollbackReconciledHostRefreshMerge(
             input.worktreePath,
-          ]);
+            reconciledMountedSubmodules,
+            [mounted.worktreePath],
+          );
           return {
             status: "blocked",
             error: formatRepoScopedRefreshError(
@@ -827,6 +836,10 @@ export class GitWorktreeIsolationStrategy {
           };
         }
 
+        reconciledMountedSubmodules.push({
+          mounted,
+          preMergeHead,
+        });
         await runGit(input.worktreePath, ["add", conflict.path]);
       }
 
@@ -845,10 +858,11 @@ export class GitWorktreeIsolationStrategy {
       );
       return { status: "ready" };
     } catch (error) {
-      await this.abortMergeStates([
+      await this.rollbackReconciledHostRefreshMerge(
         input.worktreePath,
-        ...input.mountedSubmodules.map((entry) => entry.worktreePath),
-      ]);
+        reconciledMountedSubmodules,
+        input.mountedSubmodules.map((entry) => entry.worktreePath),
+      );
       return {
         status: "blocked",
         error: formatRepoScopedRefreshError(
@@ -865,30 +879,50 @@ export class GitWorktreeIsolationStrategy {
       { cwd: worktreePath },
     );
     const stderr = result.stderr.toLowerCase();
-    if (
-      result.exitCode !== 0
-      && !stderr.includes("no such file or directory")
-      && !stderr.includes("bad config line")
-      && result.stdout.trim().length > 0
-    ) {
-      throw new Error(
-        `git config --file .gitmodules failed in '${worktreePath}': ${
-          result.stderr || result.stdout || `exit ${result.exitCode}`
-        }`,
+    if (result.exitCode === 0) {
+      return new Set(
+        result.stdout
+          .trim()
+          .split("\n")
+          .map((line) => normalizeRepoPath(line.slice(line.indexOf(" ") + 1).trim()))
+          .filter(Boolean),
       );
     }
 
-    if (result.exitCode !== 0 || result.stdout.trim().length === 0) {
+    if (
+      stderr.includes("no such file or directory")
+      || (result.exitCode === 1 && result.stdout.trim().length === 0 && stderr.trim().length === 0)
+    ) {
       return new Set();
     }
 
-    return new Set(
-      result.stdout
-        .trim()
-        .split("\n")
-        .map((line) => normalizeRepoPath(line.slice(line.indexOf(" ") + 1).trim()))
-        .filter(Boolean),
+    throw new Error(
+      `git config --file .gitmodules failed in '${worktreePath}': ${
+        result.stderr || result.stdout || `exit ${result.exitCode}`
+      }`,
     );
+  }
+
+  private async rollbackReconciledHostRefreshMerge(
+    hostWorktreePath: string,
+    reconciledMountedSubmodules: ReadonlyArray<ReconciledMountedSubmodule>,
+    mergeAbortPaths: ReadonlyArray<string>,
+  ): Promise<void> {
+    await this.abortMergeStates([
+      hostWorktreePath,
+      ...mergeAbortPaths,
+      ...reconciledMountedSubmodules.map((entry) => entry.mounted.worktreePath),
+    ]);
+
+    for (const entry of [...reconciledMountedSubmodules].reverse()) {
+      try {
+        await runGit(entry.mounted.worktreePath, ["reset", "--hard", entry.preMergeHead]);
+      } catch (error) {
+        console.warn(
+          `[dispatcher] mounted refresh rollback failed for '${entry.mounted.repoPath}': ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   }
 
   private async readSubmoduleTreeCommit(

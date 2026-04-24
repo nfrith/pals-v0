@@ -119,6 +119,11 @@ export async function resolve(
       ) {
         def.approvalPolicy = meta["approval-policy"] as AgentDef["approvalPolicy"];
       }
+      if (meta["approvals-reviewer"] === "auto_review" || meta["approvals-reviewer"] === "off") {
+        def.approvalsReviewer = meta["approvals-reviewer"] as AgentDef["approvalsReviewer"];
+      } else if (meta["approvals-reviewer"] === "null") {
+        def.approvalsReviewer = null;
+      }
       if (typeof meta["network-enabled"] === "boolean") {
         def.networkEnabled = meta["network-enabled"];
       }

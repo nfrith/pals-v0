@@ -63,6 +63,7 @@ export interface LoadedAgentPrompt {
   reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   sandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
   approvalPolicy?: "untrusted" | "on-request" | "on-failure" | "never";
+  approvalsReviewer?: "auto_review" | "off" | null;
   networkEnabled?: boolean;
 }
 
@@ -225,9 +226,11 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
       const commonDir = await gitCommonDir(input.cwd);
       const additionalDirectories = [normalizeAdditionalDirectory(input.cwd, commonDir)];
       const apiKey = asString(input.env["CODEX_API_KEY"]) ?? asString(process.env["CODEX_API_KEY"]);
+      const codexConfig = buildOpenAICodexConfig(input.agent);
       const codex = new Codex({
         ...(apiKey ? { apiKey } : {}),
         env: normalizeEnv(input.env),
+        ...(codexConfig ? { config: codexConfig } : {}),
       });
 
       const threadOptions: Record<string, unknown> = {
@@ -388,6 +391,18 @@ function normalizeEnv(env: Record<string, string | undefined>): Record<string, s
 
 function normalizeAdditionalDirectory(cwd: string, value: string): string {
   return isAbsolute(value) ? value : resolvePath(cwd, value);
+}
+
+function buildOpenAICodexConfig(
+  agent: LoadedAgentPrompt,
+): Record<string, string> | undefined {
+  if (agent.approvalsReviewer !== "auto_review") {
+    return undefined;
+  }
+
+  return {
+    approvals_reviewer: "auto_review",
+  };
 }
 
 async function loadCodexSdk(): Promise<{ Codex: new (options: Record<string, unknown>) => any }> {

@@ -796,8 +796,11 @@ function validateDelamainPromptAsset(
 
 const ANTHROPIC_AGENT_MODELS = new Set(["sonnet", "opus", "haiku"]);
 const ANTHROPIC_ONLY_FRONTMATTER_FIELDS = new Set(["tools"]);
+const OPENAI_INTERACTIVE_APPROVAL_POLICIES = new Set(["on-request", "on-failure"]);
+const OPENAI_ALLOWED_APPROVALS_REVIEWERS = new Set(["auto_review", "off"]);
 const OPENAI_ONLY_FRONTMATTER_FIELDS = new Set([
   "approval-policy",
+  "approvals-reviewer",
   "network-enabled",
   "reasoning-effort",
   "sandbox-mode",
@@ -926,6 +929,62 @@ function validateDelamainPromptProviderContract(
           },
         ),
       );
+    }
+  }
+
+  if ("approvals-reviewer" in promptFrontmatter) {
+    const rawReviewerValue = promptFrontmatter["approvals-reviewer"];
+    const normalizedReviewerValue = rawReviewerValue === null
+      ? null
+      : typeof rawReviewerValue === "string"
+        ? rawReviewerValue.trim()
+        : rawReviewerValue;
+
+    const reviewerValueIsValid = normalizedReviewerValue === null
+      || (
+        typeof normalizedReviewerValue === "string"
+        && OPENAI_ALLOWED_APPROVALS_REVIEWERS.has(normalizedReviewerValue)
+      );
+
+    if (!reviewerValueIsValid) {
+      diagnostics.push(
+        diag(
+          codes.DELAMAIN_PROMPT_INVALID,
+          "error",
+          "module_shape",
+          assetRel,
+          "OpenAI Delamain prompt assets must use 'auto_review', 'off', or null for 'approvals-reviewer'",
+          {
+            module_id: moduleId,
+            field: "approvals-reviewer",
+            expected: ["auto_review", "off", null],
+            actual: rawReviewerValue ?? null,
+          },
+        ),
+      );
+    }
+
+    if (normalizedReviewerValue === "auto_review") {
+      const approvalPolicy = typeof promptFrontmatter["approval-policy"] === "string"
+        ? promptFrontmatter["approval-policy"].trim()
+        : null;
+      if (!approvalPolicy || !OPENAI_INTERACTIVE_APPROVAL_POLICIES.has(approvalPolicy)) {
+        diagnostics.push(
+          diag(
+            codes.DELAMAIN_PROMPT_INVALID,
+            "error",
+            "module_shape",
+            assetRel,
+            "OpenAI Delamain prompt assets must pair 'approvals-reviewer: auto_review' with interactive 'approval-policy' ('on-request' or 'on-failure')",
+            {
+              module_id: moduleId,
+              field: "approvals-reviewer",
+              expected: ["on-request", "on-failure"],
+              actual: promptFrontmatter["approval-policy"] ?? null,
+            },
+          ),
+        );
+      }
     }
   }
 

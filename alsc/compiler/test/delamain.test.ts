@@ -5,6 +5,7 @@ import { loadAuthoredSourceExport } from "../src/authored-load.ts";
 import { codes } from "../src/diagnostics.ts";
 import {
   expectModuleDiagnostic,
+  expectModuleDiagnosticContaining,
   expectNoModuleDiagnostic,
   updateRecord,
   updateShapeYaml,
@@ -153,6 +154,102 @@ test.concurrent("openai prompt assets reject Claude /skill syntax", async () => 
     const result = validateFixture(root);
     expect(result.status).toBe("fail");
     expectModuleDiagnostic(result, "factory", codes.DELAMAIN_PROMPT_INVALID, "agents/planning.md");
+  });
+});
+
+test.concurrent("openai prompt assets accept approvals-reviewer auto_review with interactive approval-policy", async () => {
+  await withFixtureSandbox("delamain-openai-approvals-reviewer-accepted", async ({ root }) => {
+    await updateMarkdownFrontmatterFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/agents/planning.md",
+      (data) => {
+        data["approval-policy"] = "on-request";
+        data["approvals-reviewer"] = "auto_review";
+      },
+    );
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("pass");
+    expect(result.summary.error_count).toBe(0);
+  });
+});
+
+test.concurrent("openai prompt assets accept approvals-reviewer off as explicit disable", async () => {
+  await withFixtureSandbox("delamain-openai-approvals-reviewer-off", async ({ root }) => {
+    await updateMarkdownFrontmatterFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/agents/planning.md",
+      (data) => {
+        data["approval-policy"] = "never";
+        data["approvals-reviewer"] = "off";
+      },
+    );
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("pass");
+    expect(result.summary.error_count).toBe(0);
+  });
+});
+
+test.concurrent("anthropic prompt assets reject OpenAI approvals-reviewer frontmatter", async () => {
+  await withFixtureSandbox("delamain-anthropic-approvals-reviewer", async ({ root }) => {
+    await updateMarkdownFrontmatterFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/agents/queued.md",
+      (data) => {
+        data["approvals-reviewer"] = "auto_review";
+      },
+    );
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnostic(result, "factory", codes.DELAMAIN_PROMPT_INVALID, "agents/queued.md");
+  });
+});
+
+test.concurrent("openai prompt assets reject unknown approvals-reviewer values", async () => {
+  await withFixtureSandbox("delamain-openai-approvals-reviewer-invalid", async ({ root }) => {
+    await updateMarkdownFrontmatterFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/agents/planning.md",
+      (data) => {
+        data["approval-policy"] = "on-request";
+        data["approvals-reviewer"] = "human";
+      },
+    );
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "factory",
+      codes.DELAMAIN_PROMPT_INVALID,
+      "must use 'auto_review', 'off', or null for 'approvals-reviewer'",
+      "agents/planning.md",
+    );
+  });
+});
+
+test.concurrent("openai prompt assets reject auto_review with non-interactive approval-policy", async () => {
+  await withFixtureSandbox("delamain-openai-approvals-reviewer-inert", async ({ root }) => {
+    await updateMarkdownFrontmatterFile(
+      root,
+      ".als/modules/factory/v1/delamains/development-pipeline/agents/planning.md",
+      (data) => {
+        data["approval-policy"] = "never";
+        data["approvals-reviewer"] = "auto_review";
+      },
+    );
+
+    const result = validateFixture(root);
+    expect(result.status).toBe("fail");
+    expectModuleDiagnosticContaining(
+      result,
+      "factory",
+      codes.DELAMAIN_PROMPT_INVALID,
+      "must pair 'approvals-reviewer: auto_review' with interactive 'approval-policy'",
+      "agents/planning.md",
+    );
   });
 });
 

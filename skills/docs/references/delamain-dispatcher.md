@@ -245,6 +245,30 @@ Budget exhaustion remains provider-native at the subtype layer:
 - OpenAI budget enforcement is dispatcher-owned. When the OpenAI adapter crosses its configured cap, the dispatcher returns subtype `max_budget_exceeded` and records telemetry as `result:max_budget_exceeded provider=openai maxBudgetUsd=<value>`.
 - Anthropic budget enforcement is SDK-owned. The dispatcher passes through the Claude Agent SDK subtype `error_max_budget_usd` and records telemetry as `result:error_max_budget_usd provider=anthropic maxBudgetUsd=<value>` without rewriting the SDK subtype.
 
+## OpenAI Approval Review
+
+OpenAI agent prompts can opt into Codex automatic approval review with a per-agent frontmatter pair:
+
+```yaml
+approval-policy: on-request
+approvals-reviewer: auto_review
+```
+
+Rules:
+
+- `approvals-reviewer` is OpenAI-only. Anthropic prompts must not declare it.
+- `approvals-reviewer: auto_review` is valid only with an interactive `approval-policy` of `on-request` or `on-failure`.
+- `approvals-reviewer: off`, `approvals-reviewer: null`, or omitting the field disables the feature. The dispatcher then omits `config.approvals_reviewer` from the `new Codex(...)` constructor entirely.
+- Existing prompts that already author `approval-policy: never` stay unchanged. ALS-042 does not silently flip those prompts to an interactive policy; each Delamain must opt in explicitly.
+
+At runtime, the dispatcher keeps `approvalPolicy` on the thread options and only adds `config.approvals_reviewer = "auto_review"` for the enabled path. See OpenAI's [automatic approval reviews](https://developers.openai.com/codex/agent-approvals-security#automatic-approval-reviews) documentation and the Codex [config reference](https://developers.openai.com/codex/config-reference#configtoml).
+
+Scope boundary:
+
+- Actions that stay inside the sandbox are unchanged; the reviewer only applies to actions that already require approval.
+- Reviewer denials still fail the dispatch instead of forcing the action through.
+- Post-turn dispatcher-wrap writes after `runStreamed()` returns are out of scope for this contract. ALS-042 only covers approval-gated actions that occur inside the Codex turn itself.
+
 ## Path Resolution
 
 Agent paths in `delamain.yaml` resolve relative to the directory containing the Delamain primary definition file (the deployed bundle root), not relative to the module bundle root.

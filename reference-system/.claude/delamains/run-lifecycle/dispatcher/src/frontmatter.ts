@@ -48,7 +48,7 @@ export async function readFrontmatterField(
 export async function setFrontmatterField(
   filePath: string,
   field: string,
-  value: string,
+  value: string | null,
 ): Promise<boolean> {
   const raw = await readFile(filePath, "utf-8");
   const lines = raw.split("\n");
@@ -80,10 +80,12 @@ export async function setFrontmatterField(
     return false;
   }
 
+  const serializedValue = value === null ? "null" : value;
+
   if (existingLine !== -1) {
-    lines[existingLine] = `${field}: ${value}`;
+    lines[existingLine] = `${field}: ${serializedValue}`;
   } else {
-    lines.splice(closingFence, 0, `${field}: ${value}`);
+    lines.splice(closingFence, 0, `${field}: ${serializedValue}`);
   }
 
   await writeFile(filePath, lines.join("\n"), "utf-8");

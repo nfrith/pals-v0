@@ -301,8 +301,7 @@ const providers: Record<AgentProvider, AgentProviderAdapter> = {
           }
 
           if (type === "item.started" || type === "item.updated" || type === "item.completed") {
-            const detail = describeCodexToolUse(event["item"]);
-            if (detail) {
+            for (const detail of describeCodexActions(event)) {
               input.onToolUse(detail);
             }
           }
@@ -496,27 +495,82 @@ function extractCodexUsage(event: unknown): OpenAIUsage | null {
   };
 }
 
-function describeCodexToolUse(item: unknown): string | null {
-  if (!item || typeof item !== "object") {
-    return null;
+function describeCodexActions(event: unknown): string[] {
+  const value = asRecord(event);
+  const eventType = value ? extractCodexEventType(value) : null;
+  const item = value ? asRecord(value["item"]) : null;
+  if (!eventType || !item) {
+    return [];
   }
 
-  const value = item as Record<string, unknown>;
-  const itemType = asString(value["type"]) ?? asString(value["kind"]) ?? "";
-  if (!itemType.includes("tool")) {
-    return null;
+  const itemType = asString(item["type"]) ?? asString(item["kind"]) ?? "";
+
+  switch (itemType) {
+    case "command_execution":
+      return eventType === "item.started"
+        ? [formatToolUse("Bash", { command: asString(item["command"]) ?? "" })]
+        : [];
+    case "file_change":
+      return eventType === "item.completed" ? describeCodexFileChangeActions(item) : [];
+    case "mcp_tool_call":
+      return eventType === "item.started" ? [formatCodexMcpAction(item)] : [];
+    case "web_search":
+      return eventType === "item.started"
+        ? [formatCodexActionDetail("WebSearch", asString(item["query"]))]
+        : [];
+    case "error":
+      return eventType === "item.completed" ? [formatCodexErrorAction(item)] : [];
+    default:
+      return [];
+  }
+}
+
+function describeCodexFileChangeActions(item: Record<string, unknown>): string[] {
+  const changes = item["changes"];
+  if (!Array.isArray(changes)) {
+    return [];
   }
 
-  const name = asString(value["name"])
-    ?? asString(value["tool_name"])
-    ?? asString(value["toolName"])
-    ?? itemType;
-  const payload = asRecord(value["input"])
-    ?? asRecord(value["arguments"])
-    ?? asRecord(value["args"])
-    ?? {};
+  return changes.flatMap((change) => {
+    const value = asRecord(change);
+    const path = value ? asString(value["path"]) : null;
+    if (!path) {
+      return [];
+    }
 
-  return formatToolUse(name, payload);
+    const kind = value ? asString(value["kind"]) : null;
+    return [`${codexFileChangeVerb(kind)} ${path}`];
+  });
+}
+
+function codexFileChangeVerb(kind: string | null): string {
+  if (kind === "add") {
+    return "Write";
+  }
+  if (kind === "delete") {
+    return "Delete";
+  }
+  return "Edit";
+}
+
+function formatCodexMcpAction(item: Record<string, unknown>): string {
+  const server = asString(item["server"]);
+  const tool = asString(item["tool"]);
+  const target = server && tool ? `${server}.${tool}` : server ?? tool;
+  return target ? `MCP ${target}` : "MCP";
+}
+
+function formatCodexActionDetail(name: string, detail: string | null): string {
+  if (!detail) {
+    return name;
+  }
+
+  return `${name} ${truncateLogDetail(detail, 60)}`;
+}
+
+function formatCodexErrorAction(item: Record<string, unknown>): string {
+  const message = asString(item["message"]);
+  return message ? `Error: ${truncateLogDetail(message, 240)}` : "Error";
 }
 
 function formatToolUse(name: string, input: Record<string, unknown>): string {

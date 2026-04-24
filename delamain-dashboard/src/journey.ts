@@ -236,6 +236,11 @@ function buildLaneNode(layout: JourneyLaneLayout, canvasHeight: number): Journey
     position: { x: layout.x, y: 0 },
     width: layout.width,
     height: canvasHeight,
+    // `measured` tells @xyflow/system's `adoptUserNodes` to treat the node
+    // as already sized so internal `handleBounds` are preserved across
+    // re-renders — without this the store wipes handleBounds on every SSE
+    // snapshot and EdgeWrapper returns null (no edges render).
+    measured: { width: layout.width, height: canvasHeight },
     draggable: false,
     selectable: false,
     connectable: false,
@@ -286,6 +291,9 @@ function buildStateNodes(
         },
         width: nodeSize.width,
         height: nodeSize.height,
+        // see `buildLaneNode` comment — `measured` keeps handleBounds
+        // stable across `adoptUserNodes` re-runs so edges stay drawn.
+        measured: { width: nodeSize.width, height: nodeSize.height },
         sourcePosition: state.terminal ? Position.Left : Position.Right,
         targetPosition: Position.Left,
         data: {
@@ -357,6 +365,9 @@ function buildEdges(
           },
           width: AGGREGATE_ANCHOR_SIZE,
           height: AGGREGATE_ANCHOR_SIZE,
+          // see `buildLaneNode` comment — `measured` keeps handleBounds
+          // stable so grouped exit edges stay drawn.
+          measured: { width: AGGREGATE_ANCHOR_SIZE, height: AGGREGATE_ANCHOR_SIZE },
           sourcePosition: Position.Right,
           targetPosition: Position.Left,
           draggable: false,

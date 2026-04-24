@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import type { DashboardBootstrapPayload } from "../app-bootstrap.ts";
 import { DashboardApp } from "./app.tsx";
+import "@xyflow/react/dist/base.css";
 import "./styles.css";
 
 declare global {

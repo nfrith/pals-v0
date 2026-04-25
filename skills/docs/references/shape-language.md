@@ -530,7 +530,7 @@ Authored Delamains are TypeScript, but Claude deploy still writes a runtime `del
 
 ## Detailed Rules
 
-`shape-language.md` is the authoritative reference for ALS authored source. Runtime-specific details such as deployed dispatcher behavior, agent markdown frontmatter, and `.als/config.md` boot metadata are split into the neighboring `delamain-agents.md`, `delamain-dispatcher.md`, and `bootup-config.md` references.
+`shape-language.md` is the authoritative reference for ALS authored source. Runtime-specific details such as deployed dispatcher behavior, agent markdown frontmatter, and `.als/bootup.md` boot metadata are split into the neighboring `delamain-agents.md`, `delamain-dispatcher.md`, and `bootup-config.md` references.
 
 ### system.ts Detailed Rules
 

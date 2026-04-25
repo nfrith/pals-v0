@@ -1,10 +1,10 @@
 # Bootup Configuration
 
-Reference for the `.als/config.md` file — the operator's persistent boot configuration for an ALS system.
+Reference for the `.als/bootup.md` file — the operator's persistent boot configuration for an ALS system.
 
 ## Location
 
-`.als/config.md` sits alongside `.als/system.ts` in the system root.
+`.als/bootup.md` sits alongside `.als/system.ts` in the system root.
 
 ## Structure
 
@@ -42,7 +42,15 @@ The `/bootup` skill reads this section and executes accordingly. If the section 
 
 ## Lifecycle
 
-- Created by `/bootup` on first run (interactive setup) or manually by the operator
+- Created by `/init` on first run (interactive setup) or manually by the operator
 - Read by `/bootup` on every subsequent invocation
 - Updated by the operator when their environment changes
 - Not managed by `/change` or `/migrate` — this is operator-local configuration
+
+## Migration
+
+Legacy systems may still have `.als/config.md`. The canonical filename is now `.als/bootup.md`.
+
+Migration rule:
+- if `.als/config.md` exists and `.als/bootup.md` does not, rename the legacy file in place
+- do not change the contents during the rename

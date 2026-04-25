@@ -2,26 +2,43 @@
 
 import { resolve } from "node:path";
 import { deployClaudeSkills } from "./claude-skills.ts";
+import {
+  buildOperatorConfigSessionStartOutput,
+  inspectOperatorConfigFile,
+  resolveOperatorConfigPath,
+} from "./operator-config.ts";
 import { validateSystem } from "./validate.ts";
 
 const MAIN_USAGE = `Usage:
   alsc validate <system-root> [module-id]
   alsc deploy claude [--dry-run] [--require-empty-targets] <system-root> [module-id]
+  alsc operator-config path
+  alsc operator-config inspect [operator-config-path]
+  alsc operator-config session-start [cwd]
 
 Commands:
   validate        Validate an ALS system and emit JSON.
   deploy claude   Project active ALS Claude assets into .als/ and .claude/.
+  operator-config Inspect the operator config or render SessionStart output.
 `;
 
 const VALIDATE_USAGE = "Usage: alsc validate <system-root> [module-id]";
 const DEPLOY_USAGE = "Usage: alsc deploy claude [--dry-run] [--require-empty-targets] <system-root> [module-id]";
+const OPERATOR_CONFIG_USAGE = `Usage:
+  alsc operator-config path
+  alsc operator-config inspect [operator-config-path]
+  alsc operator-config session-start [cwd]`;
 
 export interface CliIo {
   stdout(value: string): void;
   stderr(value: string): void;
 }
 
-export function runCli(args: string[], io: CliIo = createProcessCliIo()): number {
+export function runCli(
+  args: string[],
+  io: CliIo = createProcessCliIo(),
+  env: Record<string, string | undefined> = process.env,
+): number {
   if (args.length === 0) {
     writeStderr(io, MAIN_USAGE);
     return 2;
@@ -40,6 +57,10 @@ export function runCli(args: string[], io: CliIo = createProcessCliIo()): number
 
   if (command === "deploy") {
     return runDeployCommand(rest, io);
+  }
+
+  if (command === "operator-config") {
+    return runOperatorConfigCommand(rest, io, env);
   }
 
   writeStderr(io, MAIN_USAGE);
@@ -82,6 +103,68 @@ function runDeployCommand(args: string[], io: CliIo): number {
   }
 
   return runDeployClaudeCommand(rest, io);
+}
+
+function runOperatorConfigCommand(
+  args: string[],
+  io: CliIo,
+  env: Record<string, string | undefined>,
+): number {
+  if (args.length === 0 || (args.length === 1 && isHelpFlag(args[0]))) {
+    writeStdout(io, `${OPERATOR_CONFIG_USAGE}\n`);
+    return args.length === 0 ? 2 : 0;
+  }
+
+  const [subcommand, ...rest] = args;
+
+  if (subcommand === "path") {
+    if (rest.length !== 0) {
+      writeStderr(io, `${OPERATOR_CONFIG_USAGE}\n`);
+      return 2;
+    }
+
+    const filePath = resolveOperatorConfigPath(env);
+    if (!filePath) {
+      writeStderr(io, "Unable to resolve operator config path: set XDG_CONFIG_HOME or HOME.\n");
+      return 1;
+    }
+
+    writeStdout(io, filePath);
+    return 0;
+  }
+
+  if (subcommand === "inspect") {
+    if (rest.length > 1) {
+      writeStderr(io, `${OPERATOR_CONFIG_USAGE}\n`);
+      return 2;
+    }
+
+    const filePath = rest[0] ? resolve(rest[0]) : resolveOperatorConfigPath(env);
+    if (!filePath) {
+      writeStderr(io, "Unable to resolve operator config path: set XDG_CONFIG_HOME or HOME.\n");
+      return 1;
+    }
+
+    const inspection = inspectOperatorConfigFile(filePath);
+    writeStdout(io, JSON.stringify(inspection, null, 2));
+    return inspection.status === "fail" ? 1 : 0;
+  }
+
+  if (subcommand === "session-start") {
+    if (rest.length > 1) {
+      writeStderr(io, `${OPERATOR_CONFIG_USAGE}\n`);
+      return 2;
+    }
+
+    const output = buildOperatorConfigSessionStartOutput(resolve(rest[0] ?? process.cwd()), env);
+    if (output.length > 0) {
+      writeStdout(io, output);
+    }
+    return 0;
+  }
+
+  writeStderr(io, `${OPERATOR_CONFIG_USAGE}\n`);
+  return 2;
 }
 
 function runDeployClaudeCommand(args: string[], io: CliIo): number {

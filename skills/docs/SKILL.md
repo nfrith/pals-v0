@@ -1,6 +1,6 @@
 ---
 name: docs
-description: ALS format reference index. This skill should be used when the user asks about ALS format rules, TypeScript-authored system/module/delamain contracts, delamain agents, delamain dispatchers, provider dispatch, field types, agent file format, dispatcher behavior, skill decomposition patterns, or module integration.
+description: ALS format reference index. This skill should be used when the user asks about ALS format rules, operator config, TypeScript-authored system/module/delamain contracts, delamain agents, delamain dispatchers, provider dispatch, field types, agent file format, dispatcher behavior, skill decomposition patterns, or module integration.
 ---
 
 # ALS Documentation Index
@@ -95,10 +95,22 @@ Read this when:
 
 [`references/bootup-config.md`](references/bootup-config.md)
 
-The `.als/config.md` file format — operator-local boot configuration that tells `/bootup` how to start delamain dispatchers and other runtime services.
+The `.als/bootup.md` file format — operator-local boot configuration that tells `/bootup` how to start delamain dispatchers and other runtime services.
 
 Read this when:
 - Setting up a new ALS system's runtime environment
 - Understanding how `/bootup` determines dispatcher launch behavior
-- Creating or modifying `.als/config.md`
+- Creating or modifying `.als/bootup.md`
 - Designing custom boot configurations for different environments
+
+### Operator Configuration
+
+[`references/operator-config.md`](references/operator-config.md)
+
+The operator-scoped profile stored at `${XDG_CONFIG_HOME:-$HOME/.config}/als/operator.md`, validated by ALS and injected into sessions by the SessionStart hook.
+
+Read this when:
+- Setting up the operator profile during onboarding
+- Updating stable operator identity or business context
+- Understanding `.als/skip-operator-config`
+- Reviewing the "no credentials in operator config" boundary

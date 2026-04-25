@@ -4,6 +4,10 @@ All hooks resolve the compiler path via `${CLAUDE_PLUGIN_ROOT}/alsc/compiler`.
 
 ## Hook inventory
 
+### operator-config-session-start.sh (SessionStart)
+
+On session start, resolves `${XDG_CONFIG_HOME:-$HOME/.config}/als/operator.md`, validates it, and injects one `<system-reminder>` block with stable operator identity/business context. If the current ALS system contains `.als/skip-operator-config`, or the config file is missing, it injects nothing. If the config is invalid, it injects remediation instructions telling the operator to run `/operator-config`.
+
 ### als-validate.sh (PostToolUse — Write|Edit)
 
 After Write/Edit operations, validates the affected module and blocks further edits if validation fails. This is the inline feedback loop — it catches errors immediately.

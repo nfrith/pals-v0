@@ -4,7 +4,6 @@ import {
   Handle,
   Position,
   ReactFlow,
-  getBezierPath,
   type Edge,
   type EdgeProps,
   type Node,
@@ -22,6 +21,7 @@ import {
 } from "react";
 import type { DashboardBootstrapPayload } from "../app-bootstrap.ts";
 import type { DashboardSnapshot, DispatcherSnapshot } from "../feed/types.ts";
+import { buildJourneyEdgeRoute } from "./journey-routing.ts";
 import {
   buildJourneyGraph,
   type JourneyAnchorData,
@@ -383,20 +383,20 @@ function JourneyEdge({
     `journey-edge-${data?.class ?? "advance"}`,
     data?.aggregated ? "journey-edge-aggregated" : "",
   ].filter(Boolean).join(" ");
-  const [path] = getBezierPath({
+  const route = buildJourneyEdgeRoute({
+    data: data!,
     sourceX,
     sourceY,
+    sourcePosition,
     targetX,
     targetY,
-    sourcePosition,
     targetPosition,
-    curvature: data?.class === "rework" ? 0.38 : data?.aggregated ? 0.28 : 0.24,
   });
 
   return (
     <g>
       {data?.tooltip ? <title>{data.tooltip}</title> : null}
-      <BaseEdge className={edgeClassName} id={id} markerEnd={markerEnd} path={path} />
+      <BaseEdge className={edgeClassName} id={id} markerEnd={markerEnd} path={route.path} />
     </g>
   );
 }

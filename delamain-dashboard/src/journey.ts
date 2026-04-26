@@ -32,6 +32,19 @@ const AGGREGATE_ANCHOR_SIZE = 12;
 const AGGREGATE_ANCHOR_OFFSET_X = 18;
 const MIN_CANVAS_HEIGHT = 720;
 
+export const JOURNEY_LAYOUT_CONSTANTS = {
+  aggregateAnchorOffsetX: AGGREGATE_ANCHOR_OFFSET_X,
+  aggregateAnchorSize: AGGREGATE_ANCHOR_SIZE,
+  canvasPaddingBottom: CANVAS_PADDING_BOTTOM,
+  canvasPaddingLeft: CANVAS_PADDING_LEFT,
+  canvasPaddingTop: CANVAS_PADDING_TOP,
+  laneGapX: LANE_GAP_X,
+  laneHeaderHeight: LANE_HEADER_HEIGHT,
+  laneWidth: LANE_WIDTH,
+  minCanvasHeight: MIN_CANVAS_HEIGHT,
+  nodeGapY: NODE_GAP_Y,
+} as const;
+
 type JourneyLaneNode = Node<JourneyLaneData, "journeyLane">;
 type JourneyAnchorNode = Node<JourneyAnchorData, "journeyAnchor">;
 type JourneyStateNode = Node<JourneyNodeData, "journey">;
@@ -79,11 +92,27 @@ export interface JourneyAnchorData {
   [key: string]: unknown;
 }
 
+export type JourneyEdgeNodeKind = "anchor" | "state";
+
 export interface JourneyEdgeData {
   aggregated?: boolean;
   class: DispatcherTransitionClass;
-  sourcePhase?: string;
+  routeSlot: number;
+  sourceLaneIndex: number;
+  sourceLaneWidth: number;
+  sourceLaneX: number;
+  sourceNodeHeight: number;
+  sourceNodeKind: JourneyEdgeNodeKind;
+  sourceNodeWidth: number;
+  sourcePhase: string;
   sources?: string[];
+  targetLaneIndex: number;
+  targetLaneWidth: number;
+  targetLaneX: number;
+  targetNodeHeight: number;
+  targetNodeKind: JourneyEdgeNodeKind;
+  targetNodeWidth: number;
+  targetPhase: string;
   tooltip: string;
   [key: string]: unknown;
 }
@@ -327,12 +356,16 @@ function buildEdges(
 } {
   const anchors: JourneyAnchorNode[] = [];
   const edges: Edge<JourneyEdgeData, "journey">[] = [];
-  const lanesByPhase = new Map(laneLayouts.map((layout) => [layout.phase, layout]));
+  const laneContextByPhase = new Map(laneLayouts.map((layout, index) => [layout.phase, { index, layout }]));
+  const reworkSlotsByPhase = new Map<string, number>();
 
   for (const [transitionIndex, transition] of transitions.entries()) {
     if (shouldAggregateExitTransition(transition)) {
       const targetNode = nodesById.get(transition.to);
       if (!targetNode) continue;
+      const targetPhase = normalizePhase(targetNode.data.phase);
+      const targetLaneContext = laneContextByPhase.get(targetPhase);
+      if (!targetLaneContext) continue;
 
       const sourcesByPhase = new Map<string, string[]>();
       for (const source of transition.from) {
@@ -345,8 +378,9 @@ function buildEdges(
       }
 
       for (const [phase, sources] of sourcesByPhase.entries()) {
-        const lane = lanesByPhase.get(phase);
-        if (!lane) continue;
+        const sourceLaneContext = laneContextByPhase.get(phase);
+        if (!sourceLaneContext) continue;
+        const lane = sourceLaneContext.layout;
 
         const sourceCenterY = average(
           sources
@@ -391,8 +425,22 @@ function buildEdges(
           data: {
             aggregated: true,
             class: transition.class,
+            routeSlot: 0,
+            sourceLaneIndex: sourceLaneContext.index,
+            sourceLaneWidth: lane.width,
+            sourceLaneX: lane.x,
+            sourceNodeHeight: AGGREGATE_ANCHOR_SIZE,
+            sourceNodeKind: "anchor",
+            sourceNodeWidth: AGGREGATE_ANCHOR_SIZE,
             sourcePhase: phase,
             sources,
+            targetLaneIndex: targetLaneContext.index,
+            targetLaneWidth: targetLaneContext.layout.width,
+            targetLaneX: targetLaneContext.layout.x,
+            targetNodeHeight: measureNodeHeight(targetNode),
+            targetNodeKind: "state",
+            targetNodeWidth: measureNodeWidth(targetNode),
+            targetPhase,
             tooltip: `${transition.class} • ${phase} phase -> ${transition.to}\nfrom: ${sources.join(", ")}`,
           },
         });
@@ -403,7 +451,19 @@ function buildEdges(
 
     const sources = expandSources(transition);
     for (const [sourceIndex, source] of sources.entries()) {
-      if (!nodesById.has(source) || !nodesById.has(transition.to)) continue;
+      const sourceNode = nodesById.get(source);
+      const targetNode = nodesById.get(transition.to);
+      if (!sourceNode || !targetNode) continue;
+
+      const sourcePhase = normalizePhase(sourceNode.data.phase);
+      const targetPhase = normalizePhase(targetNode.data.phase);
+      const sourceLaneContext = laneContextByPhase.get(sourcePhase);
+      const targetLaneContext = laneContextByPhase.get(targetPhase);
+      if (!sourceLaneContext || !targetLaneContext) continue;
+
+      const routeSlot = transition.class === "rework"
+        ? nextRouteSlot(reworkSlotsByPhase, sourcePhase)
+        : 0;
 
       edges.push({
         id: `${transition.class}-${source}-${transition.to}-${transitionIndex}-${sourceIndex}`,
@@ -415,6 +475,21 @@ function buildEdges(
         markerEnd: { type: MarkerType.ArrowClosed },
         data: {
           class: transition.class,
+          routeSlot,
+          sourceLaneIndex: sourceLaneContext.index,
+          sourceLaneWidth: sourceLaneContext.layout.width,
+          sourceLaneX: sourceLaneContext.layout.x,
+          sourceNodeHeight: measureNodeHeight(sourceNode),
+          sourceNodeKind: "state",
+          sourceNodeWidth: measureNodeWidth(sourceNode),
+          sourcePhase,
+          targetLaneIndex: targetLaneContext.index,
+          targetLaneWidth: targetLaneContext.layout.width,
+          targetLaneX: targetLaneContext.layout.x,
+          targetNodeHeight: measureNodeHeight(targetNode),
+          targetNodeKind: "state",
+          targetNodeWidth: measureNodeWidth(targetNode),
+          targetPhase,
           tooltip: `${transition.class} • ${source} -> ${transition.to}`,
         },
       });
@@ -451,6 +526,12 @@ function shouldAggregateExitTransition(
 
 function expandSources(transition: DispatcherTransition): string[] {
   return Array.isArray(transition.from) ? transition.from : [transition.from];
+}
+
+function nextRouteSlot(counters: Map<string, number>, phase: string): number {
+  const slot = counters.get(phase) ?? 0;
+  counters.set(phase, slot + 1);
+  return slot;
 }
 
 function measureStackHeight(states: DispatcherDefinitionState[]): number {
@@ -530,4 +611,12 @@ function average(values: number[]): number {
 
 function centerYForNode(node: JourneyStateNode): number {
   return node.position.y + (node.height ?? 0) / 2;
+}
+
+function measureNodeHeight(node: { height?: number; measured?: { height?: number } }): number {
+  return node.height ?? node.measured?.height ?? 0;
+}
+
+function measureNodeWidth(node: { measured?: { width?: number }; width?: number }): number {
+  return node.width ?? node.measured?.width ?? 0;
 }
